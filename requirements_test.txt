@@ -1,0 +1,5 @@
+black==26.5.1
+homeassistant==2026.8.3
+pytest-homeassistant-custom-component==0.13.357
+pytest-cov==7.1.0
+ruff==0.16.4

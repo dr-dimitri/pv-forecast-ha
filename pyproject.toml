@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=78"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pv-forecast-ha"
+version = "1.0.0"
+description = "PV-Ertragsprognose als Home-Assistant-Custom-Integration"
+requires-python = ">=3.13"
+dependencies = []
+
+[tool.setuptools]
+packages = []
+
+[tool.pytest.ini_options]
+addopts = "-ra --strict-markers --strict-config"
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.coverage.run]
+branch = true
+source = ["custom_components/pv_forecast"]
+
+[tool.black]
+target-version = ["py313"]
+line-length = 88
+
+[tool.ruff]
+target-version = "py313"
+line-length = 88
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "ASYNC", "RUF"]

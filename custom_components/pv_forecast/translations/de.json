@@ -1,0 +1,201 @@
+{
+  "title": "PV-Ertragsprognose",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Standort der PV-Anlage",
+        "description": "Home Assistant ist auf **{location_name}** ({country}) eingestellt. Übernimm diesen Standort direkt oder gib eine andere Anschrift ein.",
+        "data": {
+          "location_source": "Standortquelle"
+        },
+        "data_description": {
+          "location_source": "Bei Übernahme aus Home Assistant wird keine Anschrift übertragen."
+        }
+      },
+      "address": {
+        "title": "Anschrift der PV-Anlage",
+        "description": "Die Anschrift wird einmalig über OpenStreetMap in Koordinaten umgewandelt. Gespeichert werden die Anschrift und das Ergebnis, nicht eine laufende Standortabfrage.",
+        "data": {
+          "postal_code": "Postleitzahl",
+          "street": "Straße und Hausnummer",
+          "country": "Land"
+        },
+        "data_description": {
+          "postal_code": "Postleitzahl des Anlagenstandorts.",
+          "street": "Bitte einschließlich Hausnummer angeben.",
+          "country": "Das in Home Assistant eingestellte Land ist vorausgewählt."
+        }
+      },
+      "roof": {
+        "title": "Dachfläche konfigurieren",
+        "description": "Beschreibe jede Dachfläche einzeln. So kann die Prognose Ausrichtung, Neigung und Leistung korrekt berücksichtigen.",
+        "data": {
+          "name": "Name",
+          "installed_power_kwp": "Installierte Leistung",
+          "azimuth": "Ausrichtung",
+          "tilt": "Neigung",
+          "system_efficiency": "Wirkungsgrad",
+          "add_another": "Weitere Dachfläche hinzufügen"
+        },
+        "data_description": {
+          "system_efficiency": "Berücksichtigt pauschal Wechselrichter-, Leitungs-, Verschmutzungs- und sonstige Anlagenverluste. 90 % entsprechen 10 % Verlust. Der Wert kann später unter „Konfigurieren“ geändert werden."
+        }
+      },
+      "system": {
+        "title": "Anlage abschließen",
+        "description": "Optional kannst du die maximale AC-Leistung des gemeinsamen Wechselrichters begrenzen. Danach wird die Verbindung zu Open-Meteo getestet.",
+        "data": {
+          "inverter_max_power_kw": "Maximale AC-Wechselrichterleistung"
+        },
+        "data_description": {
+          "inverter_max_power_kw": "Leer lassen, wenn keine anlagenweite Begrenzung angewendet werden soll."
+        }
+      },
+      "summary": {
+        "title": "Angaben prüfen und abschließen",
+        "description": "![Symbolbild: Zusammenfassung und Abschluss](data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMjggMTI4IiB3aWR0aD0iOTYiIGhlaWdodD0iOTYiPgogIDxyZWN0IHg9IjAiIHk9IjAiIHdpZHRoPSIxMjgiIGhlaWdodD0iMTI4IiByeD0iMjYiIGZpbGw9IiMwMTE3NDkiLz4KCiAgPGc+CiAgICA8Y2lyY2xlIGN4PSI1OCIgY3k9IjMwIiByPSIxMCIgZmlsbD0iI2ZjYjYwNyIvPgogICAgPGxpbmUgeDE9IjcyLjAiIHkxPSIzMC4wIiB4Mj0iNzguMCIgeTI9IjMwLjAiIHN0cm9rZT0iI2ZjYjYwNyIgc3Ryb2tlLXdpZHRoPSI0IiBzdHJva2UtbGluZWNhcD0icm91bmQiLz4KICAgIDxsaW5lIHgxPSI2Ny45IiB5MT0iMzkuOSIgeDI9IjcyLjEiIHkyPSI0NC4xIiBzdHJva2U9IiNmY2I2MDciIHN0cm9rZS13aWR0aD0iNCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgICA8bGluZSB4MT0iNTguMCIgeTE9IjQ0LjAiIHgyPSI1OC4wIiB5Mj0iNTAuMCIgc3Ryb2tlPSIjZmNiNjA3IiBzdHJva2Utd2lkdGg9IjQiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgogICAgPGxpbmUgeDE9IjQ4LjEiIHkxPSIzOS45IiB4Mj0iNDMuOSIgeTI9IjQ0LjEiIHN0cm9rZT0iI2ZjYjYwNyIgc3Ryb2tlLXdpZHRoPSI0IiBzdHJva2UtbGluZWNhcD0icm91bmQiLz4KICAgIDxsaW5lIHgxPSI0NC4wIiB5MT0iMzAuMCIgeDI9IjM4LjAiIHkyPSIzMC4wIiBzdHJva2U9IiNmY2I2MDciIHN0cm9rZS13aWR0aD0iNCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgICA8bGluZSB4MT0iNDguMSIgeTE9IjIwLjEiIHgyPSI0My45IiB5Mj0iMTUuOSIgc3Ryb2tlPSIjZmNiNjA3IiBzdHJva2Utd2lkdGg9IjQiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgogICAgPGxpbmUgeDE9IjU4LjAiIHkxPSIxNi4wIiB4Mj0iNTguMCIgeTI9IjEwLjAiIHN0cm9rZT0iI2ZjYjYwNyIgc3Ryb2tlLXdpZHRoPSI0IiBzdHJva2UtbGluZWNhcD0icm91bmQiLz4KICAgIDxsaW5lIHgxPSI2Ny45IiB5MT0iMjAuMSIgeDI9IjcyLjEiIHkyPSIxNS45IiBzdHJva2U9IiNmY2I2MDciIHN0cm9rZS13aWR0aD0iNCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgICAKICA8L2c+CiAgPGc+CiAgICA8cmVjdCB4PSIyNiIgeT0iNTYiIHdpZHRoPSI1NiIgaGVpZ2h0PSIzMCIgcng9IjUiIGZpbGw9IiMwZTc3ZWEiLz4KICAgIDxsaW5lIHgxPSI0NC43IiB5MT0iNTYiIHgyPSI0NC43IiB5Mj0iODYiIHN0cm9rZT0iIzAxMTc0OSIgc3Ryb2tlLXdpZHRoPSIzIi8+CiAgICA8bGluZSB4MT0iNjMuMyIgeTE9IjU2IiB4Mj0iNjMuMyIgeTI9Ijg2IiBzdHJva2U9IiMwMTE3NDkiIHN0cm9rZS13aWR0aD0iMyIvPgogICAgPGxpbmUgeDE9IjI2IiB5MT0iNzEuMCIgeDI9IjgyIiB5Mj0iNzEuMCIgc3Ryb2tlPSIjMDExNzQ5IiBzdHJva2Utd2lkdGg9IjMiLz4KICAgIDxyZWN0IHg9IjUwLjAiIHk9Ijg2IiB3aWR0aD0iOCIgaGVpZ2h0PSI5IiBmaWxsPSIjMGU3N2VhIi8+CiAgICA8bGluZSB4MT0iNDAuMCIgeTE9Ijk1IiB4Mj0iNjguMCIgeTI9Ijk1IiBzdHJva2U9IiMwZTc3ZWEiIHN0cm9rZS13aWR0aD0iNCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgPC9nPgogIDxnPgogICAgPGNpcmNsZSBjeD0iOTgiIGN5PSI4NiIgcj0iMTciIGZpbGw9IiMwMTE3NDkiIHN0cm9rZT0iIzBkY2JiYSIgc3Ryb2tlLXdpZHRoPSI0Ii8+CiAgICA8cGF0aCBkPSJNIDkwIDg2IEwgOTYgOTIgTCAxMDcgNzkiIHN0cm9rZT0iIzBkY2JiYSIgc3Ryb2tlLXdpZHRoPSI1IiBmaWxsPSJub25lIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiLz4KICA8L2c+PC9zdmc+)\n\nBitte prüfe die vollständige Konfiguration.\n\n**Standort:** {location}\n\n**Standortquelle:** {location_source}\n\n**Breitengrad:** {latitude}\n\n**Längengrad:** {longitude}\n\n**Dachflächen** (installierte Leistung · Ausrichtung · Neigung · Wirkungsgrad)\n{roofs}\n\n**Maximale Wechselrichterleistung:** {inverter}\n\nDu kannst die Einrichtung jetzt abschließen oder gezielt zu einem Abschnitt zurückkehren.",
+        "menu_options": {
+          "finish": "Einrichtung abschließen",
+          "edit_location": "Standort ändern",
+          "edit_roofs": "Dachflächen ändern",
+          "edit_system": "Wechselrichterleistung ändern"
+        },
+        "menu_option_descriptions": {
+          "finish": "Speichert die geprüfte Konfiguration und legt die Sensoren an.",
+          "edit_location": "Zurück zur Standortauswahl oder Adresseingabe.",
+          "edit_roofs": "Zurück zur Erfassung der Dachflächen und ihrer Leistungen.",
+          "edit_system": "Zurück zur maximalen AC-Wechselrichterleistung."
+        }
+      }
+    },
+    "error": {
+      "address_not_found": "Die Anschrift wurde nicht gefunden. Bitte prüfe Straße, Hausnummer, Postleitzahl und Land.",
+      "cannot_connect": "Open-Meteo konnte nicht erreicht werden.",
+      "duplicate_roof_name": "Jede Dachfläche benötigt einen eindeutigen Namen.",
+      "geocoding_unavailable": "Die Adresssuche ist derzeit nicht erreichbar. Bitte versuche es später erneut.",
+      "invalid_address": "Bitte gib eine vollständige Anschrift und ein Land an.",
+      "invalid_geocoding_response": "Die Adresssuche hat eine ungültige Antwort geliefert.",
+      "invalid_inverter": "Die Wechselrichterleistung muss größer als 0 sein.",
+      "invalid_home_location": "Der in Home Assistant hinterlegte Standort enthält keine gültigen Koordinaten.",
+      "invalid_location_source": "Bitte wähle aus, wie der Standort bestimmt werden soll.",
+      "invalid_response": "Open-Meteo hat eine ungültige Antwort geliefert.",
+      "invalid_roof": "Die Dachkonfiguration ist ungültig.",
+      "unknown": "Ein unerwarteter Fehler ist aufgetreten."
+    },
+    "abort": {
+      "already_configured": "Eine PV-Ertragsprognose ist bereits eingerichtet."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Anlage bearbeiten",
+        "description": "![Symbolbild: Anlage bearbeiten](data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMjggMTI4IiB3aWR0aD0iOTYiIGhlaWdodD0iOTYiPgogIDxyZWN0IHg9IjAiIHk9IjAiIHdpZHRoPSIxMjgiIGhlaWdodD0iMTI4IiByeD0iMjYiIGZpbGw9IiMwMTE3NDkiLz4KCiAgPGc+CiAgICA8Y2lyY2xlIGN4PSI1OCIgY3k9IjMwIiByPSIxMCIgZmlsbD0iI2ZjYjYwNyIvPgogICAgPGxpbmUgeDE9IjcyLjAiIHkxPSIzMC4wIiB4Mj0iNzguMCIgeTI9IjMwLjAiIHN0cm9rZT0iI2ZjYjYwNyIgc3Ryb2tlLXdpZHRoPSI0IiBzdHJva2UtbGluZWNhcD0icm91bmQiLz4KICAgIDxsaW5lIHgxPSI2Ny45IiB5MT0iMzkuOSIgeDI9IjcyLjEiIHkyPSI0NC4xIiBzdHJva2U9IiNmY2I2MDciIHN0cm9rZS13aWR0aD0iNCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgICA8bGluZSB4MT0iNTguMCIgeTE9IjQ0LjAiIHgyPSI1OC4wIiB5Mj0iNTAuMCIgc3Ryb2tlPSIjZmNiNjA3IiBzdHJva2Utd2lkdGg9IjQiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgogICAgPGxpbmUgeDE9IjQ4LjEiIHkxPSIzOS45IiB4Mj0iNDMuOSIgeTI9IjQ0LjEiIHN0cm9rZT0iI2ZjYjYwNyIgc3Ryb2tlLXdpZHRoPSI0IiBzdHJva2UtbGluZWNhcD0icm91bmQiLz4KICAgIDxsaW5lIHgxPSI0NC4wIiB5MT0iMzAuMCIgeDI9IjM4LjAiIHkyPSIzMC4wIiBzdHJva2U9IiNmY2I2MDciIHN0cm9rZS13aWR0aD0iNCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgICA8bGluZSB4MT0iNDguMSIgeTE9IjIwLjEiIHgyPSI0My45IiB5Mj0iMTUuOSIgc3Ryb2tlPSIjZmNiNjA3IiBzdHJva2Utd2lkdGg9IjQiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgogICAgPGxpbmUgeDE9IjU4LjAiIHkxPSIxNi4wIiB4Mj0iNTguMCIgeTI9IjEwLjAiIHN0cm9rZT0iI2ZjYjYwNyIgc3Ryb2tlLXdpZHRoPSI0IiBzdHJva2UtbGluZWNhcD0icm91bmQiLz4KICAgIDxsaW5lIHgxPSI2Ny45IiB5MT0iMjAuMSIgeDI9IjcyLjEiIHkyPSIxNS45IiBzdHJva2U9IiNmY2I2MDciIHN0cm9rZS13aWR0aD0iNCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgICAKICA8L2c+CiAgPGc+CiAgICA8cmVjdCB4PSIyNiIgeT0iNTYiIHdpZHRoPSI1NiIgaGVpZ2h0PSIzMCIgcng9IjUiIGZpbGw9IiMwZTc3ZWEiLz4KICAgIDxsaW5lIHgxPSI0NC43IiB5MT0iNTYiIHgyPSI0NC43IiB5Mj0iODYiIHN0cm9rZT0iIzAxMTc0OSIgc3Ryb2tlLXdpZHRoPSIzIi8+CiAgICA8bGluZSB4MT0iNjMuMyIgeTE9IjU2IiB4Mj0iNjMuMyIgeTI9Ijg2IiBzdHJva2U9IiMwMTE3NDkiIHN0cm9rZS13aWR0aD0iMyIvPgogICAgPGxpbmUgeDE9IjI2IiB5MT0iNzEuMCIgeDI9IjgyIiB5Mj0iNzEuMCIgc3Ryb2tlPSIjMDExNzQ5IiBzdHJva2Utd2lkdGg9IjMiLz4KICAgIDxyZWN0IHg9IjUwLjAiIHk9Ijg2IiB3aWR0aD0iOCIgaGVpZ2h0PSI5IiBmaWxsPSIjMGU3N2VhIi8+CiAgICA8bGluZSB4MT0iNDAuMCIgeTE9Ijk1IiB4Mj0iNjguMCIgeTI9Ijk1IiBzdHJva2U9IiMwZTc3ZWEiIHN0cm9rZS13aWR0aD0iNCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgPC9nPgogIDxnPgogICAgPGxpbmUgeDE9IjExMS4wIiB5MT0iOTAuMCIgeDI9IjExNy4wIiB5Mj0iOTAuMCIgc3Ryb2tlPSIjMGRjYmJhIiBzdHJva2Utd2lkdGg9IjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgogICAgPGxpbmUgeDE9IjEwNy4yIiB5MT0iOTkuMiIgeDI9IjExMS40IiB5Mj0iMTAzLjQiIHN0cm9rZT0iIzBkY2JiYSIgc3Ryb2tlLXdpZHRoPSI1IiBzdHJva2UtbGluZWNhcD0icm91bmQiLz4KICAgIDxsaW5lIHgxPSI5OC4wIiB5MT0iMTAzLjAiIHgyPSI5OC4wIiB5Mj0iMTA5LjAiIHN0cm9rZT0iIzBkY2JiYSIgc3Ryb2tlLXdpZHRoPSI1IiBzdHJva2UtbGluZWNhcD0icm91bmQiLz4KICAgIDxsaW5lIHgxPSI4OC44IiB5MT0iOTkuMiIgeDI9Ijg0LjYiIHkyPSIxMDMuNCIgc3Ryb2tlPSIjMGRjYmJhIiBzdHJva2Utd2lkdGg9IjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgogICAgPGxpbmUgeDE9Ijg1LjAiIHkxPSI5MC4wIiB4Mj0iNzkuMCIgeTI9IjkwLjAiIHN0cm9rZT0iIzBkY2JiYSIgc3Ryb2tlLXdpZHRoPSI1IiBzdHJva2UtbGluZWNhcD0icm91bmQiLz4KICAgIDxsaW5lIHgxPSI4OC44IiB5MT0iODAuOCIgeDI9Ijg0LjYiIHkyPSI3Ni42IiBzdHJva2U9IiMwZGNiYmEiIHN0cm9rZS13aWR0aD0iNSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgICA8bGluZSB4MT0iOTguMCIgeTE9Ijc3LjAiIHgyPSI5OC4wIiB5Mj0iNzEuMCIgc3Ryb2tlPSIjMGRjYmJhIiBzdHJva2Utd2lkdGg9IjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgogICAgPGxpbmUgeDE9IjEwNy4yIiB5MT0iODAuOCIgeDI9IjExMS40IiB5Mj0iNzYuNiIgc3Ryb2tlPSIjMGRjYmJhIiBzdHJva2Utd2lkdGg9IjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgogICAgCiAgICA8Y2lyY2xlIGN4PSI5OCIgY3k9IjkwIiByPSIxMSIgZmlsbD0iIzAxMTc0OSIgc3Ryb2tlPSIjMGRjYmJhIiBzdHJva2Utd2lkdGg9IjQiLz4KICAgIDxjaXJjbGUgY3g9Ijk4IiBjeT0iOTAiIHI9IjQiIGZpbGw9IiMwZGNiYmEiLz4KICA8L2c+PC9zdmc+)\n\n**Dachflächen** (installierte Leistung · Ausrichtung · Neigung · Wirkungsgrad)\n{roofs}\n\n**Maximale Wechselrichterleistung:** {inverter}\n\nWähle eine Aktion.",
+        "menu_options": {
+          "add_roof": "Dachfläche hinzufügen",
+          "edit_roof": "Dachfläche bearbeiten",
+          "remove_roof": "Dachfläche entfernen",
+          "system": "Wechselrichterleistung ändern"
+        },
+        "menu_option_descriptions": {
+          "add_roof": "Erfasst eine zusätzliche Dachfläche, ohne die vorhandenen zu verändern.",
+          "edit_roof": "Bearbeitet eine einzelne bestehende Dachfläche gezielt.",
+          "remove_roof": "Entfernt eine Dachfläche nach ausdrücklicher Bestätigung.",
+          "system": "Ändert die maximale AC-Wechselrichterleistung der Gesamtanlage."
+        }
+      },
+      "add_roof": {
+        "title": "Dachfläche hinzufügen",
+        "description": "![Symbolbild: Dachfläche hinzufügen](data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMjggMTI4IiB3aWR0aD0iOTYiIGhlaWdodD0iOTYiPgogIDxyZWN0IHg9IjAiIHk9IjAiIHdpZHRoPSIxMjgiIGhlaWdodD0iMTI4IiByeD0iMjYiIGZpbGw9IiMwMTE3NDkiLz4KCiAgPGc+CiAgICA8cmVjdCB4PSIyNCIgeT0iNjIiIHdpZHRoPSI1MiIgaGVpZ2h0PSIyOCIgcng9IjUiIGZpbGw9IiMwZTc3ZWEiLz4KICAgIDxsaW5lIHgxPSI0MS4zIiB5MT0iNjIiIHgyPSI0MS4zIiB5Mj0iOTAiIHN0cm9rZT0iIzAxMTc0OSIgc3Ryb2tlLXdpZHRoPSIzIi8+CiAgICA8bGluZSB4MT0iNTguNyIgeTE9IjYyIiB4Mj0iNTguNyIgeTI9IjkwIiBzdHJva2U9IiMwMTE3NDkiIHN0cm9rZS13aWR0aD0iMyIvPgogICAgPGxpbmUgeDE9IjI0IiB5MT0iNzYuMCIgeDI9Ijc2IiB5Mj0iNzYuMCIgc3Ryb2tlPSIjMDExNzQ5IiBzdHJva2Utd2lkdGg9IjMiLz4KICAgIDxyZWN0IHg9IjQ2LjAiIHk9IjkwIiB3aWR0aD0iOCIgaGVpZ2h0PSI5IiBmaWxsPSIjMGU3N2VhIi8+CiAgICA8bGluZSB4MT0iMzYuMCIgeTE9Ijk5IiB4Mj0iNjQuMCIgeTI9Ijk5IiBzdHJva2U9IiMwZTc3ZWEiIHN0cm9rZS13aWR0aD0iNCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgPC9nPgogIDxnPgogICAgPGxpbmUgeDE9Ijk4IiB5MT0iNDYiIHgyPSI5OCIgeTI9Ijc4IiBzdHJva2U9IiMwZGNiYmEiIHN0cm9rZS13aWR0aD0iOSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgICA8bGluZSB4MT0iODIiIHkxPSI2MiIgeDI9IjExNCIgeTI9IjYyIiBzdHJva2U9IiMwZGNiYmEiIHN0cm9rZS13aWR0aD0iOSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgPC9nPjwvc3ZnPg==)\n\nErfasse die neue Dachfläche. Die vorhandenen Dachflächen bleiben unverändert.",
+        "data": {
+          "name": "Name",
+          "installed_power_kwp": "Installierte Leistung",
+          "azimuth": "Ausrichtung",
+          "tilt": "Neigung",
+          "system_efficiency": "Wirkungsgrad"
+        },
+        "data_description": {
+          "system_efficiency": "Berücksichtigt alle pauschalen Anlagenverluste. 90 % Wirkungsgrad entsprechen 10 % Verlust."
+        }
+      },
+      "edit_roof": {
+        "title": "Dachfläche auswählen",
+        "description": "![Symbolbild: Dachfläche bearbeiten](data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMjggMTI4IiB3aWR0aD0iOTYiIGhlaWdodD0iOTYiPgogIDxyZWN0IHg9IjAiIHk9IjAiIHdpZHRoPSIxMjgiIGhlaWdodD0iMTI4IiByeD0iMjYiIGZpbGw9IiMwMTE3NDkiLz4KCiAgPGc+CiAgICA8cmVjdCB4PSIyNiIgeT0iNjAiIHdpZHRoPSI1NiIgaGVpZ2h0PSIzMCIgcng9IjUiIGZpbGw9IiMwZTc3ZWEiLz4KICAgIDxsaW5lIHgxPSI0NC43IiB5MT0iNjAiIHgyPSI0NC43IiB5Mj0iOTAiIHN0cm9rZT0iIzAxMTc0OSIgc3Ryb2tlLXdpZHRoPSIzIi8+CiAgICA8bGluZSB4MT0iNjMuMyIgeTE9IjYwIiB4Mj0iNjMuMyIgeTI9IjkwIiBzdHJva2U9IiMwMTE3NDkiIHN0cm9rZS13aWR0aD0iMyIvPgogICAgPGxpbmUgeDE9IjI2IiB5MT0iNzUuMCIgeDI9IjgyIiB5Mj0iNzUuMCIgc3Ryb2tlPSIjMDExNzQ5IiBzdHJva2Utd2lkdGg9IjMiLz4KICAgIDxyZWN0IHg9IjUwLjAiIHk9IjkwIiB3aWR0aD0iOCIgaGVpZ2h0PSI5IiBmaWxsPSIjMGU3N2VhIi8+CiAgICA8bGluZSB4MT0iNDAuMCIgeTE9Ijk5IiB4Mj0iNjguMCIgeTI9Ijk5IiBzdHJva2U9IiMwZTc3ZWEiIHN0cm9rZS13aWR0aD0iNCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgPC9nPgogIDxnIHRyYW5zZm9ybT0icm90YXRlKDQ1IDk2IDQwKSI+CiAgICA8cmVjdCB4PSI5MCIgeT0iMTgiIHdpZHRoPSIxMiIgaGVpZ2h0PSIzNCIgcng9IjMiIGZpbGw9IiNmY2I2MDciLz4KICAgIDxwb2x5Z29uIHBvaW50cz0iOTAsNTIgMTAyLDUyIDk2LDY0IiBmaWxsPSIjZmNiNjA3Ii8+CiAgICA8cmVjdCB4PSI5MCIgeT0iMTgiIHdpZHRoPSIxMiIgaGVpZ2h0PSI4IiBmaWxsPSIjMDExNzQ5Ii8+CiAgPC9nPjwvc3ZnPg==)\n\nWähle die zu bearbeitende Dachfläche aus.",
+        "data": {
+          "id": "Dachfläche"
+        }
+      },
+      "edit_roof_details": {
+        "title": "Dachfläche bearbeiten",
+        "description": "Bearbeite **{roof_name}**. Die technische ID bleibt auch bei einer Umbenennung erhalten; alle übrigen Dachflächen bleiben unverändert.",
+        "data": {
+          "name": "Name",
+          "installed_power_kwp": "Installierte Leistung",
+          "azimuth": "Ausrichtung",
+          "tilt": "Neigung",
+          "system_efficiency": "Wirkungsgrad"
+        },
+        "data_description": {
+          "system_efficiency": "Berücksichtigt alle pauschalen Anlagenverluste. 90 % Wirkungsgrad entsprechen 10 % Verlust; ein höherer Wert erhöht die prognostizierte Energie."
+        }
+      },
+      "remove_roof": {
+        "title": "Dachfläche auswählen",
+        "description": "![Symbolbild: Dachfläche entfernen](data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMjggMTI4IiB3aWR0aD0iOTYiIGhlaWdodD0iOTYiPgogIDxyZWN0IHg9IjAiIHk9IjAiIHdpZHRoPSIxMjgiIGhlaWdodD0iMTI4IiByeD0iMjYiIGZpbGw9IiMwMTE3NDkiLz4KCiAgPGc+CiAgICA8cmVjdCB4PSIyNCIgeT0iNjIiIHdpZHRoPSI1MiIgaGVpZ2h0PSIyOCIgcng9IjUiIGZpbGw9IiMwZTc3ZWEiLz4KICAgIDxsaW5lIHgxPSI0MS4zIiB5MT0iNjIiIHgyPSI0MS4zIiB5Mj0iOTAiIHN0cm9rZT0iIzAxMTc0OSIgc3Ryb2tlLXdpZHRoPSIzIi8+CiAgICA8bGluZSB4MT0iNTguNyIgeTE9IjYyIiB4Mj0iNTguNyIgeTI9IjkwIiBzdHJva2U9IiMwMTE3NDkiIHN0cm9rZS13aWR0aD0iMyIvPgogICAgPGxpbmUgeDE9IjI0IiB5MT0iNzYuMCIgeDI9Ijc2IiB5Mj0iNzYuMCIgc3Ryb2tlPSIjMDExNzQ5IiBzdHJva2Utd2lkdGg9IjMiLz4KICAgIDxyZWN0IHg9IjQ2LjAiIHk9IjkwIiB3aWR0aD0iOCIgaGVpZ2h0PSI5IiBmaWxsPSIjMGU3N2VhIi8+CiAgICA8bGluZSB4MT0iMzYuMCIgeTE9Ijk5IiB4Mj0iNjQuMCIgeTI9Ijk5IiBzdHJva2U9IiMwZTc3ZWEiIHN0cm9rZS13aWR0aD0iNCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgPC9nPgogIDxnPgogICAgPGNpcmNsZSBjeD0iOTgiIGN5PSI2MiIgcj0iMTYiIGZpbGw9IiMwMTE3NDkiIHN0cm9rZT0iIzBkY2JiYSIgc3Ryb2tlLXdpZHRoPSI0Ii8+CiAgICA8bGluZSB4MT0iOTAiIHkxPSI2MiIgeDI9IjEwNiIgeTI9IjYyIiBzdHJva2U9IiMwZGNiYmEiIHN0cm9rZS13aWR0aD0iNSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgPC9nPjwvc3ZnPg==)\n\nWähle die zu entfernende Dachfläche aus.",
+        "data": {
+          "id": "Dachfläche"
+        }
+      },
+      "confirm_remove_roof": {
+        "title": "Entfernen bestätigen",
+        "description": "**{roof_name}** und ihre Sensoren werden endgültig entfernt. Dieser Schritt kann nicht rückgängig gemacht werden.",
+        "data": {
+          "confirm_remove": "Endgültig entfernen"
+        }
+      },
+      "system": {
+        "title": "Wechselrichterleistung",
+        "description": "![Symbolbild: Wechselrichterleistung](data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMjggMTI4IiB3aWR0aD0iOTYiIGhlaWdodD0iOTYiPgogIDxyZWN0IHg9IjAiIHk9IjAiIHdpZHRoPSIxMjgiIGhlaWdodD0iMTI4IiByeD0iMjYiIGZpbGw9IiMwMTE3NDkiLz4KICA8Zz4KICAgIDxyZWN0IHg9IjM0IiB5PSI1OCIgd2lkdGg9IjQ4IiBoZWlnaHQ9IjQwIiByeD0iNiIgZmlsbD0iIzBlNzdlYSIvPgogICAgPGNpcmNsZSBjeD0iNTgiIGN5PSI3OCIgcj0iMTAiIGZpbGw9IiMwMTE3NDkiLz4KICAgIDxwYXRoIGQ9Ik0gNTMgODIgTCA1OCA3MiBMIDU2IDcyIEwgNjEgNjQiIHN0cm9rZT0iI2ZjYjYwNyIgc3Ryb2tlLXdpZHRoPSIzIiBmaWxsPSJub25lIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiLz4KICAgIDxsaW5lIHgxPSI0MiIgeTE9Ijk4IiB4Mj0iNDIiIHkyPSIxMDQiIHN0cm9rZT0iIzBlNzdlYSIgc3Ryb2tlLXdpZHRoPSI0IiBzdHJva2UtbGluZWNhcD0icm91bmQiLz4KICAgIDxsaW5lIHgxPSI3NCIgeTE9Ijk4IiB4Mj0iNzQiIHkyPSIxMDQiIHN0cm9rZT0iIzBlNzdlYSIgc3Ryb2tlLXdpZHRoPSI0IiBzdHJva2UtbGluZWNhcD0icm91bmQiLz4KICA8L2c+CiAgPGc+CiAgICA8bGluZSB4MT0iODAiIHkxPSI3MCIgeDI9IjEwMiIgeTI9IjQwIiBzdHJva2U9IiMwZGNiYmEiIHN0cm9rZS13aWR0aD0iOCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgICA8cG9seWdvbiBwb2ludHM9IjEwMiw0MCA4OCw0MiAxMDAsNTIiIGZpbGw9IiMwZGNiYmEiLz4KICA8L2c+Cjwvc3ZnPg==)\n\nPasse die maximale AC-Wechselrichterleistung der Gesamtanlage an.",
+        "data": {
+          "inverter_max_power_kw": "Maximale AC-Wechselrichterleistung"
+        },
+        "data_description": {
+          "inverter_max_power_kw": "Leer lassen, um die Begrenzung zu entfernen."
+        }
+      }
+    },
+    "error": {
+      "duplicate_roof_name": "Jede Dachfläche benötigt einen eindeutigen Namen.",
+      "invalid_roof": "Die Dachkonfiguration ist ungültig.",
+      "invalid_inverter": "Die Wechselrichterleistung muss größer als 0 sein."
+    }
+  },
+  "selector": {
+    "location_source": {
+      "options": {
+        "home_assistant": "Standort aus Home Assistant übernehmen",
+        "address": "Andere Anschrift eingeben"
+      }
+    },
+    "roof_direction": {
+      "options": {
+        "north": "Nord",
+        "north_east": "Nordost",
+        "east": "Ost",
+        "south_east": "Südost",
+        "south": "Süd",
+        "south_west": "Südwest",
+        "west": "West",
+        "north_west": "Nordwest"
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "total_today": { "name": "Prognose heute" },
+      "total_tomorrow": { "name": "Prognose morgen" },
+      "roof_today": { "name": "{roof_name} Prognose heute" },
+      "roof_tomorrow": { "name": "{roof_name} Prognose morgen" }
+    }
+  }
+}
