@@ -87,6 +87,7 @@ class PvForecastCoordinator(DataUpdateCoordinator[ForecastResult]):
             self._listeners
             and not self._entry.pref_disable_polling
             and not self._update_in_progress
+            and self.get_daily_yield("tomorrow") is None
         ):
             self._entry.async_create_background_task(
                 self.hass,

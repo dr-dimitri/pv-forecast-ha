@@ -326,6 +326,36 @@ async def test_midnight_followup_is_bounded_and_keeps_its_own_date(hass) -> None
 
 
 @pytest.mark.asyncio
+async def test_delayed_midnight_does_not_refetch_already_covered_days(hass) -> None:
+    """Ein verspäteter Timer erkennt den inzwischen vollständig neuen Datenstand."""
+
+    with freeze_time("2026-08-23T23:59:59+02:00") as frozen:
+        client = AsyncMock()
+
+        async def fetch(*args, **kwargs):
+            frozen.move_to("2026-08-24T00:00:01+02:00")
+            return _two_day_weather(kwargs["local_date"])
+
+        client.async_fetch_roofs.side_effect = fetch
+        coordinator = PvForecastCoordinator(hass, _entry(hass), client)
+        listener = Mock()
+        unsub = coordinator.async_add_listener(listener)
+        coordinator.async_start_day_updates()
+        await coordinator.async_refresh()
+        assert client.async_fetch_roofs.await_count == 2
+        assert coordinator.get_daily_yield("tomorrow") is not None
+        listener.reset_mock()
+
+        async_fire_time_changed(hass)
+        await hass.async_block_till_done(wait_background_tasks=True)
+
+        assert client.async_fetch_roofs.await_count == 2
+        listener.assert_called_once_with()
+        unsub()
+        await coordinator.async_shutdown()
+
+
+@pytest.mark.asyncio
 async def test_failed_midnight_followup_retains_previous_snapshot(hass) -> None:
     """Ein fehlgeschlagener Folgeabruf bleibt ein normaler Coordinator-Fehler."""
 
