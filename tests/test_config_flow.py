@@ -66,6 +66,12 @@ ADDRESS_FORM = {
     CONF_STREET: "Pariser Platz 1",
     CONF_COUNTRY: "DE",
 }
+TOKYO_ADDRESS_FORM = {
+    CONF_POSTAL_CODE: "100-0001",
+    CONF_STREET: "1-1 Chiyoda",
+    CONF_COUNTRY: "JP",
+}
+TOKYO_LOCATION = GeocodedLocation(35.6852, 139.7528, "Chiyoda, Tokio, Japan")
 
 
 @pytest.mark.asyncio
@@ -183,6 +189,29 @@ async def _advance_to_system(hass):
     """Config Flow bis zum Verbindungstest führen."""
 
     result = await _advance_to_roof(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], ROOF_FORM
+    )
+    assert result["step_id"] == "system"
+    return result
+
+
+async def _advance_address_to_system(hass):
+    """Eine japanische Anschrift bis zum gemeinsamen Verbindungstest einrichten."""
+
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": SOURCE_USER}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_LOCATION_SOURCE: LOCATION_SOURCE_ADDRESS}
+    )
+    with patch(
+        "custom_components.pv_forecast.config_flow.NominatimClient.async_geocode",
+        return_value=TOKYO_LOCATION,
+    ):
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], TOKYO_ADDRESS_FORM
+        )
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], ROOF_FORM
     )
@@ -501,9 +530,15 @@ async def test_address_is_geocoded_and_persisted(hass) -> None:
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], ROOF_FORM
     )
-    with patch(
-        "custom_components.pv_forecast.config_flow.OpenMeteoClient.async_fetch_roofs",
-        return_value={},
+    with (
+        patch(
+            "custom_components.pv_forecast.config_flow.OpenMeteoClient.async_resolve_timezone",
+            return_value="Europe/Berlin",
+        ),
+        patch(
+            "custom_components.pv_forecast.config_flow.OpenMeteoClient.async_fetch_roofs",
+            return_value={},
+        ),
     ):
         result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
     assert result["type"] is FlowResultType.MENU
@@ -512,6 +547,7 @@ async def test_address_is_geocoded_and_persisted(hass) -> None:
     )
     assert result["description_placeholders"]["latitude"] == "52.516300"
     assert result["description_placeholders"]["longitude"] == "13.377700"
+    assert result["description_placeholders"]["timezone"] == "Europe/Berlin"
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], {"next_step_id": "edit_location"}
     )
@@ -523,6 +559,214 @@ async def test_address_is_geocoded_and_persisted(hass) -> None:
     assert address_defaults[CONF_POSTAL_CODE] == "10117"
     assert address_defaults[CONF_STREET] == "Pariser Platz 1"
     assert address_defaults[CONF_COUNTRY] == "DE"
+
+
+@pytest.mark.asyncio
+async def test_address_timezone_is_used_for_summary_entry_and_forecasts(hass) -> None:
+    """Eine Anlage in Tokio übernimmt trotz Berliner HA-Zone ihre eigene Zeitzone."""
+
+    await hass.config.async_set_time_zone("Europe/Berlin")
+    with (
+        patch(
+            "custom_components.pv_forecast.config_flow.OpenMeteoClient.async_resolve_timezone",
+            return_value="Asia/Tokyo",
+        ) as resolve_timezone,
+        patch(
+            "custom_components.pv_forecast.config_flow.OpenMeteoClient.async_fetch_roofs",
+            return_value={},
+        ) as fetch,
+    ):
+        result = await _advance_address_to_system(hass)
+        resolve_timezone.assert_not_awaited()
+        flow = hass.config_entries.flow._progress[result["flow_id"]]
+        assert CONF_TIME_ZONE not in flow._location
+        result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
+        assert result["step_id"] == "summary"
+        assert result["description_placeholders"]["timezone"] == "Asia/Tokyo"
+        assert (
+            result["description_placeholders"]["location"]
+            == TOKYO_LOCATION.display_name
+        )
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {"next_step_id": "finish"}
+        )
+        assert result["type"] is FlowResultType.CREATE_ENTRY
+        assert result["data"][CONF_TIME_ZONE] == "Asia/Tokyo"
+        assert result["data"][CONF_LOCATION_SOURCE] == LOCATION_SOURCE_ADDRESS
+        await hass.async_block_till_done()
+        resolve_timezone.assert_awaited_once_with(
+            TOKYO_LOCATION.latitude, TOKYO_LOCATION.longitude
+        )
+        assert fetch.await_count == 2
+        assert all(
+            call.args[:3]
+            == (TOKYO_LOCATION.latitude, TOKYO_LOCATION.longitude, "Asia/Tokyo")
+            for call in fetch.await_args_list
+        )
+        assert await hass.config_entries.async_unload(result["result"].entry_id)
+
+
+@pytest.mark.asyncio
+async def test_home_assistant_location_keeps_timezone_without_lookup(hass) -> None:
+    """Der HA-Standort braucht keine zusätzliche Anfrage zur Zeitzonenauflösung."""
+
+    await hass.config.async_set_time_zone("Europe/Berlin")
+    with patch(
+        "custom_components.pv_forecast.config_flow.OpenMeteoClient.async_resolve_timezone"
+    ) as resolve_timezone:
+        result = await _advance_to_summary(hass)
+        assert result["description_placeholders"]["timezone"] == "Europe/Berlin"
+        flow = hass.config_entries.flow._progress[result["flow_id"]]
+        assert flow._location[CONF_TIME_ZONE] == "Europe/Berlin"
+        resolve_timezone.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_address_timezone_survives_forecast_retry_and_back_navigation(
+    hass,
+) -> None:
+    """Forecastfehler und Rücknavigation lösen keine zweite Zeitzonenabfrage aus."""
+
+    result = await _advance_address_to_system(hass)
+    with (
+        patch(
+            "custom_components.pv_forecast.config_flow.OpenMeteoClient.async_resolve_timezone",
+            return_value="Asia/Tokyo",
+        ) as resolve_timezone,
+        patch(
+            "custom_components.pv_forecast.config_flow.OpenMeteoClient.async_fetch_roofs",
+            side_effect=[OpenMeteoConnectionError("offline"), {}, {}, {}],
+        ) as fetch,
+    ):
+        result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
+        assert result["errors"] == {"base": "cannot_connect"}
+        flow = hass.config_entries.flow._progress[result["flow_id"]]
+        assert flow._location[CONF_TIME_ZONE] == "Asia/Tokyo"
+        result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
+        assert result["step_id"] == "summary"
+        for action in ("edit_roofs", "edit_system"):
+            result = await hass.config_entries.flow.async_configure(
+                result["flow_id"], {"next_step_id": action}
+            )
+            if action == "edit_roofs":
+                result = await hass.config_entries.flow.async_configure(
+                    result["flow_id"], ROOF_FORM
+                )
+            result = await hass.config_entries.flow.async_configure(
+                result["flow_id"], {}
+            )
+            assert result["description_placeholders"]["timezone"] == "Asia/Tokyo"
+        resolve_timezone.assert_awaited_once_with(
+            TOKYO_LOCATION.latitude, TOKYO_LOCATION.longitude
+        )
+        assert fetch.await_count == 4
+        assert all(call.args[2] == "Asia/Tokyo" for call in fetch.await_args_list)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("error", "expected"),
+    [
+        (OpenMeteoConnectionError("offline"), "cannot_connect"),
+        (OpenMeteoDataError("Unbekannte Zeitzone"), "invalid_response"),
+    ],
+)
+async def test_address_timezone_error_can_be_retried_without_ha_fallback(
+    hass, error, expected: str
+) -> None:
+    """Fehlende Standortzeitzone bleibt ein sichtbarer und wiederholbarer Fehler."""
+
+    await hass.config.async_set_time_zone("Europe/Berlin")
+    result = await _advance_address_to_system(hass)
+    with (
+        patch(
+            "custom_components.pv_forecast.config_flow.OpenMeteoClient.async_resolve_timezone",
+            side_effect=[error, "Asia/Tokyo"],
+        ) as resolve_timezone,
+        patch(
+            "custom_components.pv_forecast.config_flow.OpenMeteoClient.async_fetch_roofs",
+            return_value={},
+        ) as fetch,
+    ):
+        result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
+        assert result["type"] is FlowResultType.FORM
+        assert result["step_id"] == "system"
+        assert result["errors"] == {"base": expected}
+        assert (
+            CONF_TIME_ZONE
+            not in hass.config_entries.flow._progress[result["flow_id"]]._location
+        )
+        fetch.assert_not_awaited()
+        result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
+        assert result["description_placeholders"]["timezone"] == "Asia/Tokyo"
+        assert resolve_timezone.await_count == 2
+        assert fetch.await_args.args[2] == "Asia/Tokyo"
+
+
+@pytest.mark.asyncio
+async def test_changed_address_discards_old_timezone_even_if_lookup_fails(hass) -> None:
+    """Eine neue Anschrift kann weder die alte Zone noch die HA-Zone übernehmen."""
+
+    await hass.config.async_set_time_zone("Europe/Berlin")
+    london = GeocodedLocation(
+        51.5034, -0.1276, "Westminster, London, Vereinigtes Königreich"
+    )
+    result = await _advance_address_to_system(hass)
+    with (
+        patch(
+            "custom_components.pv_forecast.config_flow.OpenMeteoClient.async_resolve_timezone",
+            side_effect=[
+                "Asia/Tokyo",
+                OpenMeteoDataError("Zone fehlt"),
+                "Europe/London",
+            ],
+        ) as resolve_timezone,
+        patch(
+            "custom_components.pv_forecast.config_flow.OpenMeteoClient.async_fetch_roofs",
+            return_value={},
+        ) as fetch,
+    ):
+        result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
+        assert result["description_placeholders"]["timezone"] == "Asia/Tokyo"
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {"next_step_id": "edit_location"}
+        )
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {CONF_LOCATION_SOURCE: LOCATION_SOURCE_ADDRESS}
+        )
+        with patch(
+            "custom_components.pv_forecast.config_flow.NominatimClient.async_geocode",
+            return_value=london,
+        ):
+            result = await hass.config_entries.flow.async_configure(
+                result["flow_id"],
+                {
+                    CONF_POSTAL_CODE: "SW1A 2AA",
+                    CONF_STREET: "10 Downing Street",
+                    CONF_COUNTRY: "GB",
+                },
+            )
+        assert result["step_id"] == "system"
+        flow = hass.config_entries.flow._progress[result["flow_id"]]
+        assert flow._location[CONF_LATITUDE] == london.latitude
+        assert CONF_TIME_ZONE not in flow._location
+        result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
+        assert result["errors"] == {"base": "invalid_response"}
+        assert CONF_TIME_ZONE not in flow._location
+        assert fetch.await_count == 1
+        result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
+        assert result["description_placeholders"]["timezone"] == "Europe/London"
+        assert fetch.await_count == 2
+        assert fetch.await_args.args[:3] == (
+            london.latitude,
+            london.longitude,
+            "Europe/London",
+        )
+        assert [call.args for call in resolve_timezone.await_args_list] == [
+            (TOKYO_LOCATION.latitude, TOKYO_LOCATION.longitude),
+            (london.latitude, london.longitude),
+            (london.latitude, london.longitude),
+        ]
 
 
 @pytest.mark.asyncio

@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, patch
 from zoneinfo import ZoneInfo
 
 import pytest
-from aiohttp import ClientError
+from aiohttp import ClientError, ClientResponseError, ContentTypeError
 from freezegun import freeze_time
 
 from custom_components.pv_forecast.api import (
@@ -15,6 +15,7 @@ from custom_components.pv_forecast.api import (
     parse_open_meteo_response,
 )
 from custom_components.pv_forecast.calculations import calculate_forecast
+from custom_components.pv_forecast.const import REQUEST_TIMEOUT_SECONDS
 from custom_components.pv_forecast.models import OpenMeteoForecast
 
 from .helpers import TIMEZONE, roof, weather
@@ -107,6 +108,120 @@ class _Session:
         self.calls += 1
         self.last_kwargs = kwargs
         return self.response
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("timezone", ["Asia/Tokyo", "Europe/Berlin", "Etc/UTC"])
+async def test_timezone_resolution_requests_only_metadata(timezone: str) -> None:
+    """Der einmalige Zeitzonenabruf benötigt keine Wetterdaten oder Dachgeometrie."""
+
+    session = _Session(_Response({"timezone": timezone}))
+    resolved = await OpenMeteoClient(session).async_resolve_timezone(35.68, 139.69)
+
+    assert resolved == timezone
+    assert session.calls == 1
+    assert session.last_kwargs["params"] == {
+        "latitude": 35.68,
+        "longitude": 139.69,
+        "timezone": "auto",
+    }
+    assert session.last_kwargs["timeout"].total == REQUEST_TIMEOUT_SECONDS
+
+
+@pytest.mark.asyncio
+async def test_timezone_resolution_preserves_dst_rules() -> None:
+    """Die IANA-Zone behält Sommerzeitregeln trotz eines aktuell festen API-Offsets."""
+
+    session = _Session(
+        _Response(
+            {
+                "timezone": "America/New_York",
+                "utc_offset_seconds": -14400,
+                "timezone_abbreviation": "EDT",
+            }
+        )
+    )
+    resolved = await OpenMeteoClient(session).async_resolve_timezone(40.71, -74.01)
+
+    assert resolved == "America/New_York"
+    timezone = ZoneInfo(resolved)
+    assert datetime(2026, 1, 15, tzinfo=timezone).utcoffset() == timedelta(hours=-5)
+    assert datetime(2026, 7, 15, tzinfo=timezone).utcoffset() == timedelta(hours=-4)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "payload",
+    [
+        None,
+        [],
+        {},
+        {"error": True, "timezone": "Asia/Tokyo"},
+        {"timezone": None},
+        {"timezone": False},
+        {"timezone": ["Asia/Tokyo"]},
+        {"timezone": ""},
+        {"timezone": " "},
+        {"timezone": "auto"},
+        {"timezone": "Mars/Base"},
+        {"timezone": "/UTC"},
+    ],
+    ids=[
+        "null",
+        "liste",
+        "fehlende-zone",
+        "api-fehler",
+        "zone-null",
+        "zone-bool",
+        "zone-liste",
+        "leere-zone",
+        "leerzeichen",
+        "nicht-aufgeloest",
+        "unbekannte-zone",
+        "ungueltiger-zonenschluessel",
+    ],
+)
+async def test_timezone_resolution_rejects_invalid_metadata(payload: object) -> None:
+    """Fehlende oder ungültige Standortzeitzonen führen zu keinem stillen Fallback."""
+
+    client = OpenMeteoClient(_Session(_Response(payload)))
+    with pytest.raises(OpenMeteoDataError):
+        await client.async_resolve_timezone(35.68, 139.69)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "error",
+    [
+        ValueError("kein JSON"),
+        ContentTypeError(None, (), status=200, message="kein JSON-Inhaltstyp"),
+    ],
+    ids=["ungueltiges-json", "ungueltiger-inhaltstyp"],
+)
+async def test_timezone_resolution_rejects_invalid_json(error: Exception) -> None:
+    """Ungültiger JSON-Inhalt bleibt auch beim Metadatenabruf ein Datenfehler."""
+
+    client = OpenMeteoClient(_Session(_Response(error)))
+    with pytest.raises(OpenMeteoDataError):
+        await client.async_resolve_timezone(35.68, 139.69)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "error",
+    [
+        ClientError("offline"),
+        ClientResponseError(None, (), status=503, message="Dienst nicht verfügbar"),
+        TimeoutError(),
+    ],
+    ids=["verbindungsfehler", "http-fehler", "timeout"],
+)
+async def test_timezone_resolution_surfaces_transport_errors(error: Exception) -> None:
+    """Verbindungs- und HTTP-Fehler sowie Timeouts behalten ihren Fehlertyp."""
+
+    client = OpenMeteoClient(_Session(_Response({}, error)))
+    with pytest.raises(OpenMeteoConnectionError):
+        await client.async_resolve_timezone(35.68, 139.69)
 
 
 @pytest.mark.asyncio
