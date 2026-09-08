@@ -1,0 +1,48 @@
+# Konfiguration und sichere Weiterentwicklung
+
+## Aktuell ausgeliefertes Schema
+
+Config Entries verwenden Version **1.1**. Ein Entry beschreibt eine PV-Anlage;
+Standortdaten liegen in `data`, Dachflächen und das optionale gemeinsame
+Wechselrichterlimit in `options`. Die UI-Eingabe `system_efficiency` wird als
+Verlust-Prozent in `loss_factor` gespeichert. Dies ist der vereinbarte
+Speichervertrag und keine zu beseitigende Altlast.
+
+Einträge ohne Wechselrichterlimit bleiben gültig und unbegrenzt. Die
+Anlagenzeitzone ist die gespeicherte IANA-Zone; sie wird beim Start weder aus
+Home Assistant übernommen noch erneut anhand der Koordinaten ermittelt. Neue
+Adresskonfigurationen ermitteln sie während der Einrichtung. Eine bewusste
+Standortkorrektur bestehender Anlagen gehört in den Reconfigure-Flow (#23).
+
+## Wann eine Migration erforderlich wird
+
+Eine Migration wird zusammen mit einer tatsächlichen Änderung des gespeicherten
+Schemas entwickelt. Kompatible optionale Ergänzungen brauchen keinen
+Major-Versionssprung und keinen vorsorglichen Umbau vorhandener Einträge.
+Bestehende Felder dürfen nicht für eine andere Bedeutung wiederverwendet werden.
+Bei inkompatiblen Änderungen wird die Major-Version erhöht; echte Umwandlungen
+laufen über `async_migrate_entry` und `hass.config_entries.async_update_entry`.
+
+Vor dem Schreiben muss der vollständige Zielstand vorbereitet und validiert
+sein. Ein fehlgeschlagener Schritt lässt den Ausgangseintrag unverändert.
+Migrationen erzeugen keine neuen Anlagen oder Dach-IDs. `entry_id`,
+Config-Entry-`unique_id`, Dach-IDs, Entity-`unique_id` und Anwenderwerte werden
+erhalten. Netzwerkfehler dürfen keinen teilweise umgeschriebenen Eintrag
+hinterlassen. Jeder tatsächliche Schritt benötigt Offline-Tests für Erfolg,
+Fehler, wiederholten Aufruf und die übernommenen Identitäten.
+
+Solange keine Datenumwandlung erforderlich ist, bleibt das Schema bei 1.1.
+Ein wirkungsloser Migrationshook bietet keinen zusätzlichen Schutz. Home
+Assistant lehnt höhere, hier nicht unterstützte Major-Versionen bereits vor dem
+Setup ab. Kompatible Minor-Versionen behandelt HA gemäß seinen
+[Config-Entry-Migrationsregeln](https://developers.home-assistant.io/docs/core/integration/config_flow/#config-entry-migration).
+
+## Künftige Mess-, Archiv- und Lerndaten
+
+Persistente Messdaten, eingefrorene Prognosen und Lernzustand erhalten bei ihrer
+Einführung eigene Speicherversionen und eigene Migrationsprüfungen. Die
+Config-Entry-Version wird nicht als Ersatz für deren Datenvertrag verwendet.
+Eine Änderung von Anlage, Messgrenze oder Modell muss in der Historie erkennbar
+bleiben und gegebenenfalls ein neues Lernsegment beginnen. Bestehende Daten
+werden nicht rückwirkend so umgedeutet, als wären sie mit der neuen Konfiguration
+entstanden.

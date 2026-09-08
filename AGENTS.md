@@ -207,6 +207,13 @@ Attribution für Open-Meteo-Daten unter CC BY 4.0.
 
 ## Arbeitsablauf
 
+Bestehende Config Entries verwenden Schema 1.1. Migrationen werden gemeinsam
+mit tatsächlichen Schemaänderungen umgesetzt; vorsorgliche Versionssprünge oder
+verlustbehaftete Normalisierungen sind nicht vorgesehen. IDs, Anwenderwerte und
+gespeicherte Anlagenzeitzonen bleiben erhalten. Die verbindliche Strategie aus
+#11 ist in [Konfigurationsversionen](docs/konfigurationsversionen.md) beschrieben.
+Lern- und Archivdaten werden bei ihrer Einführung unabhängig versioniert.
+
 Vor einer Änderung den aktuellen `main`-Stand holen und einen eigenen Branch
 anlegen. Änderungen klein und testbar halten, alle Qualitätsprüfungen ausführen,
 committen, pushen und mit einer aussagekräftigen Pull-Request-Beschreibung
