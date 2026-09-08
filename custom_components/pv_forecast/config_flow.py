@@ -329,6 +329,7 @@ class PvForecastConfigFlow(ConfigFlow, domain=DOMAIN):
     """Config Flow für genau eine PV-Prognose-Konfiguration."""
 
     VERSION = 1
+    MINOR_VERSION = 1
 
     def __init__(self) -> None:
         """Zwischenzustand des mehrstufigen Flows initialisieren."""

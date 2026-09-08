@@ -169,6 +169,10 @@ Anlagensimulation. Nicht berücksichtigt werden insbesondere:
 
 ## Entwicklung
 
+Die Regeln für bestehende Config Entries und spätere Datenmigrationen stehen
+unter [Konfigurationsversionen](docs/konfigurationsversionen.md). Das aktuelle
+Schema bleibt bei 1.1; die Release-Version ist davon unabhängig.
+
 ```bash
 python3 -m venv .venv
 .venv/bin/pip install --requirement requirements_test.txt
