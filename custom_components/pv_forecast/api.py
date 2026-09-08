@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import math
 from collections.abc import Mapping
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -48,6 +48,8 @@ class OpenMeteoClient:
         longitude: float,
         timezone: str,
         roofs: tuple[PvRoof, ...],
+        *,
+        local_date: date | None = None,
     ) -> dict[str, tuple[WeatherInterval, ...]]:
         """Forecasts je unterschiedlicher Dachgeometrie parallel abrufen.
 
@@ -55,6 +57,8 @@ class OpenMeteoClient:
         identischer Geometrie teilen sich deshalb denselben Request.
         """
 
+        if local_date is None:
+            local_date = datetime.now(UTC).astimezone(_timezone(timezone)).date()
         roofs_by_geometry: dict[tuple[float, float], list[PvRoof]] = {}
         for roof in roofs:
             geometry = (roof.tilt_deg, to_open_meteo_azimuth(roof.compass_azimuth_deg))
@@ -68,6 +72,7 @@ class OpenMeteoClient:
                     timezone,
                     tilt_deg=geometry[0],
                     open_meteo_azimuth_deg=geometry[1],
+                    local_date=local_date,
                 )
                 for geometry in roofs_by_geometry
             )
@@ -88,15 +93,34 @@ class OpenMeteoClient:
         *,
         tilt_deg: float,
         open_meteo_azimuth_deg: float,
+        local_date: date | None = None,
     ) -> OpenMeteoForecast:
         """Eine Forecast-Antwort für eine Dachgeometrie laden und validieren."""
 
+        location_timezone = _timezone(timezone)
+        if local_date is None:
+            local_date = datetime.now(UTC).astimezone(location_timezone).date()
+        day_start = datetime.combine(
+            local_date, time.min, location_timezone
+        ).astimezone(UTC)
+        day_end = datetime.combine(
+            local_date + timedelta(days=2), time.min, location_timezone
+        ).astimezone(UTC)
+        # GTI gehört zur vorhergehenden Stunde. Nur überlappende UTC-Intervalle
+        # laden; Teilstunden-Zeitzonen benötigen anteilig ausgewertete Ränder.
+        first_end = day_start.replace(minute=0, second=0, microsecond=0) + timedelta(
+            hours=1
+        )
+        last_end = day_end.replace(minute=0, second=0, microsecond=0)
+        if last_end < day_end:
+            last_end += timedelta(hours=1)
         params: Mapping[str, str | int | float] = {
             "latitude": latitude,
             "longitude": longitude,
             "hourly": "global_tilted_irradiance,temperature_2m",
-            "timezone": timezone,
-            "forecast_days": 2,
+            "timezone": "UTC",
+            "start_hour": first_end.strftime("%Y-%m-%dT%H:%M"),
+            "end_hour": last_end.strftime("%Y-%m-%dT%H:%M"),
             "timeformat": "unixtime",
             "tilt": tilt_deg,
             "azimuth": open_meteo_azimuth_deg,
@@ -118,6 +142,15 @@ class OpenMeteoClient:
         return parse_open_meteo_response(payload, timezone)
 
 
+def _timezone(name: str) -> ZoneInfo:
+    """Eine gespeicherte Anlagenzeitzone kontrolliert auflösen."""
+
+    try:
+        return ZoneInfo(name)
+    except (ValueError, ZoneInfoNotFoundError) as err:
+        raise OpenMeteoDataError("Unbekannte Zeitzone") from err
+
+
 def parse_open_meteo_response(
     payload: Any, requested_timezone: str
 ) -> OpenMeteoForecast:
@@ -136,18 +169,13 @@ def parse_open_meteo_response(
     if not isinstance(gti_values, list) or not isinstance(temperature_values, list):
         raise OpenMeteoDataError("Benötigte Wetterreihen fehlen")
 
-    try:
-        timezone = ZoneInfo(requested_timezone)
-    except ZoneInfoNotFoundError as err:
-        raise OpenMeteoDataError("Unbekannte Zeitzone") from err
+    timezone = _timezone(requested_timezone)
 
     intervals: list[WeatherInterval] = []
     for index, raw_time in enumerate(times):
         try:
             if isinstance(raw_time, int | float) and not isinstance(raw_time, bool):
                 end = datetime.fromtimestamp(raw_time, UTC).astimezone(timezone)
-            elif isinstance(raw_time, str):
-                end = datetime.fromisoformat(raw_time).replace(tzinfo=timezone)
             else:
                 raise ValueError
         except (OSError, OverflowError, ValueError) as err:

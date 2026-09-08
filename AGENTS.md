@@ -110,8 +110,17 @@ Open-Meteo ist die einzige Datenquelle. Ein Request lädt nur:
 
 - `global_tilted_irradiance`,
 - `temperature_2m`,
-- `forecast_days=2`,
-- die lokale Zeitzone von Home Assistant beziehungsweise dem Standort.
+- ein absolutes stündliches UTC-Fenster über `start_hour` und `end_hour`
+  (einschließlich des letzten GTI-Endzeitpunkts),
+- `timezone=UTC` und `timeformat=unixtime` für eindeutige Transportzeitpunkte.
+
+Diese in Issue #1 für die Korrektur von Issue #5 festgelegte Ausnahme ersetzt
+`forecast_days=2` und die lokale Request-Zeitzone. Die beiden Zielgrenzen werden
+weiterhin zuerst in der gespeicherten Anlagenzeitzone bestimmt. Geladen werden
+nur die UTC-Stundenintervalle, die heute und morgen lokal überlappen; bei
+Teilstunden-Zeitzonen werden Randintervalle anteilig ausgewertet. Das vermeidet
+die festen Request-Offsets von Open-Meteo über Zeitumstellungen hinweg. Es
+werden weiterhin ausschließlich die zwei lokalen Zieltage prognostiziert.
 
 Jede unterschiedliche Kombination aus Neigung und Open-Meteo-Azimut braucht
 ihren eigenen GTI-Verlauf. Dächer mit identischer Geometrie teilen sich den
