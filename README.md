@@ -125,6 +125,13 @@ Berechnung berücksichtigt lokale Tagesgrenzen, Zeitumstellungen und die
 Open-Meteo-Semantik, nach der ein GTI-Zeitstempel den Mittelwert der
 vorhergehenden Stunde bezeichnet.
 
+Der Abruf umfasst alle Stundenintervalle, die den heutigen und morgigen lokalen
+Tag überlappen, einschließlich der letzten Stunde morgen. Die Integration
+bestimmt diese Tagesgrenzen in der gespeicherten Anlagenzeitzone und fragt das
+benötigte Fenster mit eindeutigen UTC-Zeitpunkten ab. Dadurch bleiben auch
+23-/25-Stunden-Tage und Zeitzonen mit halbstündigem oder viertelstündigem Versatz
+korrekt zugeordnet; Randintervalle werden bei Bedarf anteilig berücksichtigt.
+
 ## Grenzen
 
 Die Prognose ist ein vereinfachtes Modell und keine vollständige
