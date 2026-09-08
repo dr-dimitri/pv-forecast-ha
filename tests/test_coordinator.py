@@ -7,7 +7,11 @@ import pytest
 from homeassistant.helpers.update_coordinator import UpdateFailed
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.pv_forecast.api import OpenMeteoConnectionError
+from custom_components.pv_forecast.api import (
+    OpenMeteoConnectionError,
+    OpenMeteoDataError,
+    OpenMeteoError,
+)
 from custom_components.pv_forecast.const import (
     CONF_INVERTER_MAX_POWER_KW,
     CONF_LATITUDE,
@@ -70,3 +74,33 @@ async def test_coordinator_converts_api_error_to_update_failed(hass) -> None:
     coordinator = PvForecastCoordinator(hass, _entry(hass), client)
     with pytest.raises(UpdateFailed):
         await coordinator._async_update_data()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "error",
+    [
+        OpenMeteoConnectionError("offline"),
+        OpenMeteoDataError("Zeitreihe unvollständig"),
+    ],
+)
+async def test_coordinator_retains_valid_forecast_after_failed_update(
+    hass, error: OpenMeteoError
+) -> None:
+    """Unbrauchbare Antworten ersetzen keinen zuvor gültigen Tagesforecast."""
+
+    client = AsyncMock()
+    client.async_fetch_roofs.return_value = {"a": (weather(),), "b": (weather(),)}
+    coordinator = PvForecastCoordinator(hass, _entry(hass), client)
+    with patch(
+        "custom_components.pv_forecast.coordinator.dt_util.now",
+        return_value=datetime(2026, 8, 23, 10, tzinfo=TIMEZONE),
+    ):
+        await coordinator.async_refresh()
+        previous = coordinator.data
+        assert previous.total.today == pytest.approx(15)
+        client.async_fetch_roofs.side_effect = error
+        await coordinator.async_refresh()
+
+    assert not coordinator.last_update_success
+    assert coordinator.data is previous

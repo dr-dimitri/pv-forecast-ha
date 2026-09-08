@@ -139,7 +139,16 @@ class OpenMeteoClient:
         except (TimeoutError, ClientResponseError, ClientError) as err:
             raise OpenMeteoConnectionError("Open-Meteo-Abfrage fehlgeschlagen") from err
 
-        return parse_open_meteo_response(payload, timezone)
+        forecast = parse_open_meteo_response(payload, timezone)
+        expected_count = int((last_end - first_end).total_seconds() / 3600) + 1
+        if len(forecast.intervals) != expected_count or any(
+            interval.end.astimezone(UTC) != first_end + timedelta(hours=index)
+            for index, interval in enumerate(forecast.intervals)
+        ):
+            raise OpenMeteoDataError(
+                "Zeitreihe deckt den angeforderten Zeitraum nicht lückenlos ab"
+            )
+        return forecast
 
 
 def _timezone(name: str) -> ZoneInfo:
