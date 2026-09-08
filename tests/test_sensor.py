@@ -1,7 +1,7 @@
 """Tests für Sensorwerte, Metadaten und stabile IDs."""
 
 from datetime import date
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 from homeassistant.components.sensor import SensorDeviceClass
@@ -10,6 +10,7 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.update_coordinator import UpdateFailed
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
+from custom_components.pv_forecast import PvForecastRuntimeData
 from custom_components.pv_forecast.const import (
     CONF_LATITUDE,
     CONF_LONGITUDE,
@@ -26,6 +27,9 @@ from custom_components.pv_forecast.models import (
 from custom_components.pv_forecast.sensor import (
     PvForecastRoofSensor,
     PvForecastTotalSensor,
+)
+from custom_components.pv_forecast.sensor import (
+    async_setup_entry as async_setup_sensor_entry,
 )
 
 from .helpers import persisted_roof, roof
@@ -147,6 +151,56 @@ async def test_renaming_roof_does_not_change_unique_id(hass) -> None:
     before = PvForecastRoofSensor(coordinator, entry, "stable_roof", "Süddach", "today")
     after = PvForecastRoofSensor(coordinator, entry, "stable_roof", "Garage", "today")
     assert before.unique_id == after.unique_id == "entry_1_stable_roof_today"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("day", ["today", "tomorrow"])
+async def test_roof_missing_from_snapshot_is_unavailable(hass, day: str) -> None:
+    """Ein nicht mehr abgedecktes Dach erzeugt keinen Wert und keinen KeyError."""
+
+    entry, coordinator = _sensor_setup(hass)
+    sensor = PvForecastRoofSensor(coordinator, entry, "missing_roof", "Garage", day)
+
+    assert sensor.native_value is None
+    assert not sensor.available
+    assert coordinator.last_update_success
+
+
+@pytest.mark.asyncio
+async def test_sensor_setup_uses_roofs_from_snapshot(hass) -> None:
+    """Neue Optionen ändern die Sensoren erst zusammen mit dem nächsten Datenstand."""
+
+    entry, coordinator = _sensor_setup(hass)
+    entry.runtime_data = PvForecastRuntimeData(coordinator)
+    hass.config_entries.async_update_entry(
+        entry,
+        options={
+            CONF_ROOFS: [
+                persisted_roof("stable_roof", name="Name aus neueren Optionen"),
+                persisted_roof("options_only_roof", name="Neues Dach"),
+            ]
+        },
+    )
+    add_entities = Mock()
+    await async_setup_sensor_entry(hass, entry, add_entities)
+
+    add_entities.assert_called_once()
+    entities = add_entities.call_args.args[0]
+    assert {entity.unique_id for entity in entities} == {
+        "entry_1_total_today",
+        "entry_1_total_tomorrow",
+        "entry_1_stable_roof_today",
+        "entry_1_stable_roof_tomorrow",
+    }
+    roof_sensors = [
+        entity for entity in entities if isinstance(entity, PvForecastRoofSensor)
+    ]
+    assert len(roof_sensors) == 2
+    assert all(
+        sensor.translation_placeholders == {"roof_name": "Süddach"}
+        for sensor in roof_sensors
+    )
+    assert all(sensor.available for sensor in entities)
 
 
 @pytest.mark.asyncio

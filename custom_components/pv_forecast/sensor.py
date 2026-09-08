@@ -11,7 +11,6 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import PvForecastConfigEntry
-from .configuration import roofs_from_options
 from .coordinator import PvForecastCoordinator
 from .entity import PvForecastEntity
 from .models import ForecastDay
@@ -29,7 +28,8 @@ async def async_setup_entry(
         PvForecastTotalSensor(coordinator, entry, "today"),
         PvForecastTotalSensor(coordinator, entry, "tomorrow"),
     ]
-    for roof in roofs_from_options(entry.options):
+    for forecast in coordinator.data.roofs.values():
+        roof = forecast.roof
         entities.extend(
             (
                 PvForecastRoofSensor(coordinator, entry, roof.id, roof.name, "today"),
