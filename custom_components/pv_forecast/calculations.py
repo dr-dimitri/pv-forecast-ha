@@ -129,8 +129,12 @@ def calculate_forecast(
     for roof in roofs:
         validate_roof(roof)
 
+    # Wiederholte Ortsstunden beim DST-Rücksprung sind nur in UTC eindeutig.
     weather_maps = {
-        roof.id: {point.end: point for point in weather_by_roof.get(roof.id, ())}
+        roof.id: {
+            point.end.astimezone(UTC): point
+            for point in weather_by_roof.get(roof.id, ())
+        }
         for roof in roofs
     }
     timestamps = sorted(

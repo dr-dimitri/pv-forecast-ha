@@ -1,6 +1,6 @@
 """Tests der reinen PV-Berechnung."""
 
-from datetime import date, datetime
+from datetime import UTC, date, datetime, timedelta
 
 import pytest
 
@@ -15,7 +15,11 @@ from custom_components.pv_forecast.calculations import (
     validate_coordinates,
     validate_roof,
 )
-from custom_components.pv_forecast.models import PvRoof, RoofForecastInterval
+from custom_components.pv_forecast.models import (
+    PvRoof,
+    RoofForecastInterval,
+    WeatherInterval,
+)
 
 from .helpers import TIMEZONE, roof, weather
 
@@ -149,6 +153,97 @@ def test_preceding_hour_is_assigned_by_interval_overlap() -> None:
         TIMEZONE,
     )
     assert result.total.today == pytest.approx(10)
+    assert result.total.tomorrow == 0
+
+
+@pytest.mark.parametrize(
+    ("local_day", "hours"),
+    [
+        (date(2026, 8, 23), 24),
+        (date(2026, 3, 29), 23),
+        (date(2026, 10, 25), 25),
+    ],
+    ids=["normaler-tag", "sommerzeitbeginn", "sommerzeitende"],
+)
+def test_forecast_preserves_every_hour_of_local_day(
+    local_day: date, hours: int
+) -> None:
+    """Ein vollständiger lokaler Tag behält auch beim Zeitwechsel jede Stunde."""
+
+    start = datetime.combine(local_day, datetime.min.time(), TIMEZONE).astimezone(UTC)
+    points = tuple(
+        WeatherInterval(
+            start=(start + timedelta(hours=hour)).astimezone(TIMEZONE),
+            end=(start + timedelta(hours=hour + 1)).astimezone(TIMEZONE),
+            gti_w_m2=1000,
+            ambient_temperature_c=25,
+        )
+        for hour in range(hours)
+    )
+    result = calculate_forecast(
+        (roof(power=1),),
+        {"roof_1": points},
+        None,
+        local_day,
+        TIMEZONE,
+    )
+
+    intervals = result.roofs["roof_1"].intervals
+    assert len(intervals) == hours
+    assert [interval.end.astimezone(UTC) for interval in intervals] == [
+        start + timedelta(hours=hour + 1) for hour in range(hours)
+    ]
+    assert result.roofs["roof_1"].daily.today == pytest.approx(hours)
+    assert result.total.today == pytest.approx(hours)
+    assert result.total.tomorrow == 0
+
+
+def test_repeated_autumn_hour_keeps_distinct_weather_and_clipping() -> None:
+    """Beide 02-Uhr-Stunden behalten ihre Dachwerte und ihr gemeinsames AC-Limit."""
+
+    ends = (
+        datetime(2026, 10, 25, 0, tzinfo=UTC),
+        datetime(2026, 10, 25, 1, tzinfo=UTC),
+    )
+    points_by_roof = {
+        roof_id: tuple(
+            WeatherInterval(
+                start=(end - timedelta(hours=1)).astimezone(TIMEZONE),
+                end=end.astimezone(TIMEZONE),
+                gti_w_m2=gti,
+                ambient_temperature_c=25,
+            )
+            for end, gti in zip(ends, gti_values, strict=True)
+        )
+        for roof_id, gti_values in {"a": (1000, 250), "b": (500, 1000)}.items()
+    }
+    # Abweichende Eingabereihenfolgen dürfen die zeitgleichen Dächer nicht mischen.
+    points_by_roof["a"] = tuple(reversed(points_by_roof["a"]))
+    result = calculate_forecast(
+        (roof("a", power=6, azimuth=90), roof("b", power=4, azimuth=270)),
+        points_by_roof,
+        6,
+        date(2026, 10, 25),
+        TIMEZONE,
+    )
+
+    for roof_result in result.roofs.values():
+        assert len(roof_result.intervals) == 2
+        assert [
+            interval.end.astimezone(UTC) for interval in roof_result.intervals
+        ] == list(ends)
+        assert [interval.end.hour for interval in roof_result.intervals] == [2, 2]
+        assert [interval.end.fold for interval in roof_result.intervals] == [0, 1]
+
+    first_a, second_a = result.roofs["a"].intervals
+    first_b, second_b = result.roofs["b"].intervals
+    assert (first_a.dc_power_kw, first_b.dc_power_kw) == pytest.approx((6, 2))
+    assert (first_a.ac_power_kw, first_b.ac_power_kw) == pytest.approx((4.5, 1.5))
+    assert (second_a.dc_power_kw, second_b.dc_power_kw) == pytest.approx((1.5, 4))
+    assert (second_a.ac_power_kw, second_b.ac_power_kw) == pytest.approx((1.5, 4))
+    assert result.roofs["a"].daily.today == pytest.approx(6)
+    assert result.roofs["b"].daily.today == pytest.approx(5.5)
+    assert result.total.today == pytest.approx(11.5)
     assert result.total.tomorrow == 0
 
 
