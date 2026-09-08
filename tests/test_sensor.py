@@ -7,6 +7,7 @@ import pytest
 from homeassistant.components.sensor import SensorDeviceClass
 from homeassistant.const import UnitOfEnergy
 from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers.update_coordinator import UpdateFailed
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.pv_forecast.const import (
@@ -28,6 +29,13 @@ from custom_components.pv_forecast.sensor import (
 )
 
 from .helpers import persisted_roof, roof
+
+
+@pytest.fixture(autouse=True)
+def fixed_sensor_date(freezer) -> None:
+    """Sensor-Fixtures beziehen sich deterministisch auf den 23. August."""
+
+    freezer.move_to("2026-08-23T12:00:00+00:00")
 
 
 def _sensor_setup(hass, roof_name: str = "Süddach"):
@@ -72,6 +80,63 @@ async def test_sensor_values_and_metadata(hass) -> None:
     assert total.device_class is SensorDeviceClass.ENERGY
     assert total.native_unit_of_measurement == UnitOfEnergy.KILO_WATT_HOUR
     assert total.state_class is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("instant", "today", "tomorrow"),
+    [
+        ("2026-08-23T22:00:00+00:00", 20.13, None),
+        ("2026-08-24T22:00:00+00:00", None, None),
+    ],
+    ids=["erster-lokaler-tageswechsel", "zweiter-lokaler-tageswechsel"],
+)
+async def test_sensor_values_follow_local_date_without_fresh_forecast(
+    hass, freezer, instant: str, today: float | None, tomorrow: float | None
+) -> None:
+    """Altes Morgen wird heute; für noch nicht abgerufene Tage fehlt die Prognose."""
+
+    entry, coordinator = _sensor_setup(hass)
+    snapshot = coordinator.data
+    sensors = [
+        (
+            PvForecastTotalSensor(coordinator, entry, day),
+            PvForecastRoofSensor(coordinator, entry, "stable_roof", "Süddach", day),
+        )
+        for day in ("today", "tomorrow")
+    ]
+    freezer.move_to(instant)
+
+    for day_sensors, expected in zip(sensors, (today, tomorrow), strict=True):
+        for sensor in day_sensors:
+            assert sensor.native_value == expected
+            assert sensor.available is (expected is not None)
+    assert coordinator.data is snapshot
+    assert coordinator.last_update_success
+
+
+@pytest.mark.asyncio
+async def test_local_date_mapping_keeps_sensors_unavailable_after_api_error(
+    hass, freezer
+) -> None:
+    """Ein vorhandener Tageswert überschreibt keinen fehlgeschlagenen API-Status."""
+
+    entry, coordinator = _sensor_setup(hass)
+    today_sensors = (
+        PvForecastTotalSensor(coordinator, entry, "today"),
+        PvForecastRoofSensor(coordinator, entry, "stable_roof", "Süddach", "today"),
+    )
+    snapshot = coordinator.data
+    error = UpdateFailed("Open-Meteo ist vorübergehend nicht erreichbar")
+    coordinator.async_set_update_error(error)
+    freezer.move_to("2026-08-23T22:00:00+00:00")
+
+    for sensor in today_sensors:
+        assert sensor.native_value == 20.13
+        assert not sensor.available
+    assert coordinator.data is snapshot
+    assert not coordinator.last_update_success
+    assert coordinator.last_exception is error
 
 
 @pytest.mark.asyncio
