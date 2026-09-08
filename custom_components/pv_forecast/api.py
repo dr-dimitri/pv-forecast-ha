@@ -42,6 +42,23 @@ class OpenMeteoClient:
 
         self._session = session
 
+    async def async_resolve_timezone(self, latitude: float, longitude: float) -> str:
+        """Die IANA-Zeitzone einer Anschrift einmalig über Metadaten bestimmen."""
+
+        payload = await self._async_request(
+            {
+                "latitude": latitude,
+                "longitude": longitude,
+                "timezone": "auto",
+            }
+        )
+        if not isinstance(payload, dict) or payload.get("error") is True:
+            raise OpenMeteoDataError("Open-Meteo meldet eine fehlerhafte Antwort")
+        timezone = payload.get("timezone")
+        if not isinstance(timezone, str) or not timezone:
+            raise OpenMeteoDataError("Zeitzone fehlt in der Open-Meteo-Antwort")
+        return _timezone(timezone).key
+
     async def async_fetch_roofs(
         self,
         latitude: float,
@@ -125,20 +142,7 @@ class OpenMeteoClient:
             "tilt": tilt_deg,
             "azimuth": open_meteo_azimuth_deg,
         }
-        try:
-            async with self._session.get(
-                OPEN_METEO_FORECAST_URL,
-                params=params,
-                timeout=ClientTimeout(total=REQUEST_TIMEOUT_SECONDS),
-            ) as response:
-                response.raise_for_status()
-                try:
-                    payload = await response.json()
-                except (ContentTypeError, ValueError, TypeError) as err:
-                    raise OpenMeteoDataError("Antwort ist kein gültiges JSON") from err
-        except (TimeoutError, ClientResponseError, ClientError) as err:
-            raise OpenMeteoConnectionError("Open-Meteo-Abfrage fehlgeschlagen") from err
-
+        payload = await self._async_request(params)
         forecast = parse_open_meteo_response(payload, timezone)
         expected_count = int((last_end - first_end).total_seconds() / 3600) + 1
         if len(forecast.intervals) != expected_count or any(
@@ -150,9 +154,26 @@ class OpenMeteoClient:
             )
         return forecast
 
+    async def _async_request(self, params: Mapping[str, str | int | float]) -> Any:
+        """JSON für Wetter- und Metadaten mit derselben Fehlerbehandlung abrufen."""
+
+        try:
+            async with self._session.get(
+                OPEN_METEO_FORECAST_URL,
+                params=params,
+                timeout=ClientTimeout(total=REQUEST_TIMEOUT_SECONDS),
+            ) as response:
+                response.raise_for_status()
+                try:
+                    return await response.json()
+                except (ContentTypeError, ValueError, TypeError) as err:
+                    raise OpenMeteoDataError("Antwort ist kein gültiges JSON") from err
+        except (TimeoutError, ClientResponseError, ClientError) as err:
+            raise OpenMeteoConnectionError("Open-Meteo-Abfrage fehlgeschlagen") from err
+
 
 def _timezone(name: str) -> ZoneInfo:
-    """Eine gespeicherte Anlagenzeitzone kontrolliert auflösen."""
+    """Eine Anlagenzeitzone kontrolliert auflösen."""
 
     try:
         return ZoneInfo(name)

@@ -60,10 +60,14 @@ Die Integration bietet zwei Standortquellen:
 - **Home-Assistant-Standort:** Verwendet Standortname, Koordinaten, Land und
   Zeitzone aus den allgemeinen Einstellungen von Home Assistant.
 - **Andere Anschrift:** Wandelt Postleitzahl, Straße mit Hausnummer und Land
-  einmalig über Nominatim in Koordinaten um.
+  einmalig über Nominatim in Koordinaten um. Open-Meteo ermittelt bei der
+  Einrichtung die zugehörige Zeitzone; sie erscheint vor dem Speichern in der
+  Zusammenfassung und bestimmt die lokalen Prognosetage.
 
-Für spätere Prognosen werden ausschließlich die gespeicherten Koordinaten
-verwendet. Es findet keine regelmäßige Adressauflösung statt.
+Für spätere Prognosen werden die gespeicherten Koordinaten und die gespeicherte
+Anlagenzeitzone verwendet. Es findet keine regelmäßige Adressauflösung statt.
+Bereits eingerichtete Anlagen behalten ihre gespeicherte Zeitzone auch nach
+einem Update.
 
 ### 2. Dachflächen konfigurieren
 

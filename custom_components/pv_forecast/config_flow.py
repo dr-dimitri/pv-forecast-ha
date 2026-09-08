@@ -429,7 +429,6 @@ class PvForecastConfigFlow(ConfigFlow, domain=DOMAIN):
                     self._location = {
                         CONF_LATITUDE: location.latitude,
                         CONF_LONGITUDE: location.longitude,
-                        CONF_TIME_ZONE: self.hass.config.time_zone,
                         CONF_LOCATION_SOURCE: LOCATION_SOURCE_ADDRESS,
                         CONF_LOCATION_NAME: location.display_name,
                         CONF_POSTAL_CODE: postal_code,
@@ -521,6 +520,13 @@ class PvForecastConfigFlow(ConfigFlow, domain=DOMAIN):
                 client = OpenMeteoClient(async_get_clientsession(self.hass))
                 try:
                     roofs = tuple(roof_from_dict(roof) for roof in self._roofs)
+                    if CONF_TIME_ZONE not in self._location:
+                        self._location[CONF_TIME_ZONE] = (
+                            await client.async_resolve_timezone(
+                                self._location[CONF_LATITUDE],
+                                self._location[CONF_LONGITUDE],
+                            )
+                        )
                     await client.async_fetch_roofs(
                         self._location[CONF_LATITUDE],
                         self._location[CONF_LONGITUDE],
@@ -566,6 +572,7 @@ class PvForecastConfigFlow(ConfigFlow, domain=DOMAIN):
                 "location_source": location_source,
                 "latitude": f"{float(self._location[CONF_LATITUDE]):.6f}",
                 "longitude": f"{float(self._location[CONF_LONGITUDE]):.6f}",
+                "timezone": str(self._location[CONF_TIME_ZONE]),
                 "roofs": _roof_summary(self._roofs),
                 "inverter": _inverter_summary(inverter_limit),
             },

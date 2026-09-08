@@ -57,6 +57,15 @@ einmal über Nominatim auf. Die Prognose verwendet danach ausschließlich die
 gespeicherten Koordinaten; eine regelmäßige Adressabfrage oder Autovervollständigung
 findet nicht statt.
 
+Bei einer neuen Adresskonfiguration wird vor dem Forecast-Test die
+IANA-Zeitzone anhand der Koordinaten einmalig über Open-Meteo mit
+`timezone=auto` ermittelt. Der reine Metadatenabruf enthält keine Wettervariablen.
+Die validierte Zeitzone wird im Einrichtungsablauf wiederverwendet und in
+`ConfigEntry.data` gespeichert. Eine neue Anschrift verwirft die alte Zeitzone;
+fehlende oder ungültige Antworten erlauben keinen stillen Ersatz durch UTC oder
+die HA-Zeitzone. Bereits gespeicherte Anlagenzeitzonen werden beim Start oder
+Update nicht automatisch umgedeutet.
+
 Veränderbare Daten werden über einen Options Flow bearbeitet und in
 `ConfigEntry.options` geführt:
 
@@ -75,9 +84,9 @@ Die UI bietet verständliche Himmelsrichtungen an. Eine zentrale Funktion
 +90°, Nord = ±180°. Die Umrechnung darf nicht dupliziert werden.
 
 Vor dem Anlegen zeigt ein Abschlussdialog Standortquelle, Breiten- und
-Längengrad, alle Dachflächen mit ihrer installierten Leistung sowie die maximale
-Wechselrichterleistung. Native Menüschaltflächen ermöglichen dort das
-Abschließen oder den gezielten Rücksprung zu Standort, Dachflächen und
+Längengrad, Anlagenzeitzone, alle Dachflächen mit ihrer installierten Leistung
+sowie die maximale Wechselrichterleistung. Native Menüschaltflächen ermöglichen
+dort das Abschließen oder den gezielten Rücksprung zu Standort, Dachflächen und
 Wechselrichterleistung, ohne bereits eingegebene unabhängige Werte zu verlieren.
 
 ## Architekturgrenzen
@@ -106,7 +115,7 @@ Anzeigenamen abhängt.
 
 ## Open-Meteo und Zeitsemantik
 
-Open-Meteo ist die einzige Datenquelle. Ein Request lädt nur:
+Open-Meteo ist die einzige Wetterdatenquelle. Ein Forecast-Request lädt nur:
 
 - `global_tilted_irradiance`,
 - `temperature_2m`,
