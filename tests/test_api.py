@@ -248,6 +248,77 @@ async def test_client_requests_complete_local_days_with_minimal_utc_window(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "defect",
+    [
+        "anfang-fehlt",
+        "schluss-fehlt",
+        "innere-luecke",
+        "duplikat",
+        "widerspruechliches-duplikat",
+        "fremder-zeitpunkt",
+        "verschobenes-raster",
+        "unsortiertes-raster",
+    ],
+)
+async def test_client_rejects_incomplete_or_unexpected_hourly_grid(defect: str) -> None:
+    """Unvollständige oder abweichende Zeitachsen sind kontrollierte Datenfehler."""
+
+    payload = _hourly_payload("2026-09-08T23:00", "2026-09-10T22:00")
+    hourly = payload["hourly"]
+    times = hourly["time"]
+    if defect in ("anfang-fehlt", "schluss-fehlt", "innere-luecke"):
+        missing_index = {"anfang-fehlt": 0, "schluss-fehlt": -1, "innere-luecke": 20}[
+            defect
+        ]
+        for values in hourly.values():
+            del values[missing_index]
+    elif defect in ("duplikat", "widerspruechliches-duplikat"):
+        times[20] = times[19]
+        if defect == "widerspruechliches-duplikat":
+            hourly["global_tilted_irradiance"][20] = 500
+    elif defect == "fremder-zeitpunkt":
+        times[-1] += 3600
+    elif defect == "verschobenes-raster":
+        hourly["time"] = [timestamp + 1800 for timestamp in times]
+    elif defect == "unsortiertes-raster":
+        times[19], times[20] = times[20], times[19]
+
+    client = OpenMeteoClient(_Session(_Response(payload)))
+    with pytest.raises(OpenMeteoDataError):
+        await client.async_fetch(
+            52,
+            13,
+            "Europe/Berlin",
+            tilt_deg=30,
+            open_meteo_azimuth_deg=0,
+            local_date=date(2026, 9, 9),
+        )
+
+
+@pytest.mark.asyncio
+async def test_complete_hourly_grid_accepts_missing_weather_at_boundaries() -> None:
+    """Vorhandene Randzeitpunkte dürfen weiterhin fehlende Wetterwerte enthalten."""
+
+    payload = _hourly_payload("2026-09-08T23:00", "2026-09-10T22:00")
+    for index in (0, -1):
+        payload["hourly"]["global_tilted_irradiance"][index] = None
+        payload["hourly"]["temperature_2m"][index] = None
+    forecast = await OpenMeteoClient(_Session(_Response(payload))).async_fetch(
+        52,
+        13,
+        "Europe/Berlin",
+        tilt_deg=30,
+        open_meteo_azimuth_deg=0,
+        local_date=date(2026, 9, 9),
+    )
+    assert len(forecast.intervals) == 48
+    for interval in (forecast.intervals[0], forecast.intervals[-1]):
+        assert interval.gti_w_m2 == 0
+        assert interval.ambient_temperature_c is None
+
+
+@pytest.mark.asyncio
 @freeze_time("2026-06-21T12:00:00+00:00")
 async def test_last_hour_of_tomorrow_keeps_positive_polar_day_yield() -> None:
     """Positiver GTI der letzten morgigen Stunde im Polartag bleibt enthalten."""
@@ -282,7 +353,9 @@ async def test_last_hour_of_tomorrow_keeps_positive_polar_day_yield() -> None:
 async def test_request_uses_local_date_when_it_differs_from_utc() -> None:
     """Nach lokaler Mitternacht gilt bereits der neue Tag trotz altem UTC-Datum."""
 
-    session = _Session(_Response(_payload()))
+    session = _Session(
+        _Response(_hourly_payload("2026-09-09T11:00", "2026-09-11T10:00"))
+    )
     await OpenMeteoClient(session).async_fetch(
         1.87,
         -157.43,
