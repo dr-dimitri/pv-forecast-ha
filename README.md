@@ -109,6 +109,14 @@ Die Integration erstellt folgende Sensoren:
 
 Alle Sensorwerte werden in kWh ausgegeben.
 
+Die Zuordnung zu heute und morgen wechselt zur Mitternacht am Anlagenstandort.
+Bis neue Wetterdaten vorliegen, kann der bisherige Morgenwert als heutige
+Prognose dienen. Der neue morgige Tag bleibt ohne passende Daten nicht
+verfügbar; er wird weder als null noch als Wert eines falschen Tages angezeigt.
+Bei einem fehlgeschlagenen Update greift weiterhin die normale
+Home-Assistant-Nichtverfügbarkeit, während der letzte Datenstand intern erhalten
+bleibt.
+
 ## Berechnungsmodell
 
 Die Energie wird für jedes Wetterintervall nach folgendem Modell berechnet:

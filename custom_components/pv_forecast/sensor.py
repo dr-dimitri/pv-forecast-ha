@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Literal, override
+from typing import override
 
 from homeassistant.components.sensor import SensorDeviceClass, SensorEntity
 from homeassistant.const import UnitOfEnergy
@@ -14,8 +14,7 @@ from . import PvForecastConfigEntry
 from .configuration import roofs_from_options
 from .coordinator import PvForecastCoordinator
 from .entity import PvForecastEntity
-
-type ForecastDay = Literal["today", "tomorrow"]
+from .models import ForecastDay
 
 
 async def async_setup_entry(
@@ -72,6 +71,13 @@ class PvForecastBaseSensor(PvForecastEntity, SensorEntity):
         super().__init__(coordinator, entry)
         self._day = day
 
+    @property
+    @override
+    def available(self) -> bool:
+        """Nur gültig abgedeckte Zieltage mit erfolgreichem Datenstand anbieten."""
+
+        return super().available and self.native_value is not None
+
 
 class PvForecastTotalSensor(PvForecastBaseSensor):
     """Prognose der Gesamtanlage für einen Tag."""
@@ -90,10 +96,11 @@ class PvForecastTotalSensor(PvForecastBaseSensor):
 
     @property
     @override
-    def native_value(self) -> float:
+    def native_value(self) -> float | None:
         """Aktuelle Tagesprognose aus dem Coordinator lesen."""
 
-        return round(getattr(self.coordinator.data.total, self._day), 2)
+        value = self.coordinator.get_daily_yield(self._day)
+        return round(value, 2) if value is not None else None
 
 
 class PvForecastRoofSensor(PvForecastBaseSensor):
@@ -117,8 +124,8 @@ class PvForecastRoofSensor(PvForecastBaseSensor):
 
     @property
     @override
-    def native_value(self) -> float:
+    def native_value(self) -> float | None:
         """Aktuelle Tagesprognose der Dachfläche lesen."""
 
-        forecast = self.coordinator.data.roofs[self._roof_id]
-        return round(getattr(forecast.daily, self._day), 2)
+        value = self.coordinator.get_daily_yield(self._day, self._roof_id)
+        return round(value, 2) if value is not None else None

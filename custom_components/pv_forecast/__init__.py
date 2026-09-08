@@ -29,6 +29,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: PvForecastConfigEntry) -
     client = OpenMeteoClient(async_get_clientsession(hass))
     coordinator = PvForecastCoordinator(hass, entry, client)
     await coordinator.async_config_entry_first_refresh()
+    coordinator.async_start_day_updates()
 
     entry.runtime_data = PvForecastRuntimeData(coordinator)
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))

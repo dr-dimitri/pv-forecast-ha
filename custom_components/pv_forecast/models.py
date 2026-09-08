@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
+from typing import Literal
+
+type ForecastDay = Literal["today", "tomorrow"]
 
 
 @dataclass(frozen=True, slots=True)
