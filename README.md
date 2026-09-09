@@ -30,6 +30,7 @@ Home-Assistant-Oberfläche. YAML wird nicht unterstützt.
   Adressauflösung über Nominatim
 - optionales AC-Leistungslimit für einen gemeinsam genutzten Wechselrichter
 - stabile Sensor-IDs, auch wenn eine Dachfläche umbenannt wird
+- begrenzte Diagnosedaten für die Fehlersuche über Home Assistant
 - automatische Aktualisierung standardmäßig alle 30 Minuten
 
 Die Integration legt ausschließlich Prognosesensoren an. Wetter-,
@@ -88,7 +89,7 @@ Mindestens eine Dachfläche ist erforderlich.
 | --- | --- |
 | Name | Eindeutige Bezeichnung, beispielsweise „Süddach“ |
 | Installierte Leistung | Nennleistung der Module in kWp, größer als 0 |
-| Ausrichtung | Himmelsrichtung der Dachfläche |
+| Ausrichtung | Himmelsrichtung oder exakter Kompasswinkel von 0° bis unter 360° |
 | Neigung | Dachneigung von 0° bis 90° |
 | Systemwirkungsgrad | Verbleibender Anteil nach pauschalen Verlusten, standardmäßig 90 % |
 
@@ -96,6 +97,12 @@ Ein Systemwirkungsgrad von 90 % entspricht einem pauschalen Gesamtverlust von
 10 %. Darin können beispielsweise Wechselrichter-, Leitungs- und
 Verschmutzungsverluste zusammengefasst werden. Der Wert ersetzt keine
 detaillierte elektrische Simulation.
+
+Die acht Himmelsrichtungen bleiben als Schnellauswahl erhalten. Für einen
+bekannten Dachwinkel wähle **Genauen Kompasswinkel verwenden**. Nord entspricht
+0°, Ost 90°, Süd 180° und West 270°. Nachkommastellen bleiben beim Speichern
+erhalten. Identische Geometrien teilen einen GTI-Abruf; unterschiedliche
+Geometrien benötigen eigene Abrufe.
 
 ### 3. Wechselrichterlimit festlegen
 
@@ -113,6 +120,19 @@ gezielt einzelne Aktionen an: eine Dachfläche hinzufügen, eine bestehende
 bearbeiten (ihre technische ID bleibt dabei erhalten), eine Dachfläche nach
 ausdrücklicher Bestätigung entfernen oder das Wechselrichterlimit ändern.
 Jede Aktion wirkt für sich allein, ohne die übrigen Dachflächen anzufassen.
+
+## Diagnosedaten
+
+Über das Menü des Integrationseintrags in Home Assistant kannst du Diagnosedaten
+bewusst herunterladen. Der integrationsspezifische Teil enthält ausschließlich
+ausgewählte Versionsangaben, Anzahlen, Datenalter, Abdeckung sowie grobe Fehler-,
+Mess-, Archiv- und Lernzustände. Er enthält keine Standorte, Koordinaten, Namen,
+Sensoridentitäten, URLs, Fehlermeldungen oder Ertragsverläufe. Der Download löst
+keinen Wetterabruf aus.
+
+Home Assistant ergänzt seinen üblichen System- und Integrationsrahmen; der
+Dateiname enthält die Kennung des Config Entry. Dieser äußere Rahmen gehört
+nicht zu den von der Integration ausgewählten Diagnosedaten.
 
 ## Echte PV-Erzeugung zuordnen (optional)
 
@@ -406,8 +426,19 @@ python3 -m venv .venv
 .venv/bin/ruff check custom_components tests
 .venv/bin/black --check custom_components tests
 .venv/bin/pytest -v
+python scripts/sync_translations.py --check
 node --test tests/frontend/*.test.mjs
 ```
+
+Die deutschen Texte in `strings.json` sind die redaktionelle Quelle.
+`python scripts/sync_translations.py` aktualisiert daraus `translations/de.json`
+und die derzeit deutsche Rückfallsprache in `translations/en.json`.
+`--check` prüft diese Dateien ohne Schreibzugriff und läuft auch in der CI.
+Eine später freigegebene englische Übersetzung braucht einen eigenen
+Übersetzungsprozess und muss nicht dauerhaft den deutschen Texten entsprechen.
+
+Der reproduzierbare Befund zu den Modulimporten steht unter
+[Importprüfung zu Issue #10](docs/issue-pruefung.md).
 
 Beim Mergen eines Pull Requests erstellt die Release-Automation standardmäßig
 ein Patch-Release. Mit genau einem der Labels `release:major`, `release:minor`

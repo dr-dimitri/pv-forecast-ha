@@ -68,5 +68,8 @@ jobs:
       - name: Black prüfen
         run: black --check custom_components tests
 
+      - name: Deutsche Sprachressourcen abgleichen
+        run: python scripts/sync_translations.py --check
+
       - name: Tests ausführen
         run: pytest -v

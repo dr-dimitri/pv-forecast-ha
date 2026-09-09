@@ -35,10 +35,13 @@
           "azimuth": "Ausrichtung",
           "tilt": "Neigung",
           "system_efficiency": "Wirkungsgrad",
-          "add_another": "Weitere Dachfläche hinzufügen"
+          "add_another": "Weitere Dachfläche hinzufügen",
+          "custom_azimuth": "Genauer Kompasswinkel"
         },
         "data_description": {
-          "system_efficiency": "Berücksichtigt pauschal Wechselrichter-, Leitungs-, Verschmutzungs- und sonstige Anlagenverluste. 90 % entsprechen 10 % Verlust. Der Wert kann später unter „Konfigurieren“ geändert werden."
+          "system_efficiency": "Berücksichtigt pauschal Wechselrichter-, Leitungs-, Verschmutzungs- und sonstige Anlagenverluste. 90 % entsprechen 10 % Verlust. Der Wert kann später unter „Konfigurieren“ geändert werden.",
+          "azimuth": "Himmelsrichtung als Schnellauswahl oder „Genauen Kompasswinkel verwenden“ wählen.",
+          "custom_azimuth": "Nur bei Auswahl des genauen Winkels verwendet. 0° = Nord, 90° = Ost, 180° = Süd, 270° = West. Erlaubt sind 0° bis unter 360°, auch mit Nachkommastellen; der Winkel wird nicht gerundet."
         }
       },
       "system": {
@@ -198,7 +201,7 @@
       "invalid_home_location": "Der in Home Assistant hinterlegte Standort enthält keine gültigen Koordinaten.",
       "invalid_location_source": "Bitte wähle aus, wie der Standort bestimmt werden soll.",
       "invalid_response": "Open-Meteo hat eine ungültige Antwort geliefert.",
-      "invalid_roof": "Die Dachkonfiguration ist ungültig.",
+      "invalid_roof": "Bitte prüfe Name, Leistung, Ausrichtung, Neigung und Wirkungsgrad. Ein genauer Kompasswinkel muss mindestens 0° und kleiner als 360° sein.",
       "unknown": "Ein unerwarteter Fehler ist aufgetreten.",
       "invalid_measurement_source": "Wähle einen passenden vorhandenen PV-Sensor und eine verständliche Messgrenze. Das Meldeintervall muss positiv sein.",
       "invalid_measurement_metadata": "Einheit, Geräteklasse und Zustandsklasse passen nicht zur gewählten Messart. Energie: Wh/kWh, energy, total oder total_increasing. Leistung: W/kW, power, measurement.",
@@ -247,10 +250,13 @@
           "installed_power_kwp": "Installierte Leistung",
           "azimuth": "Ausrichtung",
           "tilt": "Neigung",
-          "system_efficiency": "Wirkungsgrad"
+          "system_efficiency": "Wirkungsgrad",
+          "custom_azimuth": "Genauer Kompasswinkel"
         },
         "data_description": {
-          "system_efficiency": "Berücksichtigt alle pauschalen Anlagenverluste. 90 % Wirkungsgrad entsprechen 10 % Verlust."
+          "system_efficiency": "Berücksichtigt alle pauschalen Anlagenverluste. 90 % Wirkungsgrad entsprechen 10 % Verlust.",
+          "azimuth": "Himmelsrichtung als Schnellauswahl oder „Genauen Kompasswinkel verwenden“ wählen.",
+          "custom_azimuth": "Nur bei Auswahl des genauen Winkels verwendet. 0° = Nord, 90° = Ost, 180° = Süd, 270° = West. Erlaubt sind 0° bis unter 360°, auch mit Nachkommastellen; der Winkel wird nicht gerundet."
         }
       },
       "edit_roof": {
@@ -268,10 +274,13 @@
           "installed_power_kwp": "Installierte Leistung",
           "azimuth": "Ausrichtung",
           "tilt": "Neigung",
-          "system_efficiency": "Wirkungsgrad"
+          "system_efficiency": "Wirkungsgrad",
+          "custom_azimuth": "Genauer Kompasswinkel"
         },
         "data_description": {
-          "system_efficiency": "Berücksichtigt alle pauschalen Anlagenverluste. 90 % Wirkungsgrad entsprechen 10 % Verlust; ein höherer Wert erhöht die prognostizierte Energie."
+          "system_efficiency": "Berücksichtigt alle pauschalen Anlagenverluste. 90 % Wirkungsgrad entsprechen 10 % Verlust; ein höherer Wert erhöht die prognostizierte Energie.",
+          "azimuth": "Himmelsrichtung als Schnellauswahl oder „Genauen Kompasswinkel verwenden“ wählen.",
+          "custom_azimuth": "Nur bei Auswahl des genauen Winkels verwendet. 0° = Nord, 90° = Ost, 180° = Süd, 270° = West. Erlaubt sind 0° bis unter 360°, auch mit Nachkommastellen; der Winkel wird nicht gerundet."
         }
       },
       "remove_roof": {
@@ -463,7 +472,7 @@
     },
     "error": {
       "duplicate_roof_name": "Jede Dachfläche benötigt einen eindeutigen Namen.",
-      "invalid_roof": "Die Dachkonfiguration ist ungültig.",
+      "invalid_roof": "Bitte prüfe Name, Leistung, Ausrichtung, Neigung und Wirkungsgrad. Ein genauer Kompasswinkel muss mindestens 0° und kleiner als 360° sein.",
       "invalid_inverter": "Die Wechselrichterleistung muss größer als 0 sein.",
       "invalid_measurement_source": "Wähle einen passenden vorhandenen PV-Sensor und eine verständliche Messgrenze. Das Meldeintervall muss positiv sein.",
       "invalid_measurement_metadata": "Einheit, Geräteklasse und Zustandsklasse passen nicht zur gewählten Messart. Energie: Wh/kWh, energy, total oder total_increasing. Leistung: W/kW, power, measurement.",
@@ -499,7 +508,8 @@
         "south": "Süd",
         "south_west": "Südwest",
         "west": "West",
-        "north_west": "Nordwest"
+        "north_west": "Nordwest",
+        "custom": "Genauen Kompasswinkel verwenden"
       }
     }
   },
@@ -639,5 +649,11 @@
         "name": "{roof_name} Prognose morgen"
       }
     }
+  },
+  "common": {
+    "default_roof_name": "Dachfläche {number}",
+    "inverter_unlimited": "nicht begrenzt",
+    "location_source_address": "Adresseingabe (OpenStreetMap/Nominatim)",
+    "location_source_home_assistant": "Home Assistant"
   }
 }

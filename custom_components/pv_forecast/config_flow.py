@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import math
 from typing import Any, Literal, override
@@ -14,7 +15,7 @@ from homeassistant.config_entries import (
     ConfigFlowResult,
     OptionsFlow,
 )
-from homeassistant.core import callback
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.selector import (
     BooleanSelector,
@@ -28,6 +29,7 @@ from homeassistant.helpers.selector import (
     SelectSelectorMode,
     TextSelector,
 )
+from homeassistant.helpers.translation import async_get_translations
 
 from .api import OpenMeteoConnectionError, OpenMeteoDataError
 from .calculations import InvalidConfigurationError, validate_coordinates
@@ -38,6 +40,7 @@ from .const import (
     CONF_AZIMUTH,
     CONF_CONFIRM_REMOVE,
     CONF_COUNTRY,
+    CONF_CUSTOM_AZIMUTH,
     CONF_INSTALLED_POWER_KWP,
     CONF_INVERTER_MAX_POWER_KW,
     CONF_LATITUDE,
@@ -58,6 +61,7 @@ from .const import (
     DOMAIN,
     LOCATION_SOURCE_ADDRESS,
     LOCATION_SOURCE_HOME_ASSISTANT,
+    ROOF_DIRECTION_CUSTOM,
 )
 from .geocoding import (
     AddressNotFoundError,
@@ -71,25 +75,22 @@ from .runtime import async_get_open_meteo_client
 
 _LOGGER = logging.getLogger(__name__)
 
-_DIRECTION_LABELS: dict[str, str] = {
-    "north": "Nord",
-    "north_east": "Nordost",
-    "east": "Ost",
-    "south_east": "Südost",
-    "south": "Süd",
-    "south_west": "Südwest",
-    "west": "West",
-    "north_west": "Nordwest",
-}
 
-_SUMMARY_MENU_LABELS: dict[str, str] = {
-    "finish": "Einrichtung abschließen",
-    "edit_location": "Standort ändern",
-    "edit_roofs": "Dachflächen ändern",
-    "edit_system": "Wechselrichterleistung ändern",
-    "measurements": "Echte PV-Messquellen zuordnen (optional)",
-    "history": "Prognosearchiv und Soll-Ist-Vergleich (optional)",
-}
+async def _async_ui_translations(hass: HomeAssistant) -> dict[str, str]:
+    """Dynamische UI-Texte aus den deutschen HA-Sprachressourcen lesen."""
+
+    resources = await asyncio.gather(
+        *(
+            async_get_translations(hass, "de", category, integrations={DOMAIN})
+            for category in ("common", "selector", "title")
+        )
+    )
+    prefix = f"component.{DOMAIN}."
+    return {
+        key.removeprefix(prefix): value
+        for resource in resources
+        for key, value in resource.items()
+    }
 
 
 class DuplicateRoofNameError(InvalidConfigurationError):
@@ -169,7 +170,13 @@ def _roof_schema(
     """Schema für eine Dachfläche mit optionalen Vorschlagswerten."""
 
     values = defaults or {}
-    direction = _direction_for_azimuth(float(values.get(CONF_AZIMUTH, 180.0)))
+    azimuth = values.get(CONF_AZIMUTH, 180.0)
+    direction = (
+        azimuth if isinstance(azimuth, str) else _direction_for_azimuth(float(azimuth))
+    )
+    custom_azimuth = values.get(
+        CONF_CUSTOM_AZIMUTH, azimuth if not isinstance(azimuth, str) else None
+    )
     if CONF_SYSTEM_EFFICIENCY in values:
         efficiency = float(values[CONF_SYSTEM_EFFICIENCY])
     elif CONF_LOSS_FACTOR in values:
@@ -177,20 +184,22 @@ def _roof_schema(
     else:
         efficiency = DEFAULT_SYSTEM_EFFICIENCY_PERCENT
     schema: dict[Any, Any] = {
-        vol.Required(
-            CONF_NAME, default=values.get(CONF_NAME, "Dachfläche 1")
-        ): TextSelector(),
+        vol.Required(CONF_NAME, default=values.get(CONF_NAME, "")): TextSelector(),
         vol.Required(
             CONF_INSTALLED_POWER_KWP,
             default=values.get(CONF_INSTALLED_POWER_KWP, 5.0),
         ): _number_selector(minimum=0.01, step=0.01, unit="kWp"),
         vol.Required(CONF_AZIMUTH, default=direction): SelectSelector(
             SelectSelectorConfig(
-                options=list(DIRECTION_TO_COMPASS_AZIMUTH),
+                options=[*DIRECTION_TO_COMPASS_AZIMUTH, ROOF_DIRECTION_CUSTOM],
                 mode=SelectSelectorMode.DROPDOWN,
                 translation_key="roof_direction",
             )
         ),
+        vol.Optional(
+            CONF_CUSTOM_AZIMUTH,
+            **({"default": custom_azimuth} if custom_azimuth is not None else {}),
+        ): _number_selector(minimum=0, maximum=360, step="any", unit="°"),
         vol.Required(CONF_TILT, default=values.get(CONF_TILT, 35.0)): _number_selector(
             minimum=0, maximum=90, step=1, unit="°"
         ),
@@ -259,34 +268,42 @@ def _inverter_limit_from_input(value: Any) -> float | None:
 
 
 def _direction_for_azimuth(azimuth: float) -> str:
-    """Gespeicherten Kompasswinkel auf eine der acht UI-Richtungen abbilden."""
+    """Nur exakte Himmelsrichtungen vorbelegen; freie Winkel bleiben erhalten."""
 
-    return min(
-        DIRECTION_TO_COMPASS_AZIMUTH,
-        key=lambda direction: abs(
-            ((DIRECTION_TO_COMPASS_AZIMUTH[direction] - azimuth + 180) % 360) - 180
+    return next(
+        (
+            direction
+            for direction, value in DIRECTION_TO_COMPASS_AZIMUTH.items()
+            if value == azimuth
         ),
+        ROOF_DIRECTION_CUSTOM,
     )
 
 
-def _localized_direction(azimuth: float) -> str:
+def _localized_direction(azimuth: float, translations: dict[str, str]) -> str:
     """Gespeicherte Ausrichtung deutsch für die Zusammenfassung ausgeben."""
 
     direction = _direction_for_azimuth(azimuth)
-    return _DIRECTION_LABELS[direction]
+    if direction == ROOF_DIRECTION_CUSTOM:
+        return f"{azimuth}°"
+    return translations[f"selector.roof_direction.options.{direction}"]
 
 
 def _persisted_roof(user_input: dict[str, Any], roof_id: str) -> dict[str, Any]:
     """UI-Werte in die persistierte Dachkonfiguration umwandeln."""
 
     direction = str(user_input[CONF_AZIMUTH])
-    if direction not in DIRECTION_TO_COMPASS_AZIMUTH:
+    if direction == ROOF_DIRECTION_CUSTOM:
+        azimuth = float(user_input[CONF_CUSTOM_AZIMUTH])
+    elif direction in DIRECTION_TO_COMPASS_AZIMUTH:
+        azimuth = DIRECTION_TO_COMPASS_AZIMUTH[direction]
+    else:
         raise InvalidConfigurationError("Ungültige Himmelsrichtung")
     persisted = {
         CONF_ROOF_ID: roof_id,
         CONF_NAME: str(user_input[CONF_NAME]).strip(),
         CONF_INSTALLED_POWER_KWP: float(user_input[CONF_INSTALLED_POWER_KWP]),
-        CONF_AZIMUTH: DIRECTION_TO_COMPASS_AZIMUTH[direction],
+        CONF_AZIMUTH: azimuth,
         CONF_TILT: float(user_input[CONF_TILT]),
         CONF_LOSS_FACTOR: 100 - float(user_input[CONF_SYSTEM_EFFICIENCY]),
     }
@@ -294,13 +311,13 @@ def _persisted_roof(user_input: dict[str, Any], roof_id: str) -> dict[str, Any]:
     return persisted
 
 
-def _roof_summary(roofs: list[dict[str, Any]]) -> str:
+def _roof_summary(roofs: list[dict[str, Any]], translations: dict[str, str]) -> str:
     """Dachflächen als Aufzählung für Zusammenfassung und Optionsmenü formatieren."""
 
     return "\n".join(
         (
             f"- **{roof[CONF_NAME]}:** {roof[CONF_INSTALLED_POWER_KWP]:g} kWp · "
-            f"{_localized_direction(float(roof[CONF_AZIMUTH]))} · "
+            f"{_localized_direction(float(roof[CONF_AZIMUTH]), translations)} · "
             f"{roof[CONF_TILT]:g}° · "
             f"{100 - roof[CONF_LOSS_FACTOR]:g}%"
         )
@@ -308,13 +325,15 @@ def _roof_summary(roofs: list[dict[str, Any]]) -> str:
     )
 
 
-def _inverter_summary(inverter_limit: float | None) -> str:
+def _inverter_summary(
+    inverter_limit: float | None, translations: dict[str, str]
+) -> str:
     """Wechselrichterlimit für die Anzeige formatieren."""
 
     return (
         f"{float(inverter_limit):g} kW"
         if inverter_limit is not None
-        else "nicht begrenzt"
+        else translations["common.inverter_unlimited"]
     )
 
 
@@ -523,16 +542,21 @@ class PvForecastConfigFlow(
                 self._roof_index = 0
                 return await self.async_step_system()
 
+        translations = await _async_ui_translations(self.hass)
         defaults = (
             dict(existing)
             if existing is not None
-            else {CONF_NAME: f"Dachfläche {len(self._roofs) + 1}"}
+            else {
+                CONF_NAME: translations["common.default_roof_name"].format(
+                    number=len(self._roofs) + 1
+                )
+            }
         )
         if existing is not None:
             defaults[CONF_ADD_ANOTHER] = self._roof_index + 1 < len(self._roofs)
         return self.async_show_form(
             step_id="roof",
-            data_schema=_roof_schema(defaults),
+            data_schema=_roof_schema(defaults | (user_input or {})),
             errors=errors,
         )
 
@@ -596,20 +620,28 @@ class PvForecastConfigFlow(
         """Geprüfte Konfiguration vor dem Anlegen zusammenfassen."""
 
         inverter_limit = self._options.get(CONF_INVERTER_MAX_POWER_KW)
-        location_source = "Adresseingabe (OpenStreetMap/Nominatim)"
-        if self._location[CONF_LOCATION_SOURCE] == LOCATION_SOURCE_HOME_ASSISTANT:
-            location_source = "Home Assistant"
+        translations = await _async_ui_translations(self.hass)
+        location_source = translations[
+            f"common.location_source_{self._location[CONF_LOCATION_SOURCE]}"
+        ]
         return self.async_show_menu(
             step_id="summary",
-            menu_options=_SUMMARY_MENU_LABELS,
+            menu_options=[
+                "finish",
+                "edit_location",
+                "edit_roofs",
+                "edit_system",
+                "measurements",
+                "history",
+            ],
             description_placeholders={
                 "location": str(self._location[CONF_LOCATION_NAME]),
                 "location_source": location_source,
                 "latitude": f"{float(self._location[CONF_LATITUDE]):.6f}",
                 "longitude": f"{float(self._location[CONF_LONGITUDE]):.6f}",
                 "timezone": str(self._location[CONF_TIME_ZONE]),
-                "roofs": _roof_summary(self._roofs),
-                "inverter": _inverter_summary(inverter_limit),
+                "roofs": _roof_summary(self._roofs, translations),
+                "inverter": _inverter_summary(inverter_limit, translations),
             },
         )
 
@@ -618,8 +650,9 @@ class PvForecastConfigFlow(
     ) -> ConfigFlowResult:
         """Die im Abschlussdialog bestätigte Konfiguration anlegen."""
 
+        translations = await _async_ui_translations(self.hass)
         return self.async_create_entry(
-            title="PV-Ertragsprognose",
+            title=translations["title"],
             data=self._location,
             options=self._options,
         )
@@ -731,13 +764,15 @@ class PvForecastOptionsFlow(
         menu_options.append("measurements")
         menu_options.append("history")
         menu_options.append("calibration")
+        translations = await _async_ui_translations(self.hass)
         return self.async_show_menu(
             step_id="init",
             menu_options=menu_options,
             description_placeholders={
-                "roofs": _roof_summary(roofs),
+                "roofs": _roof_summary(roofs, translations),
                 "inverter": _inverter_summary(
-                    float(inverter_limit) if inverter_limit is not None else None
+                    float(inverter_limit) if inverter_limit is not None else None,
+                    translations,
                 ),
             },
         )
@@ -761,10 +796,16 @@ class PvForecastOptionsFlow(
                 roofs.append(roof)
                 return self._finish_with_unchanged_inverter(roofs)
 
+        translations = await _async_ui_translations(self.hass)
         return self.async_show_form(
             step_id="add_roof",
             data_schema=_roof_schema(
-                {CONF_NAME: f"Dachfläche {len(roofs) + 1}"},
+                {
+                    CONF_NAME: translations["common.default_roof_name"].format(
+                        number=len(roofs) + 1
+                    )
+                }
+                | (user_input or {}),
                 include_add_another=False,
             ),
             errors=errors,
@@ -816,7 +857,9 @@ class PvForecastOptionsFlow(
 
         return self.async_show_form(
             step_id="edit_roof_details",
-            data_schema=_roof_schema(existing, include_add_another=False),
+            data_schema=_roof_schema(
+                existing | (user_input or {}), include_add_another=False
+            ),
             errors=errors,
             description_placeholders={"roof_name": str(existing[CONF_NAME])},
         )

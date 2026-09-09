@@ -19,6 +19,7 @@ CONF_ROOF_ID: Final = "id"
 CONF_NAME: Final = "name"
 CONF_INSTALLED_POWER_KWP: Final = "installed_power_kwp"
 CONF_AZIMUTH: Final = "azimuth"
+CONF_CUSTOM_AZIMUTH: Final = "custom_azimuth"
 CONF_TILT: Final = "tilt"
 CONF_LOSS_FACTOR: Final = "loss_factor"
 CONF_SYSTEM_EFFICIENCY: Final = "system_efficiency"
@@ -43,6 +44,7 @@ NOMINATIM_USER_AGENT: Final = (
 
 LOCATION_SOURCE_HOME_ASSISTANT: Final = "home_assistant"
 LOCATION_SOURCE_ADDRESS: Final = "address"
+ROOF_DIRECTION_CUSTOM: Final = "custom"
 
 DIRECTION_TO_COMPASS_AZIMUTH: Final[dict[str, float]] = {
     "north": 0.0,

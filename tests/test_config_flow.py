@@ -21,6 +21,7 @@ from custom_components.pv_forecast.const import (
     CONF_AZIMUTH,
     CONF_CONFIRM_REMOVE,
     CONF_COUNTRY,
+    CONF_CUSTOM_AZIMUTH,
     CONF_INSTALLED_POWER_KWP,
     CONF_INVERTER_MAX_POWER_KW,
     CONF_LATITUDE,
@@ -39,6 +40,7 @@ from custom_components.pv_forecast.const import (
     DOMAIN,
     LOCATION_SOURCE_ADDRESS,
     LOCATION_SOURCE_HOME_ASSISTANT,
+    ROOF_DIRECTION_CUSTOM,
 )
 from custom_components.pv_forecast.geocoding import (
     AddressNotFoundError,
@@ -242,7 +244,7 @@ async def test_summary_is_german_for_english_profile(hass) -> None:
 
     assert "8.2 kWp · Süd · 35° · 90%" in result["description_placeholders"]["roofs"]
     assert result["description_placeholders"]["inverter"] == "nicht begrenzt"
-    assert result["menu_options"] == {
+    assert await _translated_menu_options(hass, result) == {
         "finish": "Einrichtung abschließen",
         "edit_location": "Standort ändern",
         "edit_roofs": "Dachflächen ändern",
@@ -250,6 +252,17 @@ async def test_summary_is_german_for_english_profile(hass) -> None:
         "measurements": "Echte PV-Messquellen zuordnen (optional)",
         "history": "Prognosearchiv und Soll-Ist-Vergleich (optional)",
     }
+
+
+async def _translated_menu_options(hass, result) -> dict[str, str]:
+    """Die Menüschlüssel wie das HA-Frontend über die Sprachressourcen auflösen."""
+
+    assert isinstance(result["menu_options"], list)
+    translations = await async_get_translations(
+        hass, hass.config.language, "config", integrations={DOMAIN}
+    )
+    prefix = f"component.{DOMAIN}.config.step.{result['step_id']}.menu_options."
+    return {option: translations[prefix + option] for option in result["menu_options"]}
 
 
 def _assert_form_is_serializable(result) -> None:
@@ -390,7 +403,7 @@ async def test_successful_setup_with_multiple_roofs(hass) -> None:
     assert result["description_placeholders"]["longitude"] == (
         f"{hass.config.longitude:.6f}"
     )
-    assert result["menu_options"] == {
+    assert await _translated_menu_options(hass, result) == {
         "finish": "Einrichtung abschließen",
         "edit_location": "Standort ändern",
         "edit_roofs": "Dachflächen ändern",
@@ -1078,6 +1091,95 @@ async def test_options_flow_edit_roof_preserves_other_roofs_and_stable_id(
     assert roofs[0][CONF_LOSS_FACTOR] == 9
     assert roofs[1] == persisted_roof("other_id", name="Ostdach")
     assert result["data"][CONF_INVERTER_MAX_POWER_KW] == 8
+
+
+@pytest.mark.asyncio
+async def test_options_flow_preserves_exact_azimuth_when_saving_defaults(hass) -> None:
+    """Bloßes Öffnen und Speichern darf einen vorhandenen Winkel nicht runden."""
+
+    stored_roof = persisted_roof("stable_id") | {CONF_AZIMUTH: 158.123456789}
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        version=1,
+        minor_version=1,
+        data=LOCATION | {CONF_TIME_ZONE: "Europe/Berlin"},
+        options={CONF_ROOFS: [stored_roof]},
+    )
+    entry.add_to_hass(hass)
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "edit_roof"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {CONF_ROOF_ID: "stable_id"}
+    )
+    _assert_form_is_serializable(result)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], result["data_schema"]({})
+    )
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert result["data"][CONF_ROOFS] == [stored_roof]
+    assert (entry.version, entry.minor_version) == (1, 1)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("azimuth", [0.0, 158.123456789, 359.999999999])
+async def test_setup_accepts_exact_compass_degrees(hass, azimuth: float) -> None:
+    """Freie Winkel erreichen Testabruf, Abschluss und Speicher ohne Rundung."""
+
+    result = await _advance_to_roof(hass)
+    form = ROOF_FORM | {
+        CONF_AZIMUTH: ROOF_DIRECTION_CUSTOM,
+        CONF_CUSTOM_AZIMUTH: azimuth,
+    }
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], form)
+    with patch(
+        "custom_components.pv_forecast.api.OpenMeteoClient.async_fetch_roofs",
+        return_value={},
+    ) as fetch:
+        result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
+    assert fetch.call_args.args[3][0].compass_azimuth_deg == azimuth
+    if azimuth != 0:
+        assert f"{azimuth}°" in result["description_placeholders"]["roofs"]
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"next_step_id": "edit_roofs"}
+    )
+    _assert_form_is_serializable(result)
+    defaults = result["data_schema"]({})
+    assert defaults[CONF_CUSTOM_AZIMUTH] == azimuth
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], defaults)
+    with patch(
+        "custom_components.pv_forecast.api.OpenMeteoClient.async_fetch_roofs",
+        return_value={},
+    ):
+        result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
+    with patch("custom_components.pv_forecast.async_setup_entry", return_value=True):
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {"next_step_id": "finish"}
+        )
+    assert result["options"][CONF_ROOFS][0][CONF_AZIMUTH] == azimuth
+    assert CONF_CUSTOM_AZIMUTH not in result["options"][CONF_ROOFS][0]
+
+
+@pytest.mark.asyncio
+async def test_invalid_exact_angle_keeps_inputs_for_correction(hass) -> None:
+    """360° ist ungültig; ein korrigierter Wert lässt sich ohne Neueingabe speichern."""
+
+    result = await _advance_to_roof(hass)
+    form = ROOF_FORM | {
+        CONF_AZIMUTH: ROOF_DIRECTION_CUSTOM,
+        CONF_CUSTOM_AZIMUTH: 360.0,
+    }
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], form)
+    assert result["errors"] == {"base": "invalid_roof"}
+    defaults = result["data_schema"]({})
+    assert defaults[CONF_NAME] == form[CONF_NAME]
+    assert defaults[CONF_CUSTOM_AZIMUTH] == 360
+    assert defaults[CONF_AZIMUTH] == ROOF_DIRECTION_CUSTOM
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], defaults | {CONF_CUSTOM_AZIMUTH: 359.9}
+    )
+    assert result["step_id"] == "system"
 
 
 @pytest.mark.asyncio
