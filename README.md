@@ -10,7 +10,8 @@ Tag. Als Wetter- und Strahlungsdatenquelle dient
 [Open-Meteo](https://open-meteo.com/).
 
 Die Einrichtung und spätere Konfiguration erfolgen vollständig über die
-Home-Assistant-Oberfläche. YAML wird nicht unterstützt.
+Home-Assistant-Oberfläche. Eine YAML-Konfiguration der Integration ist nicht
+vorgesehen.
 
 ## Funktionen
 
@@ -24,18 +25,25 @@ Home-Assistant-Oberfläche. YAML wird nicht unterstützt.
 - optionales Prognosearchiv mit Soll-Ist-Berichten und bewusstem JSON-/CSV-Export
 - freiwillige Lovelace-Karte mit visuellem Editor, Tageskurven und Dachauswahl
 - optionale Selbstkalibrierung mit getrennten Lern- und späteren Prüftagen
+- empirische Tagesbänder nach Prüfung passender eingefrorener Archivstände
+- zusammenhängende Solarzeitfenster und getrennte Tagesaussicht aus Messung,
+  geschätzter Brücke und Restprognose
 - mehrere Dachflächen mit eigener Leistung, Ausrichtung, Neigung und eigenem
   Systemwirkungsgrad
 - Übernahme des in Home Assistant hinterlegten Standorts oder einmalige
   Adressauflösung über Nominatim
-- optionales AC-Leistungslimit für einen gemeinsam genutzten Wechselrichter
+- optionale reale AC-Wechselrichtergruppen und ein gemeinsames Anlagenlimit
 - stabile Sensor-IDs, auch wenn eine Dachfläche umbenannt wird
+- bewusste Standortkorrektur mit erhaltenen IDs und getrennten historischen Daten
 - begrenzte Diagnosedaten für die Fehlersuche über Home Assistant
 - automatische Aktualisierung standardmäßig alle 30 Minuten
 
 Die Integration legt ausschließlich Prognosesensoren an. Wetter-,
 Einstrahlungs-, Temperatur-, Status- und Debug-Sensoren gehören nicht zum
 Funktionsumfang.
+
+Die noch erforderlichen Nutzertests, Gütenachweise und zurückgestellten
+Erweiterungen sind unter [Offene Abnahmen](docs/offene-abnahmen.md) ausgewiesen.
 
 ## Installation
 
@@ -110,6 +118,12 @@ Optional kann die maximale AC-Leistung des gemeinsamen Wechselrichters in kW
 angegeben werden. Überschreitet die berechnete Gesamtleistung dieses Limit,
 werden die Beiträge der Dachflächen proportional reduziert.
 
+Bei mehreren realen Geräten kannst du später unter **Konfigurieren →
+AC-Wechselrichtergruppen** deren AC-Grenzen und Dachzuordnung festlegen. Mehrere
+Dächer am selben Gerät teilen eine Gruppe. Die vorhandene Gesamtgrenze greift
+anschließend auf die gesamte Anlage. Beispiele und Grenzen stehen unter
+[Wechselrichtergruppen](docs/wechselrichtergruppen.md).
+
 Vor dem Speichern prüft die Integration den Zugriff auf Open-Meteo und zeigt
 eine Zusammenfassung der Konfiguration. Standort, Dachflächen und
 Wechselrichterlimit lassen sich von dort gezielt korrigieren.
@@ -120,6 +134,29 @@ gezielt einzelne Aktionen an: eine Dachfläche hinzufügen, eine bestehende
 bearbeiten (ihre technische ID bleibt dabei erhalten), eine Dachfläche nach
 ausdrücklicher Bestätigung entfernen oder das Wechselrichterlimit ändern.
 Jede Aktion wirkt für sich allein, ohne die übrigen Dachflächen anzufassen.
+
+Eine Standortkorrektur erfolgt über **Neu konfigurieren** im Menü der
+Integration. Erst nach Standortprüfung und erfolgreichem Forecast-Test wird
+der Entwurf gespeichert. Bestehende IDs bleiben erhalten; Messung, Archiv und
+Lernen unterscheiden den früheren vom neuen Standort. Details stehen unter
+[Standortwechsel](docs/standortwechsel.md).
+
+## Solarplanung und aktuelle Tagesaussicht
+
+Die Karte bietet ein **bestes Solarzeitfenster** für eine gewählte Laufdauer
+und einen zulässigen Zeitraum. Sie zeigt außerdem die Tagesaussicht aus
+belegter Messung, geschätzter Brücke seit der letzten Messung und Prognose ab
+jetzt. Datenlücken werden nicht als Nullwerte oder sichere Erzeugung ausgegeben.
+
+[Solarzeitfenster](docs/solarzeitfenster.md) beschreibt die Leseaktion, einen
+getesteten HA-Script-Blueprint für einen bewusst angeforderten Hinweis und einen
+lokalen Datenadapter für EMHASS. Die Integration schaltet keine Verbraucher.
+
+Ein optionales [Erfahrungsband](docs/bandbreite.md) bezieht sich ausdrücklich
+auf den angezeigten eingefrorenen Tagesstand. Es benötigt 60 frühere Lerntage
+und 30 spätere Prüftage mit passender Datenbasis. Ohne bestandene Prüfung
+bleibt die Bandbreite offen. Für die laufende Restprognose und beliebige
+Planungsfenster werden keine unbewiesenen Grenzen übertragen.
 
 ## Diagnosedaten
 

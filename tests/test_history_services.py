@@ -139,6 +139,9 @@ async def test_history_read_is_json_serializable_and_does_not_fetch(
         result = await _history(hass, entry.entry_id, days="7", include_records=True)
     assert result["schema_version"] == 1
     assert result["horizons"]["daily_previous_18"]["count_valid"] == 1
+    assert result["uncertainty"]["schema_version"] == 1
+    assert result["uncertainty"]["basis"] == "frozen_daily_forecast"
+    assert result["uncertainty"]["days"]["today"]["upper_kwh"] is None
     assert json.loads(json.dumps(result, allow_nan=False)) == result
     assert snapshot.call_args.args == (
         7,
@@ -192,8 +195,11 @@ async def test_history_requires_read_permission_on_actual_source(hass, archived_
         )
     }
     user.mock_policy({"entities": {"entity_ids": allowed}})
-    with pytest.raises(Unauthorized):
-        await _history(hass, entry.entry_id, include_records=True, user_id=user.id)
+    manager = entry.runtime_data.history
+    with patch.object(manager, "experience_bands") as bands:
+        with pytest.raises(Unauthorized):
+            await _history(hass, entry.entry_id, include_records=True, user_id=user.id)
+        bands.assert_not_called()
     allowed[source.entity_id] = {"read": True}
     user.mock_policy({"entities": {"entity_ids": allowed}})
     assert await _history(hass, entry.entry_id, user_id=user.id)

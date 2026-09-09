@@ -32,27 +32,57 @@ from homeassistant.helpers.event import (
 from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
+from .configuration import location_fingerprint
 from .const import CONF_INSTALLED_POWER_KWP, CONF_ROOFS, CONF_TIME_ZONE, DOMAIN
 from .measurement_windows import MeasurementWindow, async_interval_windows
 from .measurements import SourceConfig, SourceHistory, aggregate_energy
+from .models import ForecastResult
+from .outlook import build_day_outlook
 
 _LOGGER = logging.getLogger(__name__)
-STORAGE_VERSION = 1
+STORAGE_VERSION = 2
 RETENTION = timedelta(days=7)
 MAX_READINGS = 20_000
 SAVE_DELAY = 60
 
 
+class _MeasurementStore(Store[dict[str, Any]]):
+    """Standortkontexte alter Messsegmente ohne Änderung der Messwerte ergänzen."""
+
+    location_data: dict[str, Any]
+
+    async def _async_migrate_func(
+        self, old_major_version: int, old_minor_version: int, old_data: dict[str, Any]
+    ) -> dict[str, Any]:
+        if old_major_version != 1:
+            raise NotImplementedError
+        timezone = str(self.location_data[CONF_TIME_ZONE])
+        location_id = location_fingerprint(self.location_data)
+        sources = {}
+        for source_id, data in old_data["sources"].items():
+            history = SourceHistory.from_dict(
+                SourceConfig.from_dict(data["source"]), data, timezone, float_info.max
+            )
+            history.bind_location(location_id, timezone, dt_util.utcnow())
+            sources[source_id] = dict(data) | {
+                "segment_contexts": history.to_dict()["segment_contexts"]
+            }
+        return dict(old_data) | {"sources": sources}
+
+
 def _measurement_store(hass: HomeAssistant, entry_id: str) -> Store[dict[str, Any]]:
     """Den unabhängig von Config Entries versionierten lokalen Speicher öffnen."""
 
-    return Store(
+    store = _MeasurementStore(
         hass,
         STORAGE_VERSION,
         f"{DOMAIN}.measurements.{entry_id}",
         private=True,
         atomic_writes=True,
     )
+    entry = hass.config_entries.async_get_entry(entry_id)
+    store.location_data = dict(entry.data) if entry is not None else {}
+    return store
 
 
 async def async_remove_measurement_store(hass: HomeAssistant, entry_id: str) -> None:
@@ -128,6 +158,9 @@ class MeasurementManager:
             self._histories[source.source_id] = SourceHistory(
                 source, self.timezone, self._max_power_kw
             )
+            self._histories[source.source_id].bind_location(
+                location_fingerprint(entry.data), self.timezone, dt_util.utcnow()
+            )
 
     @property
     def running(self) -> bool:
@@ -175,7 +208,13 @@ class MeasurementManager:
             return
         try:
             stored = await self._store.async_load()
-        except (HomeAssistantError, NotImplementedError) as err:
+        except (
+            HomeAssistantError,
+            NotImplementedError,
+            ValueError,
+            KeyError,
+            TypeError,
+        ) as err:
             _LOGGER.exception("Gespeicherte PV-Messdaten können nicht geladen werden")
             self._storage_error = (
                 "unsupported_version"
@@ -191,6 +230,11 @@ class MeasurementManager:
                 try:
                     history = SourceHistory.from_dict(
                         history.source, data, self.timezone, self._max_power_kw
+                    )
+                    history.bind_location(
+                        location_fingerprint(self.entry.data),
+                        self.timezone,
+                        dt_util.utcnow(),
                     )
                     self._histories[source_id] = history
                 except (KeyError, TypeError, ValueError, OverflowError):
@@ -236,6 +280,9 @@ class MeasurementManager:
         if history is None:
             return
         replacement = SourceHistory(history.source, self.timezone, self._max_power_kw)
+        replacement.bind_location(
+            location_fingerprint(self.entry.data), self.timezone, dt_util.utcnow()
+        )
         replacement.mark_gap("data_deleted")
         self._histories[source_id] = replacement
         self._save_scheduled = False
@@ -254,6 +301,27 @@ class MeasurementManager:
         }
 
     @callback
+    def day_outlook(
+        self,
+        forecast: ForecastResult,
+        now: datetime,
+        fetched_at: datetime | None,
+        last_update_success: bool,
+    ) -> dict[str, Any]:
+        """Die lokale Tagesaussicht mit denselben geprüften Messquellen bilden."""
+        return build_day_outlook(
+            forecast,
+            tuple(
+                history.current_location_view() for history in self._histories.values()
+            ),
+            self.timezone,
+            now,
+            fetched_at,
+            last_update_success,
+            identity_unresolved=bool(self.identity_unresolved),
+        )
+
+    @callback
     def snapshot(self, start: datetime, end: datetime, now: datetime) -> dict[str, Any]:
         """Ein UTC-Fenster aus vorhandenen Messwerten ohne Nebenwirkungen lesen."""
 
@@ -263,9 +331,18 @@ class MeasurementManager:
             result = history.snapshot(start, end, now)
             result["identity_unresolved"] = source_id in unresolved
             sources.append(result)
-        return self._snapshot_result(
+        result = self._snapshot_result(
             start, end, now, tuple(self._histories.values()), sources
         )
+        result["current_location_total_energy"] = aggregate_energy(
+            tuple(
+                history.current_location_view() for history in self._histories.values()
+            ),
+            start,
+            end,
+            now,
+        )
+        return result
 
     async def async_snapshot(
         self, start: datetime, end: datetime, now: datetime
@@ -304,7 +381,11 @@ class MeasurementManager:
                 for source_id, history in self._histories.items()
             )
             result = await async_interval_windows(
-                tuple(history for _, history, _, _ in histories), windows, now
+                tuple(
+                    history.current_location_view() for _, history, _, _ in histories
+                ),
+                windows,
+                now,
             )
             if histories == tuple(
                 (source_id, history, history.source, history.segment_id)

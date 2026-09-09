@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from itertools import pairwise
-from math import isfinite
+from math import fsum, isclose, isfinite
 from typing import Any, Literal
 
 type ForecastDay = Literal["today", "tomorrow"]
@@ -30,6 +30,16 @@ class PvRoof:
     compass_azimuth_deg: float
     tilt_deg: float
     loss_fraction: float
+
+
+@dataclass(frozen=True, slots=True)
+class AcInverterGroup:
+    """Ein reales AC-Gerät beziehungsweise eine gemeinsam begrenzte Dachgruppe."""
+
+    id: str
+    name: str
+    max_power_kw: float
+    roof_ids: tuple[str, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -104,6 +114,7 @@ class ForecastResult:
     roofs: dict[str, RoofForecast]
     total: DailyYield
     total_intervals: tuple[TotalForecastInterval, ...] = ()
+    inverter_groups: tuple[AcInverterGroup, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -131,13 +142,21 @@ class ForecastBasisInterval:
     start: datetime
     end: datetime
     dc_power_kw: float
+    group_dc_power_kw: tuple[float, ...] = ()
+    ungrouped_dc_power_kw: float | None = None
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        result = {
             "start": self.start.isoformat(),
             "end": self.end.isoformat(),
             "dc_power_kw": self.dc_power_kw,
         }
+        if self.group_dc_power_kw:
+            result.update(
+                group_dc_power_kw=list(self.group_dc_power_kw),
+                ungrouped_dc_power_kw=self.ungrouped_dc_power_kw,
+            )
+        return result
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> ForecastBasisInterval:
@@ -149,13 +168,43 @@ class ForecastBasisInterval:
             start.utcoffset() is None
             or end.utcoffset() is None
             or end.astimezone(UTC) <= start.astimezone(UTC)
-            or isinstance(power, bool)
-            or not isinstance(power, int | float)
-            or not isfinite(power)
-            or power < 0
+            or not _basis_energy(power)
         ):
             raise ValueError("Die gespeicherte Kalibrierungsbasis ist ungültig")
-        return cls(start.astimezone(UTC), end.astimezone(UTC), float(power))
+        grouped = data.get("group_dc_power_kw", [])
+        ungrouped = data.get("ungrouped_dc_power_kw")
+        if (
+            not isinstance(grouped, list)
+            or (
+                ("group_dc_power_kw" in data or "ungrouped_dc_power_kw" in data)
+                and (not grouped or "ungrouped_dc_power_kw" not in data)
+            )
+            or any(not _basis_energy(value) for value in grouped)
+            or (grouped and not _basis_energy(ungrouped))
+            or (not grouped and ungrouped is not None)
+        ):
+            raise ValueError("Die gespeicherte Gruppenleistung ist ungültig")
+        return cls(
+            start.astimezone(UTC),
+            end.astimezone(UTC),
+            float(power),
+            tuple(float(value) for value in grouped),
+            float(ungrouped) if ungrouped is not None else None,
+        )
+
+
+def _basis_energy(value: object) -> bool:
+    """Gespeicherte Leistungen ohne Bool-Zahlen und Überläufe prüfen."""
+
+    try:
+        return (
+            not isinstance(value, bool)
+            and isinstance(value, int | float)
+            and isfinite(value)
+            and value >= 0
+        )
+    except OverflowError:
+        return False
 
 
 @dataclass(frozen=True, slots=True)
@@ -164,12 +213,24 @@ class ForecastCalibrationBasis:
 
     intervals: tuple[ForecastBasisInterval, ...]
     inverter_max_power_kw: float | None
+    group_limits: tuple[tuple[str, float], ...] = ()
+    has_ungrouped_roofs: bool = False
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        result = {
             "intervals": [item.to_dict() for item in self.intervals],
             "inverter_max_power_kw": self.inverter_max_power_kw,
         }
+        if self.group_limits:
+            result.update(
+                schema_version=2,
+                inverter_groups=[
+                    {"id": group_id, "max_power_kw": limit}
+                    for group_id, limit in self.group_limits
+                ],
+                has_ungrouped_roofs=self.has_ungrouped_roofs,
+            )
+        return result
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> ForecastCalibrationBasis:
@@ -180,15 +241,60 @@ class ForecastCalibrationBasis:
         if (
             not intervals
             or any(left.end != right.start for left, right in pairwise(intervals))
-            or (
-                limit is not None
-                and (
-                    isinstance(limit, bool)
-                    or not isinstance(limit, int | float)
-                    or not isfinite(limit)
-                    or limit <= 0
-                )
-            )
+            or (limit is not None and (not _basis_energy(limit) or limit <= 0))
         ):
             raise ValueError("Die gespeicherte Kalibrierungsbasis ist ungültig")
-        return cls(intervals, float(limit) if limit is not None else None)
+        version = data.get("schema_version", 1)
+        if type(version) is not int or version not in (1, 2):
+            raise ValueError("Unbekannte Version der Kalibrierungsbasis")
+        groups = data.get("inverter_groups", [])
+        ungrouped = data.get("has_ungrouped_roofs", False)
+        if version == 1:
+            if (
+                "inverter_groups" in data
+                or "has_ungrouped_roofs" in data
+                or any(item.group_dc_power_kw for item in intervals)
+            ):
+                raise ValueError("Gruppen benötigen einen eindeutigen Basisvertrag")
+            return cls(intervals, float(limit) if limit is not None else None)
+        if (
+            not isinstance(groups, list)
+            or not groups
+            or "has_ungrouped_roofs" not in data
+            or type(ungrouped) is not bool
+        ):
+            raise ValueError("Die gespeicherten AC-Gruppen sind ungültig")
+        limits = []
+        for group in groups:
+            if (
+                not isinstance(group, dict)
+                or not isinstance(group.get("id"), str)
+                or not group["id"].strip()
+                or not _basis_energy(group.get("max_power_kw"))
+                or group["max_power_kw"] <= 0
+            ):
+                raise ValueError("Die gespeicherte AC-Gruppe ist ungültig")
+            limits.append((group["id"], float(group["max_power_kw"])))
+        if len({group_id for group_id, _ in limits}) != len(limits):
+            raise ValueError("Die gespeicherten AC-Gruppen sind doppelt vorhanden")
+        for item in intervals:
+            if (
+                len(item.group_dc_power_kw) != len(limits)
+                or item.ungrouped_dc_power_kw is None
+                or (not ungrouped and item.ungrouped_dc_power_kw != 0)
+            ):
+                raise ValueError(
+                    "Die gespeicherte Leistungsaufteilung ist unvollständig"
+                )
+            try:
+                total = fsum((*item.group_dc_power_kw, item.ungrouped_dc_power_kw))
+            except OverflowError as err:
+                raise ValueError("Die gespeicherte Gruppensumme ist ungültig") from err
+            if not isclose(total, item.dc_power_kw, rel_tol=1e-9, abs_tol=1e-9):
+                raise ValueError("Die gespeicherte Gruppensumme stimmt nicht überein")
+        return cls(
+            intervals,
+            float(limit) if limit is not None else None,
+            tuple(limits),
+            ungrouped,
+        )

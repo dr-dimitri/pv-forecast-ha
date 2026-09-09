@@ -3,6 +3,7 @@
 export const REFRESH_MS = 60_000;
 export const ARCHIVE_LABEL = "Jeweils 1 Stunde vorher";
 const UPDATE_HINT = "Bitte die PV-Forecast-Integration und die Kartenressource aktualisieren. Die Kartenansicht benötigt Datenvertrag 1.";
+const PLANNING_CHANGED_HINT = "Auswahl geändert. Erneut berechnen, um die Empfehlung anzupassen.";
 const numberFormat = new Intl.NumberFormat("de-DE", { maximumFractionDigits: 2 });
 const caches = new WeakMap();
 const finite = (value) => typeof value === "number" && Number.isFinite(value);
@@ -170,7 +171,7 @@ export async function loadView(hass, config, publish, active = () => true, cache
   const measurement = midnight ? Promise.resolve() : (async () => {
     try {
       const data = await read("get_measurements", {
-        config_entry_id: config.config_entry_id, start: view.today_start, end: view.as_of,
+        config_entry_id: config.config_entry_id, start: view.today_start, end: view.as_of, include_outlook: true,
         ...(view.day === "today" && view.intervals.length ? { interval_windows: view.intervals.map(({ start, end }) => ({ start, end })) } : {}),
       });
       state.measurement = { status: "ready", data };
@@ -284,7 +285,79 @@ export function renderReport(report, days) {
   return `<p class="hint">${days} abgeschlossene lokale Tage · ${ARCHIVE_LABEL}. Nur vollständig belegte, vergleichbare Intervalle gehen in die Fehlermaße ein.</p><dl class="report-metrics"><div><dt>MAE</dt><dd>${energyText(metrics.mae_kwh)} <small>kWh</small></dd></div><div><dt>Bias</dt><dd>${energyText(metrics.bias_kwh)} <small>kWh</small></dd></div><div><dt>Stichprobe</dt><dd>${escapeHtml(metrics.count_valid ?? 0)} <small>Intervalle</small></dd></div><div><dt>Abdeckung</dt><dd>${finite(metrics.coverage) ? energyText(metrics.coverage * 100) : "—"} <small>%</small></dd></div></dl><p class="hint">MAE: mittlerer absoluter Fehler. Bias: Prognose minus Messung; positive Werte bedeuten Überschätzung.${data.retention_truncated ? " Die Aufbewahrungsgrenze hat ältere Daten gekürzt." : ""}${data.enabled === false ? " Die Erfassung ist pausiert." : ""}</p>`;
 }
 
-export function renderContent(config, state, width = 600, report = null, reportDays = 7) {
+const plantStamp = (value, timezone) => finite(millis(value)) ? `${formatPlantDate(value, timezone)}, ${formatPlantTime(value, timezone)}` : "unbekannt";
+
+export function renderOutlook(state) {
+  const timezone = state.forecast.data.timezone;
+  const outlook = state.measurement?.data?.outlook;
+  const available = outlook?.schema_version === 1 && outlook.status === "available" && finite(outlook.total_kwh);
+  const reason = {
+    no_energy_sources: "Es sind noch keine bestätigten AC-Energiequellen vorhanden.",
+    no_common_measurement_boundary: "Die Messquellen haben noch keinen gemeinsamen gesicherten Zeitpunkt.",
+    unresolved_measurement_identity: "Die Zuordnung mindestens einer Messquelle ist nicht mehr bestätigt.",
+    input_fallbacks: "Die Wetterdaten enthalten Ersatzwerte; eine aktuelle Tagesaussicht bleibt offen.",
+    incomplete_measurement: "Die Messung seit Tagesbeginn ist nicht vollständig belegt.",
+    incomplete_measurements: "Die Messung seit Tagesbeginn ist nicht vollständig belegt.",
+    stale_measurement: "Der letzte gesicherte Messwert ist zu alt.",
+    stale_measurements: "Der letzte gesicherte Messwert ist zu alt.",
+    incomplete_forecast: "Die Prognose deckt den restlichen Tag nicht vollständig ab.",
+    stale_forecast: "Der Wetterabruf ist für eine aktuelle Tagesaussicht zu alt.",
+  }[outlook?.reason] ?? "Für eine Tagesaussicht fehlen ausreichend belegte Mess- oder Prognosedaten.";
+  const metric = (label, value) => `<div><dt>${label}</dt><dd>${energyText(value)} <small>kWh</small></dd></div>`;
+  return `<details id="outlook"><summary id="outlook-toggle">Aktuelle Tagesaussicht <span>${available ? `${energyText(outlook.total_kwh)} kWh` : "Noch offen"}</span></summary>${available ? `<p class="feature-result">Heute voraussichtlich insgesamt <strong>${energyText(outlook.total_kwh)} kWh</strong></p><dl class="report-metrics">${metric("Gesichert gemessen", outlook.measured_kwh)}${metric("Geschätzt seit letzter Messung", outlook.bridge_kwh)}${metric("Rest ab jetzt", outlook.remaining_kwh)}</dl><p class="hint">Messung bis ${escapeHtml(plantStamp(outlook.measured_until, timezone))}. Die Zeit seit dieser Messung bleibt eine Schätzung. Rest ab jetzt und geschätzte Brücke überschneiden sich nicht. Kurzfristige Korrektur ist aus.</p>${outlook.quality_flags?.length ? '<p class="hint">Die Tagesaussicht enthält Qualitätsmarkierungen; sie ist keine zugesagte Erzeugung.</p>' : ""}` : `<p class="hint">${escapeHtml(reason)}</p>`}</details>`;
+}
+
+export function renderUncertainty(state) {
+  const view = state.forecast.data;
+  const uncertainty = state.history?.data?.uncertainty;
+  const band = uncertainty?.days?.[view.day];
+  const available = uncertainty?.schema_version === 1 && band?.status === "available" && [band.lower_kwh, band.central_kwh, band.upper_kwh].every(finite);
+  const checkpoint = band?.horizon === "daily_same_06" ? "06 Uhr am Zieltag" : "18 Uhr am Vortag";
+  const evaluation = band?.evaluation;
+  const wilson = evaluation?.coverage_wilson95;
+  const evaluationText = [
+    finite(evaluation?.mean_width_kwh) ? `Mittlere Bandbreite in der Prüfung: ${energyText(evaluation.mean_width_kwh)} kWh.` : "",
+    finite(wilson?.lower) && finite(wilson?.upper) ? `95-%-Wilson-Intervall der Prüfdeckung: ${energyText(wilson.lower * 100)}–${energyText(wilson.upper * 100)} %. Nur ein Anhaltspunkt unter der Annahme unabhängiger Tage; aufeinanderfolgendes Wetter kann diese Annahme verletzen.` : "",
+  ].filter(Boolean).join(" ");
+  return `<details id="uncertainty"><summary id="uncertainty-toggle">Erfahrungsband <span>${available ? "Eingefrorener Stand" : "Noch nicht belastbar"}</span></summary>${available ? `<p class="feature-result">${energyText(band.lower_kwh)}–${energyText(band.upper_kwh)} kWh</p><p class="hint">Zum eingefrorenen Tageswert von <strong>${energyText(band.central_kwh)} kWh</strong> (${checkpoint}). Diese Basis ist unabhängig von der aktuellen Tagesprognose oben.</p><p class="hint">Stichtag ${escapeHtml(plantStamp(band.cutoff, view.timezone))}; Prognose beobachtet ${escapeHtml(plantStamp(band.forecast_observed_at, view.timezone))}. ${escapeHtml(band.training_count ?? 0)} Lerntage, ${escapeHtml(band.validation_count ?? 0)} Prüftage.${finite(band.target_coverage) ? ` Zielabdeckung: ${energyText(band.target_coverage * 100)} %.` : ""}${finite(band.evaluation?.coverage_fraction) ? ` Erreichte Prüfdeckung: ${energyText(band.evaluation.coverage_fraction * 100)} %.` : ""} Keine Garantie für den einzelnen Tag.</p>` : '<p class="hint">Bandbreite noch nicht belastbar. Es fehlen passende Daten, genügend spätere Prüftage oder eine bestandene Prüfung.</p>'}${available && evaluationText ? `<p class="hint">${evaluationText}</p>` : ""}${uncertainty?.retention_truncated ? '<p class="hint">Die Aufbewahrungsgrenze hat ältere Vergleichsdaten gekürzt.</p>' : ""}<p class="hint">Für den Resttag und die nächsten 60 Minuten gibt es noch kein belastbares Erfahrungsband.</p></details>`;
+}
+
+export function planningChoices(state) {
+  const view = state?.forecast?.data;
+  if (!view) return [];
+  const intervals = state.forecast.envelope?.intervals ?? view.intervals;
+  const boundaries = intervals.filter(validInterval).flatMap(({ start, end }) => [millis(start), millis(end)]);
+  if (intervals.some((item) => validInterval(item) && millis(item.start) <= millis(view.as_of) && millis(view.as_of) < millis(item.end))) boundaries.push(millis(view.as_of));
+  return [...new Set(boundaries)].sort((left, right) => left - right).map((value) => new Date(value).toISOString());
+}
+
+export function renderPlanning(state, planningUI = {}) {
+  const view = state.forecast.data;
+  const choices = planningChoices(state);
+  const inputs = planningUI.inputs ?? {};
+  const optionList = (selected) => [ ...(finite(millis(selected)) && !choices.some((value) => millis(value) === millis(selected)) ? [selected] : []), ...choices ].map((value) => `<option value="${escapeHtml(value)}" ${millis(value) === millis(selected) ? "selected" : ""}>${escapeHtml(plantStamp(value, view.timezone))}</option>`).join("");
+  const result = planningUI.result;
+  const plan = result?.data;
+  const usable = plan?.schema_version === 1 && ["available", "started", "completed"].includes(plan.status) && validInterval(plan) && (plan.status !== "available" || finite(plan.energy_kwh));
+  const reason = {
+    outside_forecast: "Die Auswahl liegt außerhalb der beiden aktuellen Prognosetage.",
+    infeasible_window: "Die Laufdauer passt nicht mehr in das gewählte Zeitfenster.",
+    incomplete_forecast: "Die Prognose deckt das gewählte Zeitfenster nicht vollständig ab.",
+    input_fallbacks: "Die Wetterdaten enthalten Ersatzwerte; daraus entsteht keine neue Empfehlung.",
+    no_solar_energy: "In diesem Zeitraum wird keine nutzbare PV-Energie erwartet.",
+    no_energy: "In diesem Zeitraum wird keine nutzbare PV-Energie erwartet.",
+    no_remaining_energy: "In diesem Zeitraum wird keine nutzbare PV-Energie erwartet.",
+    no_feasible_window: "Die Laufdauer passt nicht in das gewählte Zeitfenster.",
+    window_too_short: "Die Laufdauer passt nicht in das gewählte Zeitfenster.",
+    incomplete_coverage: "Die Prognose deckt das gewählte Zeitfenster nicht vollständig ab.",
+    stale_forecast: "Der Prognosestand ist für ein neues Zeitfenster zu alt.",
+    forecast_unavailable: "Es liegt keine verwendbare Prognose für das Zeitfenster vor.",
+  }[plan?.reason] ?? "Für diese Auswahl kann noch kein belastbares Solarzeitfenster angegeben werden.";
+  const output = usable ? `<p class="feature-result">${escapeHtml(plantStamp(plan.start, view.timezone))}<br>bis ${escapeHtml(plantStamp(plan.end, view.timezone))}${finite(plan.energy_kwh) ? `<br><strong>${energyText(plan.energy_kwh)} kWh</strong> erwartet` : ""}</p><p class="hint">${plan.status === "started" ? "Dieses empfohlene Fenster läuft bereits und wird nicht automatisch verschoben." : plan.status === "completed" ? "Dieses empfohlene Fenster ist beendet." : "In diesem zusammenhängenden Fenster wird innerhalb deiner Auswahl besonders viel PV-Energie erwartet."}${plan.hysteresis_applied ? " Bei nur geringfügig geänderter Prognose bleibt die bisherige Empfehlung erhalten." : ""} Wetterabruf: ${escapeHtml(plantStamp(plan.fetched_at, view.timezone))}.</p>${plan.quality_flags?.length ? '<p class="hint">Die Prognose enthält Qualitätsmarkierungen. Das Zeitfenster bleibt eine Schätzung.</p>' : ""}` : result?.status === "loading" ? '<p class="hint" role="status">Zeitfenster wird berechnet …</p>' : result ? `<p class="hint" role="status">${escapeHtml(result.message ?? reason)}</p>` : '<p class="hint">Laufdauer und zulässigen Zeitraum wählen, dann bewusst berechnen.</p>';
+  return `<details id="planning"><summary id="planning-toggle">Bestes Solarzeitfenster <span>Gesamtanlage</span></summary><form id="planning-form"><label>Laufdauer in Minuten<input id="planning-duration" name="duration_minutes" type="number" inputmode="numeric" min="1" max="2880" step="1" required value="${escapeHtml(inputs.duration_minutes ?? 120)}"></label><label>Frühester Start<select id="planning-earliest" required>${optionList(inputs.earliest_start)}</select></label><label>Spätestes Ende<select id="planning-latest" required>${optionList(inputs.latest_end)}</select></label><button id="planning-calculate" class="reset-button" type="submit" ${choices.length ? "" : "disabled"}>Zeitfenster berechnen</button></form><p id="planning-input-notice" class="hint" role="status">${planningUI.dirty ? PLANNING_CHANGED_HINT : ""}</p>${output}<p class="hint">Basis sind die vorhandenen Prognoseintervalle mit gleichmäßiger mittlerer Leistung innerhalb jedes Intervalls. Für dieses Fenster gibt es noch kein belastbares Erfahrungsband. Verfügbarer Überschuss hängt zusätzlich von Hausverbrauch und Speicher ab. Es werden keine Geräte eingeschaltet.</p></details>`;
+}
+
+export function renderContent(config, state, width = 600, report = null, reportDays = 7, planningUI = {}) {
   const forecast = state?.forecast;
   const view = forecast?.data;
   const title = config.title || view?.plant_name || "PV-Prognose";
@@ -294,7 +367,7 @@ export function renderContent(config, state, width = 600, report = null, reportD
   const fetchedAt = forecast.envelope?.fetched_at;
   const weatherStamp = finite(millis(fetchedAt)) ? `${formatPlantDate(fetchedAt, view.timezone)}, ${formatPlantTime(fetchedAt, view.timezone)}` : "unbekannt";
   const measurement = state.measurement;
-  const total = measurement?.data?.total_energy;
+  const total = measurement?.data?.current_location_total_energy ?? measurement?.data?.total_energy;
   const actualComplete = total?.energy_complete === true;
   const actual = total?.energy_kwh;
   const actualHint = view.roof_id ? "Keine Dachmessung" : measurement?.status === "ready" ? actualComplete ? "Seit Tagesbeginn" : finite(actual) ? "Unvollständig erfasst" : "Noch keine Messwerte" : measurement?.status === "loading" ? "Messdaten laden …" : "Keine Messdaten";
@@ -306,7 +379,7 @@ export function renderContent(config, state, width = 600, report = null, reportD
     !view.complete ? "Prognose unvollständig. Schattierte Lücken werden nicht als null Ertrag dargestellt." : "",
     hasFlags ? "Eingabedaten enthalten Qualitätsmarkierungen. Das ist keine gemessene Prognosegüte." : "",
     statusText(measurement, "Messdaten"), statusText(state.history, "Archivdaten"),
-    measurement?.data?.total_energy?.quality_flags?.length ? "Messdaten enthalten Qualitätsmarkierungen; unvollständige Intervalle bleiben frei." : "",
+    total?.quality_flags?.length ? "Messdaten enthalten Qualitätsmarkierungen; unvollständige Intervalle bleiben frei." : "",
     selectedSeries(state).history.some((item) => item.quality_flags?.length) ? "Die archivierten Prognosestände enthalten Qualitätsmarkierungen ihrer Eingabedaten." : "",
     measurement?.status === "ready" && !actualComplete ? finite(actual) ? "Ist heute ist nur der bisher belegte Teil; die Tageserfassung ist unvollständig." : "Für heute sind noch keine belegten Messwerte verfügbar." : "",
     state.history?.status === "ready" && !selectedSeries(state).history.length ? "Für diesen Tag sind noch keine Stundenstände im Archiv eingefroren." : "",
@@ -316,6 +389,7 @@ export function renderContent(config, state, width = 600, report = null, reportD
     <dl class="kpis">${kpi("Heute", view.summary.today_kwh, "Tagesprognose")}${kpi("Morgen", view.summary.tomorrow_kwh, "Tagesprognose")}${kpi("Rest heute", view.summary.remaining_today_kwh, "Ab jetzt erwartet")}${kpi("Ist heute", view.roof_id ? null : actual, actualHint, actualComplete ? "measured" : "incomplete")}</dl>
     <section class="chart-section" aria-label="Tagesverlauf"><div class="chart-heading"><h3>Energie im Tagesverlauf</h3><span>kWh / Intervall</span></div><div class="legend"><span><i class="forecast-key"></i>Aktuelle Prognose</span><span><i class="history-key"></i>${ARCHIVE_LABEL}</span><span><i class="actual-key"></i>Ist</span></div>${renderChart(state, width)}<p class="chart-note">${escapeHtml(view.timezone)} · Ansicht ${escapeHtml(formatPlantTime(view.as_of, view.timezone))}<br>Wetterabruf ${escapeHtml(weatherStamp)}</p></section>
     ${notices.length ? `<div class="notices" role="status">${notices.map((text) => `<p>${escapeHtml(text)}</p>`).join("")}</div>` : ""}
+    ${view.roof_id ? "" : `${renderOutlook(state)}${renderUncertainty(state)}${renderPlanning(state, planningUI)}`}
     ${renderTable(state)}
     ${view.roof_id ? "" : `<details id="report"><summary id="report-toggle">Prognosegüte im Archiv <span>Gesamtanlage</span></summary><label class="report-label">Zeitraum<select id="report-days"><option value="7" ${reportDays === 7 ? "selected" : ""}>7 Tage</option><option value="30" ${reportDays === 30 ? "selected" : ""}>30 Tage</option></select></label>${renderReport(report ?? (state.history?.status === "ready" && reportDays === 7 ? state.history : null), reportDays)}</details>`}`;
 }
@@ -332,6 +406,7 @@ const styles = `
   details{border-top:1px solid var(--divider-color,#e4e8eb)}summary{min-height:48px;padding:15px 0;font-size:12px;font-weight:500;cursor:pointer;line-height:1.5}summary span{font-size:10px;color:var(--secondary-text-color,#64717a);float:right;font-weight:400;margin-left:5px}.hint{font-size:11px;line-height:1.6;color:var(--secondary-text-color,#64717a);margin:0 0 14px}.report-label{display:flex;align-items:center;gap:12px;margin:0 0 12px}.report-metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin:12px 0 16px}.report-metrics dt{font-size:11px;color:var(--secondary-text-color,#64717a)}.report-metrics dd{margin:4px 0 0;font-size:19px}.report-metrics small{font-size:10px;color:var(--secondary-text-color,#64717a)}
   table{border-collapse:collapse;width:100%;table-layout:fixed;font-size:11px;margin-bottom:12px}th,td{padding:9px 3px;border-bottom:1px solid var(--divider-color,#e4e8eb);text-align:right;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}th:first-child{width:40%;text-align:left}thead th{font-size:10px;font-weight:500;color:var(--secondary-text-color,#64717a)}tbody th{font-weight:400;font-size:10px}.until{display:block;color:var(--secondary-text-color,#64717a);font-size:9px;margin-top:3px}.sr-only{position:absolute;clip:rect(0,0,0,0);width:1px;height:1px;overflow:hidden}
   @container (max-width:460px){.kpis{grid-template-columns:repeat(2,minmax(0,1fr));gap:19px 0}.kpi:nth-child(3){border-left:0;padding-left:0}.kpi dd{font-size:27px}.body{padding:18px 16px 6px}.controls{gap:10px;margin-top:20px}.day-switch button{padding:0 12px}h2{font-size:21px}.badge{font-size:10px}.legend{column-gap:12px}}
+  #planning-input-notice:empty{display:none}#planning-form{display:grid;gap:12px;margin-bottom:8px}#planning-form label{display:grid;gap:5px;min-width:0}#planning-form select{width:100%}#planning-form input{font:inherit;font-size:14px;min-height:42px;width:100%;padding:8px 10px;border:1px solid var(--divider-color,#dce3e6);border-radius:7px;background:var(--card-background-color,#fff);color:var(--primary-text-color,#202b32)}input:focus-visible{outline:3px solid var(--primary-color,#007c91);outline-offset:3px}#planning-calculate{margin:2px 0 4px}.feature-result{font-size:14px;line-height:1.7;margin:0 0 12px;overflow-wrap:anywhere}.feature-result strong{font-size:18px}.hint strong{color:var(--primary-text-color,#202b32)}
   :host{container-type:inline-size}
 `;
 
@@ -359,6 +434,9 @@ export class PvForecastCard extends ElementBase {
     this._reportDays = 7;
     this._reportOpen = false;
     this._valuesOpen = false;
+    this._outlookOpen = false;
+    this._uncertaintyOpen = false;
+    this._planningOpen = false;
     if (!this.attachShadow) return;
     this.attachShadow({ mode: "open" });
     this.shadowRoot.addEventListener("click", (event) => {
@@ -369,11 +447,22 @@ export class PvForecastCard extends ElementBase {
     this.shadowRoot.addEventListener("change", (event) => {
       if (event.target.id === "roof") { this._config = { ...this._config, roof_id: event.target.value || undefined }; this._bind(); }
       if (event.target.id === "report-days") { this._reportDays = Number(event.target.value); this._bindReport(); this._render(); }
+      const field = { "planning-earliest": "earliest_start", "planning-latest": "latest_end" }[event.target.id];
+      if (field) this._updatePlanningInput(field, event.target.value);
+    });
+    this.shadowRoot.addEventListener("input", (event) => {
+      if (event.target.id === "planning-duration") this._updatePlanningInput("duration_minutes", event.target.value);
+    });
+    this.shadowRoot.addEventListener("submit", (event) => {
+      if (event.target.id === "planning-form") { event.preventDefault(); this._calculatePlanning(); }
     });
     this.shadowRoot.addEventListener("toggle", (event) => {
       // Nur das aktuelle Element darf bei einem Neuaufbau seinen Zustand melden.
       if (!event.target.isConnected) return;
       if (event.target.id === "values") this._valuesOpen = event.target.open;
+      if (event.target.id === "outlook") this._outlookOpen = event.target.open;
+      if (event.target.id === "uncertainty") this._uncertaintyOpen = event.target.open;
+      if (event.target.id === "planning" && this._planningOpen !== event.target.open) { this._planningOpen = event.target.open; this._bindPlanning(); }
       if (event.target.id === "report" && this._reportOpen !== event.target.open) {
         this._reportOpen = event.target.open;
         this._bindReport();
@@ -384,7 +473,14 @@ export class PvForecastCard extends ElementBase {
   setConfig(config) {
     if (!config?.config_entry_id || typeof config.config_entry_id !== "string") throw new Error("Bitte eine PV-Anlage auswählen.");
     if (config.day && !["today", "tomorrow"].includes(config.day)) throw new Error("Der Prognosetag muss Heute oder Morgen sein.");
-    if (this._config?.config_entry_id !== config.config_entry_id) this._state = null;
+    if (this._config?.config_entry_id !== config.config_entry_id) {
+      this._state = null;
+      this._planning = null;
+      this._planningInputs = null;
+      this._planningRequest = null;
+      this._planningPreviousStart = null;
+      this._planningDirty = false;
+    }
     this._config = { ...config, day: config.day ?? "today" };
     this._bind();
     this._render();
@@ -425,6 +521,7 @@ export class PvForecastCard extends ElementBase {
     this._connected = false;
     this._unsubscribe?.(); this._unsubscribe = null;
     this._unsubscribeReport?.(); this._unsubscribeReport = null;
+    this._unsubscribePlanning?.(); this._unsubscribePlanning = null;
     this._observer?.disconnect();
     this._visibilityObserver?.disconnect();
     this._visibilityObserver = null;
@@ -433,6 +530,7 @@ export class PvForecastCard extends ElementBase {
   _bind() {
     this._unsubscribe?.(); this._unsubscribe = null;
     this._unsubscribeReport?.(); this._unsubscribeReport = null;
+    this._unsubscribePlanning?.(); this._unsubscribePlanning = null;
     this._selectionPending = Boolean(this._state?.forecast?.data && (this._state.forecast.data.day !== this._config?.day || (this._state.forecast.data.roof_id ?? null) !== (this._config?.roof_id ?? null)));
     this._report = null;
     if (!this._connected || this._visible === false || !this._hass || !this._config) return;
@@ -447,6 +545,7 @@ export class PvForecastCard extends ElementBase {
       this._render();
     });
     this._bindReport();
+    this._bindPlanning();
     this._render();
   }
 
@@ -464,16 +563,72 @@ export class PvForecastCard extends ElementBase {
     }, (report) => { if (this._connected) { this._report = report; this._render(); } });
   }
 
+  _updatePlanningInput(field, value) {
+    this._planningInputs = { ...this._planningInputs, [field]: value };
+    this._planningDirty = true;
+    const notice = this.shadowRoot?.getElementById("planning-input-notice");
+    if (notice) notice.textContent = PLANNING_CHANGED_HINT;
+  }
+
+  _calculatePlanning() {
+    const inputs = this._planningInputs ?? {};
+    const duration = Number(inputs.duration_minutes);
+    if (!Number.isInteger(duration) || duration < 1 || duration > 2880 || !finite(millis(inputs.earliest_start)) || !finite(millis(inputs.latest_end)) || millis(inputs.latest_end) <= millis(inputs.earliest_start)) {
+      this._unsubscribePlanning?.(); this._unsubscribePlanning = null;
+      this._planningRequest = null;
+      this._planning = { status: "error", message: "Bitte 1 bis 2880 Minuten und ein Ende nach dem frühesten Start wählen." };
+      this._render();
+      return;
+    }
+    this._planningRequest = { duration_minutes: duration, earliest_start: inputs.earliest_start, latest_end: inputs.latest_end };
+    this._planningPreviousStart = null;
+    this._planning = { status: "loading" };
+    this._planningDirty = false;
+    this._bindPlanning();
+    this._render();
+  }
+
+  _bindPlanning() {
+    this._unsubscribePlanning?.(); this._unsubscribePlanning = null;
+    if (!this._connected || this._visible === false || !this._hass || !this._config || !this._planningOpen || !this._planningRequest || this._config.roof_id) return;
+    const cache = connectionCache(this._hass);
+    const entry = this._config.config_entry_id;
+    const request = { ...this._planningRequest };
+    this._unsubscribePlanning = cache.subscribe(JSON.stringify(["planning", entry, request]), async (publish, active) => {
+      const previous = this._planningPreviousStart;
+      const serviceData = { config_entry_id: entry, planning: { ...request, ...(finite(millis(previous)) ? { previous_start: previous } : {}) } };
+      try {
+        const response = await cache.request(JSON.stringify(["get_forecast", serviceData]), () => readService(this._hass, "get_forecast", serviceData));
+        if (response.planning?.schema_version !== 1) throw new Error(UPDATE_HINT);
+        if (active()) publish({ status: "ready", data: response.planning });
+      } catch (error) { if (active()) publish(sourceError(error, "Planungsdaten")); }
+    }, (planning) => {
+      if (!this._connected) return;
+      if (finite(millis(planning.data?.start))) this._planningPreviousStart = planning.data.start;
+      this._planning = planning;
+      this._render();
+    });
+  }
+
   _render() {
     if (!this.shadowRoot || !this._config) return;
     const focused = this.shadowRoot.activeElement;
     const focusId = focused?.id;
     const focusDay = focused?.dataset?.day;
-    this.shadowRoot.innerHTML = `<style>${styles}</style><ha-card><div class="body" aria-busy="${Boolean(this._selectionPending)}">${renderContent(this._config, this._state ? { ...this._state, selectionPending: this._selectionPending } : null, this._width, this._report, this._reportDays)}</div></ha-card>`;
+    if (!this._planningInputs && this._state?.forecast?.data) {
+      const choices = planningChoices(this._state);
+      const now = millis(this._state.forecast.data.as_of);
+      this._planningInputs = { duration_minutes: "120", earliest_start: choices.find((value) => millis(value) >= now) ?? choices[0], latest_end: choices.at(-1) };
+    }
+    this.shadowRoot.innerHTML = `<style>${styles}</style><ha-card><div class="body" aria-busy="${Boolean(this._selectionPending)}">${renderContent(this._config, this._state ? { ...this._state, selectionPending: this._selectionPending } : null, this._width, this._report, this._reportDays, { inputs: this._planningInputs, result: this._planning, dirty: this._planningDirty })}</div></ha-card>`;
     const values = this.shadowRoot.getElementById("values");
     const report = this.shadowRoot.getElementById("report");
     if (values) values.open = this._valuesOpen;
     if (report) report.open = this._reportOpen;
+    for (const [id, open] of [["outlook", this._outlookOpen], ["uncertainty", this._uncertaintyOpen], ["planning", this._planningOpen]]) {
+      const section = this.shadowRoot.getElementById(id);
+      if (section) section.open = open;
+    }
     if (focusId) this.shadowRoot.getElementById(focusId)?.focus({ preventScroll: true });
     else if (focusDay) this.shadowRoot.querySelector(`[data-day="${focusDay}"]`)?.focus({ preventScroll: true });
   }

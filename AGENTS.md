@@ -114,7 +114,7 @@ menschliche Abnahme und wird durch Offline-Tests nicht ersetzt.
 ## Optionales Prognosearchiv aus #27 und Statistikentscheidung #4
 
 Das Archiv ist per UI opt-in und speichert tatsächlich rechtzeitig beobachtete
-Prognosestände in einem getrennten HA-Store (seit #18 Version 2). Festgelegte Stichtage:
+Prognosestände in einem getrennten HA-Store (seit #22/#23 Version 3). Festgelegte Stichtage:
 18 Uhr am Vortag und 06 Uhr am Zieltag für lokale Tageswerte (maximal zwei
 Stunden alte Prognose), Vorlauf eine beziehungsweise drei Stunden für
 UTC-Intervalle (maximal eine Stunde alte Prognose). Nach dem Stichtag werden
@@ -231,6 +231,46 @@ Allowlist und enthält keine Standorte, Koordinaten, Namen, IDs, URLs,
 Fehlermeldungen, Haushalts- oder Ertragshistorien. Sie löst keine Wetterabrufe
 oder Speicheränderungen aus und benötigt keine zusätzlichen Entities.
 Home Assistant ergänzt seinen üblichen äußeren Diagnoserahmen.
+
+## Solarzeitfenster aus #31
+
+Für die erste Stufe von #31 erweitert ausschließlich die vorhandene Leseaktion `get_forecast` ihren Vertrag optional um eine versionierte Planung für die Gesamtanlage. Angefragt werden Laufdauer und eindeutige früheste/späteste UTC-Grenzen innerhalb der zwei lokalen Prognosetage. Reine Python-Funktionen maximieren die Energie eines zusammenhängenden Fensters anhand der bereits geclippten Intervalle. Gleichstände wählen den frühesten absoluten Start. Fehlende Zeitabdeckung, veraltete Daten, unbrauchbare Eingaben, Nullertrag und unerfüllbare Grenzen liefern begründete Leerzustände. Die Annahme konstanter mittlerer Leistung innerhalb eines Intervalls wird ausgegeben. Ein explizit mitgegebener bisheriger Start wird nur bei einer Verbesserung um mehr als 5 Prozent und 0,1 kWh verschoben, solange er noch zulässig ist; bereits gestartete Verbraucher werden nicht neu geplant. Die Karte nutzt dieselbe Antwort, ohne PV-Berechnung im Browser. Ein bewusst eingerichtetes HA-Automationsbeispiel dient als geprüfter Nutzungspfad; keine automatische Geräteaktion und keine Behauptung verfügbaren Überschusses. Bandbreiten für beliebige Laufzeitfenster werden ohne passende empirische Basis nicht erfunden.
+
+P3-Ausweitungen (#20/#21/#24) bleiben bis zum in der Roadmap verlangten belegten Bedarf zurückgestellt. Die offenen realen Nutzer-/Güteprüfungen und Fehler des fremden nativen HA-Frontends bleiben ausdrücklich von technisch lieferbaren Repositoryänderungen getrennt.
+
+## Erfahrungsband: erste prüfbare Stufe zu #29
+
+Die erste Stufe bewertet ausschließlich tatsächlich eingefrorene Tagesprognosen (`daily_previous_18` und `daily_same_06`) anhand passender Tagesresiduen. Historische gleitende Restfenster fehlen bislang; für diese und beliebige Planungsfenster bleibt die Bandbreite ausdrücklich nicht verfügbar. Es werden keine Stundenquantile zu Tagesquantilen addiert.
+
+Regelversion 1 nutzt je kompatiblem Modell, Anlagenkonfiguration und bestätigter Quellenidentität 60 chronologisch frühere gültige Trainingstage und 30 strikt spätere Prüftage innerhalb der letzten 180 lokalen Tage. Rohmodell und damals angewendete Kalibrierungsmethode werden getrennt bewertet; laufende Faktorwerte oder Kandidaten-IDs teilen dieselbe Methode nicht täglich auf. Frühere Messkorrekturen werden nur benutzt, wenn ihre Bewertung bereits vor dem ersten Prüfforecast bekannt war. Fehlt diese belegbare Revision, fehlt die Stichprobe.
+
+Das signierte empirische Residuenband hat als vorab festgelegtes Ziel zentrale 80 Prozent. Die spätere Prüfung verlangt mindestens 70 Prozent beobachtete Abdeckung und bewertet zugleich Breite und Winkler-Score gegen ein ausschließlich aus dem Training bestimmtes breites Referenzband. Energiegrenzen werden auf null und das bekannte AC-Limit begrenzt, auch während der Prüfung. Ziel, tatsächliche Abdeckung, mittlere Breite, Stichprobengröße und ein ausdrücklich nur unter Unabhängigkeitsannahme indikatives Wilson-Intervall bleiben sichtbar. Ohne bestandene Prüfung erscheinen keine Grenzen, sondern ein begründeter Leerzustand. Keine Genauigkeits- oder Sicherheitsgarantie, keine weiteren Wetterdaten, keine neue Speicherung oder Aktion. Die vorhandene Archivabfrage stellt die rein lokal berechneten Ergebnisse für Karte und Automationen unter denselben Quellenrechten bereit.
+
+Die Prüfung mit echten späteren Messdaten bleibt offen; deterministische Tests belegen die Auswahl- und Ausgaberegeln, keine erreichte reale Güte.
+
+## Tagesaussicht: erste Stufe zu #30
+
+Die bestehende berechtigungsgeprüfte Messdatenaktion liefert optional die aktuelle Tagesaussicht aus einem vollständig belegten Messpräfix seit lokaler Mitternacht, einer sichtbar geschätzten Brücke vom letzten gemeinsam gesicherten Messzeitpunkt bis jetzt und der Prognose ab jetzt bis Tagesende. Alle drei Abschnitte sind disjunkt. Mehrere Quellen benötigen einen gemeinsamen exakten Zählergrenzzeitpunkt; fehlende Abdeckung, unklare Identität, Quellenwechsel oder Korrektur erzeugen keine künstliche vollständige Messung. Es werden keine Zählerdifferenzen anteilig zerlegt. Fehlende beziehungsweise veraltete Prognose verhindert eine vollständige Tagesaussicht, während vorhandene Messwerte und Restprognose weiterhin getrennt lesbar bleiben.
+
+Diese rein lesende erste Stufe verwendet unverändert die wirksame gemeinsame Prognose und benötigt keine Einstellung, Persistenz oder zusätzlichen Abruf. Eine automatische kurzfristige Korrektur wird erst nach einem gesondert vorab festgelegten Versuch mit tatsächlich eingefrorenen Zukunftsständen umgesetzt; die Addition bekannter Messwerte behauptet keine verbesserte Vorhersage. Die Karte zeigt Messung, geschätzte Brücke und Zukunft getrennt. #30 bleibt für den Korrekturversuch und die echte Güteprüfung offen.
+
+## Standortänderung mit erhaltenen Daten zu #23
+
+Der native Reconfigure-Flow erlaubt nachträgliche Standortkorrekturen über dieselben validierten Standortquellen wie das Setup. Ein Entwurf wird nach erfolgreichem Open-Meteo-Test und ausdrücklichem Abschluss gespeichert. Entry-ID, Unique-ID und Dach-/sonstige Optionen bleiben erhalten. Reine Namensänderungen ohne neue Koordinaten oder Zeitzone beginnen keine neue Vergleichsgrundlage.
+
+Ein physischer Standort- oder Zeitzonenwechsel beginnt neue Mess-/Archiv-/Lernsegmente. Mess-Store Version 2 ergänzt je Segment den ursprünglichen Standortkontext, die ursprüngliche Zeitzone und den Beginn. Die Migration des bisherigen Stores erfolgt verlustfrei im noch gültigen alten Standortkontext. Alte Zeitpunkte, Zählerdifferenzen und Korrekturen werden nicht in die neue Zone umgedeutet; vor dem Wechsel datierte HA-Zustände liefern keine neue Zählerbasis. Archiv-Store Version 3 erhält gemischte, individuell validierte Record-Zeitzonen. Neue Erfassung verwendet die aktive Zone; Berichte trennen Konfigurationskennung und Zeitzone. Die üblichen aktuellen Kennzahlen beziehen sich auf die aktuelle Vergleichsgrundlage. Alte Archivstände bleiben vorhanden.
+
+Vor einer physischen Änderung werden bekannte Stores im alten Kontext sicher vorbereitet. Unbekannte oder unlesbare Speicherversionen verhindern die Änderung, um keine noch nicht interpretierbare historische Standortinformation zu verlieren. Aktive Manager werden vor dem eigentlichen Config-Update beendet; dadurch dürfen alte laufende Abrufe keine Daten unter einer neuen Konfigurationskennung archivieren. Danach folgt genau ein Reload. Eine alte Kalibrierungsfreigabe wird nicht auf den neuen Standort übertragen. Config Entries bleiben bei Schema 1.1. Speicher-, Mess-, Rechte- und Aufbewahrungsgrenzen bleiben bestehen.
+
+## Echte AC-Wechselrichtergruppen zu #22
+
+Optional werden reale AC-Wechselrichtergruppen in den Optionen als stabile ID, Name, positive maximale AC-kW und zugeordnete stabile Dach-IDs geführt. Ein Dach gehört höchstens einer Gruppe an; mehrere Dächer dürfen ein gemeinsames Gerät teilen. Nicht zugeordnete Dächer unterliegen weiterhin dem bestehenden Anlagenlimit. Die UI erklärt AC-Gruppen ausdrücklich und deutet weder DC-MPPT-Grenzen noch Netzeinspeiselimits als zusätzliche Wechselrichter um.
+
+Eine zentrale reine Funktion begrenzt zuerst jede Gruppe proportional innerhalb ihrer Dachbeiträge und anschließend genau einmal die resultierende Gesamtleistung nach dem bisherigen Anlagenlimit. Gruppen beeinflussen keine fremden Dachbeiträge. Ohne Gruppen bleibt der bisherige Rechenweg identisch. Der optionale Anlagenkalibrierungsfaktor wird vor beiden Begrenzungsstufen angewendet.
+
+Neue archivierte Kalibrierungsbasen mit Gruppen erhalten einen eigenen Basisvertrag Version 2: je UTC-Intervall unveränderte DC-Leistung je Gruppe und unzugeordnete Leistung, dazu die damals geltenden Gruppen- und Gesamtlimits. Ihre Summe muss zur vorhandenen Gesamt-DC-Leistung passen. Basen ohne Gruppen behalten den bisherigen Vertrag und werden nicht nachträglich ergänzt oder umgedeutet. Der unabhängig versionierte Archiv-Store 3 enthält diese Erweiterung zusammen mit den Standortkontexten; Lern-Store 1 und Config-Entry-Schema 1.1 bleiben erhalten. Nichtleere Gruppen mit Zuordnungen und Limits erweitern den physischen Fingerprint und entziehen inkompatiblen Lernfaktoren die Freigabe; reine Gruppennamen tun dies nicht. Ohne Gruppen ändert sich der bestehende Fingerprint nicht.
+
+Die Leseaktionen, Energy und Karte bleiben auf derselben wirksamen Gesamtzeitreihe. Es gibt keine zusätzlichen Sensoren oder Wetterabrufe. Physische Bandgrenzen berücksichtigen bei vollständig zugeordneten Dächern auch die Summe der Gruppenlimits. Tests sichern getrennte Geräte, mehrere Dächer an einem Gerät, kombiniertes Anlagenlimit, Kalibrierung vor beiden Clippings, verlustfreie Basisübergänge und bitgleiche Ergebnisse ohne Gruppen ab.
 
 ## Konfiguration
 

@@ -61,13 +61,16 @@ def async_setup_history_services(hass: HomeAssistant) -> None:
         )
         if call.data["current_targets"]:
             result["current_targets"] = manager.current_targets(now)
+        result["uncertainty"] = manager.experience_bands(now)
         return result
 
     async def async_export_history(call: ServiceCall) -> ServiceResponse:
         manager = await _async_get_archive(hass, call)
         output_format = call.data["format"]
-        content = manager.export(call.data["days"], output_format, dt_util.utcnow())
+        now = dt_util.utcnow()
+        content = manager.export(call.data["days"], output_format, now)
         if output_format == "json":
+            content["uncertainty"] = manager.experience_bands(now)
             content = json.dumps(content, ensure_ascii=False, indent=2, allow_nan=False)
         return {
             "schema_version": 1,

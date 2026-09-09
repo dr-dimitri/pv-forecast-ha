@@ -574,7 +574,7 @@ def test_corrupt_archive_is_rejected(corruption) -> None:
     elif corruption == "nan":
         stored["records"][0]["raw_energy_kwh"] = float("nan")
     elif corruption == "timezone":
-        stored["timezone"] = "Europe/Berlin"
+        stored["timezone"] = "Keine/Zeitzone"
     elif corruption == "calibration":
         stored["records"][0]["calibrated_energy_kwh"] = 1
     else:

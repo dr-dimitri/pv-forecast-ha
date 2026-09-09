@@ -21,6 +21,10 @@ get_forecast:
     roof_id:
       selector:
         text:
+    planning:
+      example: '{"duration_minutes": 120, "earliest_start": "2026-09-09T08:00:00+00:00", "latest_end": "2026-09-09T18:00:00+00:00"}'
+      selector:
+        object:
 get_measurements:
   fields:
     config_entry_id:
@@ -41,6 +45,10 @@ get_measurements:
     interval_windows:
       selector:
         object:
+    include_outlook:
+      default: false
+      selector:
+        boolean:
 get_history:
   fields:
     config_entry_id:

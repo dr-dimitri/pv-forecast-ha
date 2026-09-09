@@ -54,7 +54,7 @@ Messpfad aktiviert; vorhandene Konfigurationen benötigen keine Migration.
 Jede Quelle hat eine stabile `source_id`, eine bestätigte Entity-Registry-ID
 (soweit vorhanden), Messart, Messgrenze und explizite Herkunftsbestätigungen.
 
-Die lokal erfassten Messdaten verwenden einen eigenen HA-Store Version 1
+Die lokal erfassten Messdaten verwenden seit #23 einen eigenen HA-Store Version 2
 mit dem Schlüssel `pv_forecast.measurements.<entry_id>`. Sie werden höchstens
 sieben Tage und bis zu 20.000 Messpunkte sowie 20.000 zugehörige
 Zählerdifferenzen pro Quelle vorgehalten. Quellenwechsel
@@ -65,7 +65,7 @@ Der Datenvertrag ist in [Messdaten](messdaten.md) beschrieben.
 
 `history_enabled` und die optionale bestätigte Zuordnung `comparison_forecast`
 sind kompatible Options-Ergänzungen des Schemas 1.1. Deaktivierte Erfassung
-löscht keine bestehenden Daten. Archivdaten verwenden seit #18 separat Store-Version 2
+löscht keine bestehenden Daten. Archivdaten verwenden seit #23 separat Store-Version 3
 unter `pv_forecast.history.<entry_id>`. Der
 [Archivvertrag](prognosearchiv.md) nennt Zeitfenster, Rohprognose, Bewertungs-
 revisionen, Konfigurationsbezug, Aufbewahrungsgrenzen und Löschung.
@@ -81,3 +81,13 @@ geschätzte Lernbasis. Unbekannte Versionen werden nicht überschrieben.
 Die [Kalibrierungsregeln](kalibrierung.md) bestimmen Freigabe, Segmentwechsel,
 Messrevisionen und bewusstes Rücksetzen. IDs, Nennwerte und Anlagenzeitzone
 werden dadurch nicht umgedeutet.
+
+## Standortänderungen ab #23
+
+Der [Reconfigure-Flow](standortwechsel.md) erhält Config Entry und Optionen bei
+Schema 1.1. Mess-Store 2 ergänzt originale Standort- und Zeitzonenkontexte je
+Segment; Archiv-Store 3 erlaubt erhaltene Datensätze unterschiedlicher
+Anlagenzeitzonen. Bestehende Daten werden im bisherigen Kontext migriert.
+Alte Tagesgrenzen und Zuordnungen ändern ihre Bedeutung nicht. Ein physischer
+Wechsel beginnt neue aktive Segmente und übernimmt keine alte Lernfreigabe.
+Unbekannte oder unlesbare Stores verhindern die Änderung.

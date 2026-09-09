@@ -188,6 +188,11 @@
         "data": {
           "confirm_delete": "Das Prognosearchiv dieser Anlage jetzt endgültig löschen"
         }
+      },
+      "reconfigure_confirm": {
+        "title": "Standortänderung prüfen",
+        "description": "**Standort:** {location}\n\n**Breitengrad:** {latitude}\n\n**Längengrad:** {longitude}\n\n**Anlagenzeitzone:** {timezone}\n\nBeim Speichern bleiben Dachflächen, Sensor-IDs und Optionen erhalten. Geänderte Koordinaten oder eine andere Anlagenzeitzone beginnen eine neue Mess- und Vergleichsgrundlage. Vorhandene Daten behalten ihren ursprünglichen Standortbezug. Ein bisheriger Lernfaktor wird für den neuen Standort nicht übernommen.",
+        "submit": "Geprüften Standort speichern"
       }
     },
     "error": {
@@ -212,10 +217,13 @@
       "duplicate_comparison_source": "Heute und morgen benötigen zwei unterschiedliche Prognosesensoren.",
       "comparison_confirmation_required": "Bestätige den Tagesbezug in der Anlagenzeitzone und dieselbe AC-Gesamtmessgrenze.",
       "history_unavailable": "Für diese Anlage ist das Prognosearchiv noch nicht verfügbar. Lade die Anlage, um gespeicherte Daten zu lesen.",
-      "history_delete_failed": "Das Archiv konnte nicht gelöscht werden. Prüfe die lokale Speicherung und versuche es erneut."
+      "history_delete_failed": "Das Archiv konnte nicht gelöscht werden. Prüfe die lokale Speicherung und versuche es erneut.",
+      "reconfigure_storage_unavailable": "Die bisherigen Mess-, Archiv- oder Lerndaten können nicht sicher übernommen werden oder die Anlage lässt sich nicht entladen. Der gespeicherte Standort bleibt unverändert."
     },
     "abort": {
-      "already_configured": "Eine PV-Ertragsprognose ist bereits eingerichtet."
+      "already_configured": "Eine PV-Ertragsprognose ist bereits eingerichtet.",
+      "reconfigure_successful": "Der Standort wurde gespeichert. Die Anlage wird mit unveränderten Sensor-IDs neu geladen.",
+      "reconfigure_entry_changed": "Die Anlage wurde während der Standortbearbeitung anderweitig geändert. Bitte starte die Standortbearbeitung erneut."
     }
   },
   "options": {
@@ -230,7 +238,8 @@
           "system": "Wechselrichterleistung ändern",
           "measurements": "Echte PV-Messquellen zuordnen (optional)",
           "history": "Prognosearchiv und Soll-Ist-Vergleich (optional)",
-          "calibration": "Selbstkalibrierung (optional)"
+          "calibration": "Selbstkalibrierung (optional)",
+          "inverter_groups": "AC-Wechselrichtergruppen zuordnen"
         },
         "menu_option_descriptions": {
           "add_roof": "Erfasst eine zusätzliche Dachfläche, ohne die vorhandenen zu verändern.",
@@ -239,7 +248,8 @@
           "system": "Ändert die maximale AC-Wechselrichterleistung der Gesamtanlage.",
           "measurements": "Vorhandene PV-Zähler zuordnen und lokale Messkopien verwalten.",
           "history": "Rechtzeitige Prognosen lokal archivieren, vergleichen und bewusst exportieren.",
-          "calibration": "Einen begrenzten Anlagenfaktor beobachten, prüfen und bewusst anwenden."
+          "calibration": "Einen begrenzten Anlagenfaktor beobachten, prüfen und bewusst anwenden.",
+          "inverter_groups": "Dächer einer tatsächlichen gemeinsamen AC-Leistungsgrenze zuordnen."
         }
       },
       "add_roof": {
@@ -292,9 +302,9 @@
       },
       "confirm_remove_roof": {
         "title": "Entfernen bestätigen",
-        "description": "**{roof_name}** und ihre Sensoren werden endgültig entfernt. Dieser Schritt kann nicht rückgängig gemacht werden.",
+        "description": "**{roof_name}** und ihre Sensoren werden endgültig entfernt. Dieser Schritt kann nicht rückgängig gemacht werden.\n\n{inverter_group_changes}",
         "data": {
-          "confirm_remove": "Endgültig entfernen"
+          "confirm_remove": "Dachfläche und angezeigte Gruppenzuordnungen jetzt entfernen"
         }
       },
       "system": {
@@ -468,6 +478,48 @@
         "data": {
           "confirm_reset": "Lernzustand dieser Anlage jetzt zurücksetzen"
         }
+      },
+      "inverter_groups": {
+        "title": "AC-Wechselrichtergruppen",
+        "description": "{groups}\n\nEine Gruppe beschreibt die gemeinsame AC-Ausgangsgrenze eines echten Wechselrichters. Mehrere Dachflächen können ihn teilen; jede Dachfläche gehört höchstens einer Gruppe. Unzugeordnete Dächer verwenden nur die bisherige anlagenweite Begrenzung. Eine MPPT-Eingangsgrenze oder eine Netzexportbegrenzung ist keine AC-Wechselrichtergruppe.",
+        "menu_options": {
+          "add_inverter_group": "AC-Gruppe hinzufügen",
+          "edit_inverter_group": "AC-Gruppe bearbeiten",
+          "remove_inverter_group": "AC-Gruppe entfernen",
+          "init": "Zurück zu den Optionen"
+        }
+      },
+      "inverter_group_details": {
+        "title": "AC-Gruppe konfigurieren",
+        "description": "Ordne die Dachflächen derselben tatsächlichen AC-Leistungsgrenze zu. Bereits anderweitig zugeordnete Dächer müssen zuerst aus ihrer bisherigen Gruppe entfernt werden. Die Gruppe begrenzt nur ihre eigenen Dachbeiträge; anschließend gilt gegebenenfalls die anlagenweite Grenze.",
+        "data": {
+          "name": "Name des Wechselrichters",
+          "max_power_kw": "Maximale AC-Ausgangsleistung",
+          "roof_ids": "Gemeinsam angeschlossene Dachflächen"
+        },
+        "data_description": {
+          "max_power_kw": "Die gemeinsame maximale AC-Leistung muss größer als 0 kW sein. Keine DC-Nennleistung, MPPT-Eingangsgrenze oder Netzexportgrenze eingeben.",
+          "roof_ids": "Mindestens eine Dachfläche auswählen; die übrigen Dachwerte bleiben unverändert."
+        }
+      },
+      "edit_inverter_group": {
+        "title": "AC-Gruppe bearbeiten",
+        "data": {
+          "id": "AC-Wechselrichtergruppe"
+        }
+      },
+      "remove_inverter_group": {
+        "title": "AC-Gruppe entfernen",
+        "data": {
+          "id": "AC-Wechselrichtergruppe"
+        }
+      },
+      "confirm_remove_inverter_group": {
+        "title": "AC-Gruppe entfernen?",
+        "description": "Die Gruppe **{name}** und ihre eigene Leistungsgrenze werden entfernt. Alle Dachflächen bleiben erhalten. Für sie gilt danach nur noch eine gegebenenfalls konfigurierte anlagenweite Begrenzung.",
+        "data": {
+          "confirm_remove": "Diese AC-Gruppe jetzt entfernen"
+        }
       }
     },
     "error": {
@@ -489,7 +541,11 @@
       "calibration_unavailable": "Der Lernstatus ist derzeit nicht geladen. Lade die Anlage erneut, um den Status zu lesen.",
       "calibration_exclusion_date": "Wähle einen Tag innerhalb der letzten 365 lokalen Kalendertage einschließlich heute.",
       "calibration_exclusion_limit": "Es sind bereits 90 Tage markiert. Nimm zuerst eine bestehende Tagesmarkierung zurück.",
-      "calibration_reset_failed": "Der Lernzustand konnte nicht zurückgesetzt werden. Prüfe die lokale Speicherung und versuche es erneut."
+      "calibration_reset_failed": "Der Lernzustand konnte nicht zurückgesetzt werden. Prüfe die lokale Speicherung und versuche es erneut.",
+      "invalid_inverter_group": "Bitte wähle einen eindeutigen Namen, eine positive endliche AC-Leistung und mindestens eine noch nicht anderweitig zugeordnete Dachfläche."
+    },
+    "abort": {
+      "reconfigure_entry_changed": "Die Anlage wurde während der Bearbeitung anderweitig geändert. Bitte starte die Bearbeitung erneut."
     }
   },
   "selector": {
@@ -533,6 +589,10 @@
         "roof_id": {
           "name": "Dachfläche",
           "description": "Stabile Dach-ID für die optionale Kartenansicht; leer bedeutet Gesamtanlage."
+        },
+        "planning": {
+          "name": "Solarzeitfenster",
+          "description": "Laufdauer in ganzen Minuten, frühester Start und spätestes Ende mit UTC-Offset; optional bisheriger Start. Die Planung gilt für die Gesamtanlage."
         }
       }
     },
@@ -555,6 +615,10 @@
         "interval_windows": {
           "name": "Explizite Messintervalle",
           "description": "Bis zu 50 nicht überlappende absolute UTC-Fenster mit start und end; unvollständige Energie bleibt unbekannt."
+        },
+        "include_outlook": {
+          "name": "Tagesaussicht",
+          "description": "Belegte Messenergie seit Tagesbeginn, geschätzte Brücke seit letzter gemeinsamer Messung und Prognose ab jetzt getrennt ausgeben."
         }
       }
     },
@@ -620,6 +684,9 @@
     },
     "roof_not_found": {
       "message": "Die ausgewählte Dachfläche wurde nicht gefunden."
+    },
+    "invalid_planning_window": {
+      "message": "Der Planungszeitraum oder die Laufdauer ist ungültig."
     }
   },
   "entity": {
@@ -654,6 +721,11 @@
     "default_roof_name": "Dachfläche {number}",
     "inverter_unlimited": "nicht begrenzt",
     "location_source_address": "Adresseingabe (OpenStreetMap/Nominatim)",
-    "location_source_home_assistant": "Home Assistant"
+    "location_source_home_assistant": "Home Assistant",
+    "timezone_pending": "noch nicht ermittelt",
+    "inverter_groups_none": "Keine getrennten AC-Wechselrichtergruppen zugeordnet.",
+    "default_inverter_group_name": "Wechselrichter {number}",
+    "inverter_group_remove_roof": "Die Dachzuordnung zur AC-Gruppe „{name}“ wird entfernt. Die übrigen Dächer bleiben zugeordnet.",
+    "inverter_group_remove_empty": "Die danach leere AC-Gruppe „{name}“ wird ebenfalls entfernt."
   }
 }

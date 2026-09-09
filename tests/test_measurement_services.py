@@ -140,6 +140,50 @@ async def test_measurement_action_reads_without_fetch_and_preserves_forecast(
     assert fetch.await_count == 1
 
 
+@pytest.mark.parametrize("with_intervals", [False, True])
+async def test_measurement_action_day_outlook_is_explicit_local_and_permissioned(
+    hass, measured_entry, with_intervals
+):
+    """Die Tagesaussicht wahrt Quellenrechte und kennzeichnet den fehlenden Morgen."""
+
+    entry, source, fetch = measured_entry
+    coordinator = entry.runtime_data.coordinator
+    fetched_at = coordinator.last_update_success_time
+    forecast = coordinator.data
+    request = {"include_outlook": True, "start": "2026-09-08T22:00:00Z"}
+    if with_intervals:
+        request["interval_windows"] = [
+            {"start": "2026-09-09T12:00:00Z", "end": "2026-09-09T12:10:00Z"}
+        ]
+    assert "outlook" not in await _read(hass, entry.entry_id)
+    user = MockUser().add_to_hass(hass)
+    permitted = {
+        entity.entity_id: {"read": True}
+        for entity in er.async_entries_for_config_entry(
+            er.async_get(hass), entry.entry_id
+        )
+    }
+    user.mock_policy({"entities": {"entity_ids": permitted}})
+    with pytest.raises(Unauthorized):
+        await _read(hass, entry.entry_id, user_id=user.id, **request)
+    permitted[source.entity_id] = {"read": True}
+    user.mock_policy({"entities": {"entity_ids": permitted}})
+    result = await _read(hass, entry.entry_id, user_id=user.id, **request)
+    outlook = result["outlook"]
+    assert outlook["schema_version"] == 1
+    assert outlook["status"] == "unavailable"
+    assert outlook["reason"] == "incomplete_measurements"
+    assert result["current_location_total_energy"]["energy_kwh"] == pytest.approx(1)
+    assert not result["current_location_total_energy"]["energy_complete"]
+    assert outlook["total_kwh"] is None
+    assert outlook["remaining_kwh"] is not None
+    assert outlook["correction"] == "off"
+    assert json.loads(json.dumps(result, allow_nan=False)) == result
+    assert fetch.await_count == 1
+    assert coordinator.data is forecast
+    assert coordinator.last_update_success_time == fetched_at
+
+
 async def test_measurement_action_rejects_reversed_window(hass, measured_entry):
     """Ein leeres oder rückwärts laufendes Fenster liefert einen erklärten Fehler."""
 

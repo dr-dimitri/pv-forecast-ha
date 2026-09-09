@@ -123,7 +123,7 @@ Ohne solche Werte bleibt die korrigierte Variante `null`.
 
 ## Lokaler Speicher, Löschen und Lebenszyklus
 
-Der private HA-Store `pv_forecast.history.<entry_id>` hat seit #18 Version 2, unabhängig
+Der private HA-Store `pv_forecast.history.<entry_id>` hat seit #23 Version 3, unabhängig
 von Config-Entry-Schema 1.1 und Messstore-Version. Stundenstände werden maximal
 90 Tage und Tagesbewertungen maximal 365 Tage aufbewahrt. Zusätzlich gelten
 höchstens 6.000 Zieldatensätze, drei frühere Bewertungsrevisionen pro Datensatz
@@ -211,3 +211,17 @@ Darstellungsintervalle anteilig geteilt. `source_start`, `source_end` und
 `raw_energy_kwh` erhalten den vollständigen ursprünglichen Stundenbezug; die
 Archivdatensätze bleiben identisch. So zeigt konstante Leistung am Tagesrand
 keinen künstlichen Unterschied zwischen aktueller und historischer Energie.
+
+## Getrennte Anlagenkonfigurationen
+
+Ein [Standortwechsel](standortwechsel.md) erhält die ursprüngliche Zeitzone
+jedes Archivstands. Die aktuelle Berichtssumme zählt nur die aktive Kombination
+aus Konfigurationskennung und Zeitzone. `configuration_groups` enthält die
+getrennten früheren Vergleichsgrundlagen; deren Werte bleiben exportierbar.
+Die Migration zu Store 3 deutet keine alten Tagesgrenzen um.
+
+[Wechselrichtergruppen](wechselrichtergruppen.md) erweitern die unveränderliche
+Kalibrierungsbasis bei gruppierten Anlagen um die ursprüngliche DC-Aufteilung
+und die damaligen AC-Grenzen. Der eigene Basisvertrag hat dann Version 2.
+Damit gilt jeder geprüfte Faktor weiterhin vor beiden Begrenzungsstufen.
+Bestehende Basen ohne Gruppen bleiben unverändert lesbar.

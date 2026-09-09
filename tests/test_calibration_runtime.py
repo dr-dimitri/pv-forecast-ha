@@ -85,6 +85,29 @@ async def test_restart_preserves_learning_segment(hass, freezer):
     assert coordinator.listeners == []
 
 
+async def test_location_change_revokes_old_learning_segment_with_paused_archive(hass):
+    """Eine neue Lage übernimmt auch ohne aktive Lernvoraussetzungen keinen Altstand."""
+
+    entry, coordinator, history, manager = _managers(hass, mode="off")
+    state = CalibrationState(_configuration_id(entry), NOW - timedelta(days=12), "UTC")
+    await manager._store.async_save({"state": state.to_dict()})
+    hass.config_entries.async_update_entry(
+        entry,
+        data={**entry.data, "latitude": 35.6},
+        options={**entry.options, "history_enabled": False},
+    )
+    await history.async_start()
+    try:
+        await manager.async_start()
+        assert manager._state.configuration_id == _configuration_id(entry)
+        assert manager._state.segment_start == NOW
+        assert manager._state.approved_factor == 1
+        assert coordinator.calibration_factor == 1
+    finally:
+        await manager.async_stop()
+        await history.async_stop()
+
+
 async def test_default_off_does_not_load_or_write_learning_store(hass):
     """Bestandsanlagen erhalten ohne Opt-in keinen neuen Lernlistener oder Store."""
     _, coordinator, _history, manager = _managers(hass, mode=None)

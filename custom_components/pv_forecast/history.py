@@ -733,10 +733,13 @@ class HistoryArchive:
             for entity, registry in sorted(sources, key=str)
         )
 
-    def current_targets(self, now: datetime) -> dict[str, Any]:
+    def current_targets(
+        self, now: datetime, configuration_id: str | None = None
+    ) -> dict[str, Any]:
         """Bereits feste Stundenprognosen für die zwei aktuellen lokalen Tage lesen."""
 
         now = _utc(now)
+        configuration_id = configuration_id or self._active_configuration_id()
         today = now.astimezone(self.timezone).date()
         start, _ = _day_bounds(today, self.timezone)
         _, end = _day_bounds(today + timedelta(days=1), self.timezone)
@@ -749,6 +752,8 @@ class HistoryArchive:
                 record
                 for record in self.records.values()
                 if record.horizon == "hourly_1h"
+                and record.configuration_id == configuration_id
+                and record.timezone == self.timezone.key
                 and record.cutoff <= now
                 and record.start < end
                 and record.end > start
@@ -786,30 +791,24 @@ class HistoryArchive:
             ],
         }
 
-    def snapshot(
-        self, now: datetime, days: int, include_records: bool = False
+    def _summarize_horizons(
+        self,
+        records: Sequence[ArchiveRecord],
+        now: datetime,
+        days: int,
+        timezone: ZoneInfo,
     ) -> dict[str, Any]:
-        """Abgeschlossene lokale Tage mit Stichprobe statt Prozentgenauigkeit zeigen."""
-        now = _utc(now)
-        if isinstance(days, bool) or days not in (7, 30, 90):
-            raise ValueError("Das Bewertungsfenster umfasst 7, 30 oder 90 Tage")
-        end_day = now.astimezone(self.timezone).date()
+        """Genau eine Konfiguration in ihrer eigenen Tageszeitzone bewerten."""
+
+        end_day = now.astimezone(timezone).date()
         start_day = end_day - timedelta(days=days)
-        records = sorted(
-            (
-                record
-                for record in self.records.values()
-                if start_day <= record.target_date < end_day
-            ),
-            key=lambda record: (record.start, record.horizon),
-        )
         horizons = {}
         for horizon in HORIZONS:
             selected = [record for record in records if record.horizon == horizon]
             expected = (
                 days
                 if horizon.startswith("daily")
-                else _expected_hours(start_day, end_day, self.timezone)
+                else _expected_hours(start_day, end_day, timezone)
             )
             valid = []
             exclusions: Counter[str] = Counter()
@@ -928,6 +927,65 @@ class HistoryArchive:
                     ),
                 },
             }
+        return horizons
+
+    def _active_configuration_id(self) -> str | None:
+        """Die zuletzt tatsächlich beobachtete Konfiguration als Vorgabe nehmen."""
+
+        return (
+            self._configuration_changes[-1][1] if self._configuration_changes else None
+        )
+
+    def snapshot(
+        self,
+        now: datetime,
+        days: int,
+        include_records: bool = False,
+        *,
+        configuration_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Aktuelle Kennzahlen und ältere Anlagenkontexte getrennt ausweisen."""
+
+        now = _utc(now)
+        if isinstance(days, bool) or days not in (7, 30, 90):
+            raise ValueError("Das Bewertungsfenster umfasst 7, 30 oder 90 Tage")
+        configuration_id = configuration_id or self._active_configuration_id()
+        end_day = now.astimezone(self.timezone).date()
+        start_day = end_day - timedelta(days=days)
+        groups: dict[tuple[str | None, str], list[ArchiveRecord]] = {
+            (configuration_id, self.timezone.key): []
+        }
+        for record in self.records.values():
+            groups.setdefault((record.configuration_id, record.timezone), []).append(
+                record
+            )
+        contexts = []
+        included_records = []
+        for (group_configuration, zone_name), all_records in sorted(
+            groups.items(), key=lambda item: (item[0][0] or "", item[0][1])
+        ):
+            zone = ZoneInfo(zone_name)
+            group_end = now.astimezone(zone).date()
+            group_start = group_end - timedelta(days=days)
+            selected = [
+                record
+                for record in all_records
+                if group_start <= record.target_date < group_end
+            ]
+            included_records.extend(selected)
+            contexts.append(
+                {
+                    "configuration_id": group_configuration,
+                    "timezone": zone_name,
+                    "active": (group_configuration, zone_name)
+                    == (configuration_id, self.timezone.key),
+                    "window_start": group_start.isoformat(),
+                    "window_end_exclusive": group_end.isoformat(),
+                    "record_count": len(all_records),
+                    "horizons": self._summarize_horizons(selected, now, days, zone),
+                }
+            )
+        active = next(group for group in contexts if group["active"])
         result = {
             "schema_version": 1,
             "timezone": self.timezone.key,
@@ -941,10 +999,17 @@ class HistoryArchive:
                 else None
             ),
             "record_count": len(self.records),
-            "horizons": horizons,
+            "configuration_id": configuration_id,
+            "horizons": active["horizons"],
+            "configuration_groups": contexts,
         }
         if include_records:
-            result["records"] = [record.to_dict() for record in records]
+            result["records"] = [
+                record.to_dict()
+                for record in sorted(
+                    included_records, key=lambda item: (item.start, item.horizon)
+                )
+            ]
         return result
 
     def to_dict(self) -> dict[str, Any]:
@@ -972,9 +1037,8 @@ class HistoryArchive:
     def from_dict(cls, data: Mapping[str, Any], timezone: str) -> HistoryArchive:
         """Persistierte Stichtage streng prüfen, bevor neue Werte aufgenommen werden."""
         try:
-            if data["timezone"] != timezone or not isinstance(
-                data["retention_truncated"], bool
-            ):
+            ZoneInfo(data["timezone"])
+            if not isinstance(data["retention_truncated"], bool):
                 raise ValueError(
                     "Gespeicherte Archivzeitzone oder Begrenzung ist ungültig"
                 )
@@ -991,7 +1055,7 @@ class HistoryArchive:
                     )
                 archive.note_configuration(item["configuration_id"], instant)
             for item in data["records"]:
-                record = _record_from_dict(item, archive.timezone)
+                record = _record_from_dict(item, ZoneInfo(item["timezone"]))
                 if record.record_id in archive.records:
                     raise ValueError("Ein Archivziel ist doppelt gespeichert")
                 archive.records[record.record_id] = record
@@ -1021,12 +1085,15 @@ class HistoryArchive:
         if max_records < 0 or max_bytes < 1:
             raise ValueError("Archivgrenzen müssen nichtnegative Datensätze erlauben")
         previous_count = len(self.records)
-        local_today = now.astimezone(self.timezone).date()
+        local_days = {
+            record.timezone: now.astimezone(ZoneInfo(record.timezone)).date()
+            for record in self.records.values()
+        }
         self.records = {
             key: record
             for key, record in self.records.items()
             if record.target_date
-            >= local_today
+            >= local_days[record.timezone]
             - timedelta(days=365 if record.horizon.startswith("daily") else 90)
         }
         ordered = sorted(
