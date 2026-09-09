@@ -70,6 +70,29 @@ def test_parse_valid_response_and_missing_values() -> None:
     assert forecast.intervals[1].ambient_temperature_c is None
     assert forecast.intervals[0].end == datetime(2026, 8, 23, 0, tzinfo=TIMEZONE)
     assert forecast.intervals[0].duration_hours == 1
+    assert forecast.intervals[0].quality_flags == ("gti_fallback",)
+    assert forecast.intervals[1].quality_flags == (
+        "gti_fallback",
+        "temperature_fallback",
+    )
+
+
+def test_input_fallbacks_survive_total_interval_calculation() -> None:
+    """Ersatzwerte bleiben erkennbar, ohne vorhandene Zeitabdeckung zu verlieren."""
+
+    payload = _hourly_payload("2026-08-23T10:00", "2026-08-23T11:00")
+    payload["hourly"]["global_tilted_irradiance"] = [None, 0]
+    payload["hourly"]["temperature_2m"] = [None, 25]
+    parsed = parse_open_meteo_response(payload, "Europe/Berlin")
+    forecast = calculate_forecast(
+        (roof(),), {"roof_1": parsed.intervals}, None, date(2026, 8, 23), TIMEZONE
+    )
+
+    first, second = forecast.total_intervals
+    assert first.quality_flags == ("gti_fallback", "temperature_fallback")
+    assert second.quality_flags == ()
+    assert first.is_complete and second.is_complete
+    assert first.energy_kwh == second.energy_kwh == 0
 
 
 @pytest.mark.parametrize("sign", [1, -1], ids=["positiv", "negativ"])

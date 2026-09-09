@@ -190,10 +190,37 @@
       }
     }
   },
+  "services": {
+    "get_forecast": {
+      "name": "PV-Prognose lesen",
+      "description": "Liest die gespeicherte Stundenprognose der ausgewählten Anlage, ohne Wetterdaten neu abzurufen.",
+      "fields": {
+        "config_entry_id": {
+          "name": "PV-Anlage",
+          "description": "Anlage, deren gespeicherte Prognose gelesen wird."
+        }
+      }
+    }
+  },
+  "exceptions": {
+    "entry_not_found": {
+      "message": "Die ausgewählte PV-Anlage wurde nicht gefunden."
+    },
+    "entry_not_loaded": {
+      "message": "Die ausgewählte PV-Anlage ist nicht geladen."
+    },
+    "forecast_unavailable": {
+      "message": "Für die ausgewählte PV-Anlage liegt noch keine Prognose vor."
+    }
+  },
   "entity": {
     "sensor": {
       "total_today": { "name": "Prognose heute" },
       "total_tomorrow": { "name": "Prognose morgen" },
+      "total_remaining_today": { "name": "Restertrag heute" },
+      "total_next_60_minutes": { "name": "Ertrag nächste 60 Minuten" },
+      "total_power_now": { "name": "Geschätzte Leistung jetzt" },
+      "total_peak_today": { "name": "Beginn der stärksten Prognosestunde heute" },
       "roof_today": { "name": "{roof_name} Prognose heute" },
       "roof_tomorrow": { "name": "{roof_name} Prognose morgen" }
     }

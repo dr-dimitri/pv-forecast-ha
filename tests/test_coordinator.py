@@ -695,7 +695,8 @@ async def test_provider_pause_survives_manual_refresh_and_midnight(
             frozen.move_to("2026-08-24T00:00:00+02:00")
             async_fire_time_changed(hass)
             await hass.async_block_till_done(wait_background_tasks=True)
-            listener.assert_called_once_with()
+            # Minutentakt und Tageswechsel benachrichtigen jeweils lokal.
+            assert listener.call_count == 2
             request_refresh.assert_not_called()
         assert coordinator.get_daily_yield("today") == previous.total.tomorrow
         assert coordinator.get_daily_yield("tomorrow") is None

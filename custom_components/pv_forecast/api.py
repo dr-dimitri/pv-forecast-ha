@@ -413,18 +413,25 @@ def parse_open_meteo_response(
                 raise ValueError
         except (OSError, OverflowError, ValueError) as err:
             raise OpenMeteoDataError("Ungültiger Zeitstempel") from err
-        gti = _non_negative_number(
+        raw_gti = _optional_number(
             gti_values[index] if index < len(gti_values) else None
         )
+        gti = max(0.0, raw_gti) if raw_gti is not None else 0.0
         ambient_temperature = _optional_number(
             temperature_values[index] if index < len(temperature_values) else None
         )
+        quality_flags: list[str] = []
+        if raw_gti is None or raw_gti < 0:
+            quality_flags.append("gti_fallback")
+        if ambient_temperature is None:
+            quality_flags.append("temperature_fallback")
         intervals.append(
             WeatherInterval(
                 start=(end.astimezone(UTC) - timedelta(hours=1)).astimezone(timezone),
                 end=end,
                 gti_w_m2=gti,
                 ambient_temperature_c=ambient_temperature,
+                quality_flags=tuple(quality_flags),
             )
         )
     return OpenMeteoForecast(intervals=tuple(intervals))
@@ -440,10 +447,3 @@ def _optional_number(value: Any) -> float | None:
     except OverflowError:
         return None
     return numeric if math.isfinite(numeric) else None
-
-
-def _non_negative_number(value: Any) -> float:
-    """Fehlendes oder ungültiges GTI gemäß Spezifikation als null behandeln."""
-
-    numeric = _optional_number(value)
-    return max(0.0, numeric) if numeric is not None else 0.0

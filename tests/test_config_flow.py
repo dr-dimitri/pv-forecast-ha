@@ -414,11 +414,15 @@ async def test_successful_setup_with_multiple_roofs(hass) -> None:
     await hass.async_block_till_done()
     entry = result["result"]
     entities = er.async_entries_for_config_entry(er.async_get(hass), entry.entry_id)
-    assert len(entities) == 6
+    assert len(entities) == 10
     assert {entity.domain for entity in entities} == {"sensor"}
     assert {entity.original_name for entity in entities} == {
         "Prognose heute",
         "Prognose morgen",
+        "Restertrag heute",
+        "Ertrag nächste 60 Minuten",
+        "Geschätzte Leistung jetzt",
+        "Beginn der stärksten Prognosestunde heute",
         "Süddach Prognose heute",
         "Süddach Prognose morgen",
         "Ostdach Prognose heute",

@@ -125,6 +125,9 @@ async def test_existing_schema_1_1_preserves_configuration_and_entity_ids(
         f"{entry.entry_id}_{scope}_{day}"
         for scope in ("total", *roof_ids)
         for day in ("today", "tomorrow")
+    } | {
+        f"{entry.entry_id}_total_{key}"
+        for key in ("remaining_today", "next_60_minutes", "power_now", "peak_today")
     }
     start = datetime(2026, 8, 23, 11, tzinfo=ZoneInfo("Pacific/Chatham"))
     point = WeatherInterval(start, start + timedelta(hours=1), 1000, 25)
