@@ -269,7 +269,7 @@ def test_last_hour_window_requires_full_remaining_coverage() -> None:
 
 @pytest.mark.parametrize("zone", ["Europe/Berlin", "Asia/Kolkata", "Asia/Kathmandu"])
 def test_large_finite_energy_survives_time_fractions(zone: str) -> None:
-    """Zeitquoten dürfen große gültige Energien nicht durch Sekundenprodukte überlaufen."""
+    """Zeitquoten erhalten große gültige Energien ohne überlaufende Sekundenprodukte."""
 
     timezone = ZoneInfo(zone)
     result = _complete_forecast(timezone=timezone, power=1e305)

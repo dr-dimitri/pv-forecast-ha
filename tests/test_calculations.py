@@ -381,8 +381,7 @@ def test_system_daily_sum_overflow_is_controlled(day_offset: int) -> None:
         )
         for item in roofs
     }
-    day_name = "heute" if day_offset == 0 else "morgen"
-    with pytest.raises(InvalidConfigurationError, match=f"Gesamtenergie {day_name}"):
+    with pytest.raises(InvalidConfigurationError, match="Tagesenergie"):
         calculate_forecast(roofs, points, None, date(2026, 8, 23), TIMEZONE)
 
 

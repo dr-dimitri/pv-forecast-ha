@@ -224,7 +224,10 @@ def calculate_forecast(
                 TotalForecastInterval(
                     start=start,
                     end=end,
-                    energy_kwh=power * ((end - start).total_seconds() / 3600),
+                    energy_kwh=_finite_result(
+                        power * ((end - start).total_seconds() / 3600),
+                        "Gesamtintervallenergie",
+                    ),
                     ac_power_kw=power,
                     quality_flags=tuple(sorted(flags)),
                     is_complete=is_complete,
