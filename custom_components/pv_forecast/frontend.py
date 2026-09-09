@@ -1,5 +1,6 @@
 """Das optionale Kartenmodul lokal bereitstellen, ohne Dashboards zu verändern."""
 
+import hashlib
 from pathlib import Path
 
 from homeassistant.core import HomeAssistant, callback
@@ -10,6 +11,15 @@ from .const import DOMAIN
 CARD_URL = "/pv_forecast/pv-forecast-card.js"
 CARD_FILE = Path(__file__).parent / "frontend" / "pv-forecast-card.js"
 _DATA_REGISTERED = f"{DOMAIN}.frontend_registered"
+
+
+async def async_get_card_revision(hass: HomeAssistant) -> str:
+    """Die tatsächlich installierten Modulbytes ohne blockierendes Datei-I/O lesen."""
+
+    def fingerprint() -> str:
+        return hashlib.sha256(CARD_FILE.read_bytes()).hexdigest()
+
+    return await hass.async_add_executor_job(fingerprint)
 
 
 @callback

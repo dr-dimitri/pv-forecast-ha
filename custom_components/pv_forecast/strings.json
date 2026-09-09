@@ -901,5 +901,28 @@
     "dashboard_conflict": "Die Seitenadresse ist bereits anderweitig belegt. Der bestehende Inhalt wurde nicht verändert.",
     "dashboard_error": "Die Seite konnte nicht eingerichtet werden. Bitte die HA-Protokolle prüfen und erneut speichern.",
     "dashboard_menu": "Menü öffnen"
+  },
+  "issues": {
+    "dashboard_update": {
+      "title": "PV-Dashboard aktualisieren",
+      "fix_flow": {
+        "step": {
+          "confirm": {
+            "title": "PV-Dashboard aktualisieren",
+            "description": "Für **{dashboard}** hat sich das installierte Dashboard-Modul geändert. Übernimm die neue Version und öffne die PV-Seite anschließend über den angebotenen Link neu. Der Link lädt die Seite vollständig neu, damit die aktuelle Karte angezeigt wird. Prognosen und Messdaten bleiben erhalten.",
+            "submit": "Dashboard aktualisieren"
+          }
+        },
+        "error": {
+          "dashboard_unavailable": "Das Dashboard konnte nicht aktualisiert werden. Bitte prüfen, ob die PV-Seite geladen ist und ihre Adresse nicht durch ein anderes Panel belegt ist. Danach erneut versuchen."
+        },
+        "abort": {
+          "updated": "Die neue Dashboard-Version wurde übernommen.\n\n[Dashboard öffnen und neu laden]({dashboard_url})\n\nDer Link lädt die HA-Seite vollständig neu. Andere geöffnete Browser oder Geräte können ihre PV-Seite ebenfalls neu laden.",
+          "changed": "Die angebotene Dashboard-Version hat sich inzwischen geändert. Bitte diesen Dialog schließen und die aktuelle Reparaturmeldung erneut öffnen.",
+          "not_loaded": "Die PV-Anlage ist gerade nicht geladen. Bitte die Integration laden und die Reparatur anschließend erneut öffnen.",
+          "no_longer_needed": "Diese Dashboard-Seite ist ausgeschaltet oder ihre Anlage wurde entfernt. Die Reparatur ist nicht mehr erforderlich."
+        }
+      }
+    }
   }
 }

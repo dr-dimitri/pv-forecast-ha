@@ -193,6 +193,29 @@ teilt weiter ihre Leseaufrufe und beendet sie beim Ausblenden oder Entfernen.
 Tests prüfen beide Flows und den Panel-Lebenszyklus; Browserprüfungen sichern
 360 px, Hell/Dunkel, Tastatur und die mobile HA-Menünavigation ab.
 
+## Dashboard-Aktualisierung über HA-Reparaturen aus #101
+
+Die automatisch verwaltete PV-Seite vergleicht beim Laden den SHA-256-Fingerprint
+des gebündelten JavaScript-Moduls mit der zuletzt übernommenen Fassung in der
+internen Entry-Option `dashboard_revision`. Ein erstmaliger Vergleichsstand
+erzeugt keine Änderungsmeldung. Spätere Inhaltsänderungen erzeugen je Anlage eine
+native behebbare Reparaturmeldung; unveränderte oder bestätigte Fassungen nicht.
+Die native Issue Registry bewahrt Meldung und Ignorierung derselben Fassung über
+Neustarts. Eine weitere Inhaltsänderung wird erneut angeboten.
+
+Der native Reparaturdialog mit seinen Adminrechten übernimmt eine Fassung erst
+nach erfolgreicher Registrierung des eigenen Panels. Ein interner Link lädt
+danach die PV-Seite als neues Dokument, damit bereits registrierte Custom Elements
+ersetzt werden. Der Modul-URL-Parameter verwendet den Inhaltsfingerprint. Fehler,
+fremde URL-Belegung oder eine inzwischen neue Fassung werden nicht als erfolgreich
+bestätigt. Abschalten oder Entfernen löscht nur die zugehörige Reparaturmeldung.
+
+Schema 1.1 bleibt erhalten; es gibt keinen zusätzlichen Integrationsstore,
+Wetterabruf, fachlichen Reload, Sensor oder Service. Manuelle Lovelace-Ressourcen
+und andere Dashboards werden nicht verändert. Reparaturtexte stammen aus
+`strings.json`. Diese Ausnahme erweitert ausschließlich den nativen
+Plattformumfang um `repairs.py` und den bestehenden Dashboard-Lebenszyklus.
+
 ## Optionale Selbstkalibrierung aus #18
 
 Ein begrenzter Anlagenfaktor wird ausschließlich in den Optionen aktiviert:
