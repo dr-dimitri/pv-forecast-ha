@@ -905,12 +905,11 @@
   "issues": {
     "dashboard_update": {
       "title": "PV-Dashboard aktualisieren",
-      "description": "Für **{dashboard}** hat sich das installierte Dashboard-Modul geändert. Aktualisiere die PV-Seite hier und öffne sie anschließend über den angebotenen Link neu. Prognosen und Messdaten bleiben erhalten.",
       "fix_flow": {
         "step": {
           "confirm": {
             "title": "PV-Dashboard aktualisieren",
-            "description": "Die installierte Dashboard-Version für **{dashboard}** übernehmen. Anschließend erhältst du einen Link, der die PV-Seite vollständig neu lädt. Dadurch werden auch bereits geöffnete alte Karten ersetzt. Andere Dashboards und Wetterabrufe bleiben unverändert.",
+            "description": "Für **{dashboard}** hat sich das installierte Dashboard-Modul geändert. Übernimm die neue Version und öffne die PV-Seite anschließend über den angebotenen Link neu. Der Link lädt die Seite vollständig neu, damit die aktuelle Karte angezeigt wird. Prognosen und Messdaten bleiben erhalten.",
             "submit": "Dashboard aktualisieren"
           }
         },
