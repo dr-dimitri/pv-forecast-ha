@@ -43,8 +43,9 @@ Die Integration legt ausschließlich Prognosesensoren an. Wetter-,
 Einstrahlungs-, Temperatur-, Status- und Debug-Sensoren gehören nicht zum
 Funktionsumfang.
 
-Die noch erforderlichen Nutzertests, Gütenachweise und zurückgestellten
-Erweiterungen sind unter [Freiwillige Erprobung](docs/offene-abnahmen.md) ausgewiesen.
+Die noch ausstehenden freiwilligen Nutzertests, fehlenden Gütenachweise und
+zurückgestellten Erweiterungen sind unter
+[Freiwillige Erprobung](docs/offene-abnahmen.md) ausgewiesen.
 
 ## Installation
 

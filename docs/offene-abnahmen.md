@@ -81,3 +81,23 @@ auf Anwenderwunsch als nicht weiter geplante Aufgaben geschlossen. #18, #27
 und #28 bleiben geschlossen. Weitere technisch umsetzbare Arbeiten benötigen
 keine vorherige Rückmeldung einer Testgruppe. Nicht gelieferte weitergehende
 Varianten können bei konkretem Bedarf separat beauftragt werden.
+
+## Abschlussprüfung der verbleibenden Issues am 09.09.2026
+
+Der Auftrag zur weiteren Umsetzung gilt ausschließlich für `pv-forecast-ha`.
+Die Prüfung des gelieferten Codes ergibt keine noch ausstehende technische
+Aufgabe aus der Roadmap im eigenen Repository. Jedes verbleibende Issue wurde
+gegen seinen Lieferumfang und die vorhandenen Regressionstests geprüft:
+
+| Issue | Review und Ergebnis |
+| --- | --- |
+| [#25](https://github.com/dr-dimitri/pv-forecast-ha/issues/25) | Die technischen Roadmap-Stufen einschließlich #21, #24 und #20 sind geliefert. Freiwillige Erprobungen und separat zurückgestellte Varianten sind keine offenen Abschlussbedingungen. Die Roadmap ist abgeschlossen. |
+| [#52](https://github.com/dr-dimitri/pv-forecast-ha/issues/52) | Der native Integrationstest in `tests/test_energy.py` prüft zwei Solarzähler mit demselben Forecast-Entry und genau einen Adapterabruf. Messaggregator und Archiv verarbeiten die bestätigten Quellen ohne doppelte Quellenidentität. Die Gesamtprognose muss im nativen Energy Dashboard weiterhin genau einem Zähler zugeordnet werden; dessen fehlerhafte Mehrfachdarstellung liegt im fremden Frontend. |
+| [#53](https://github.com/dr-dimitri/pv-forecast-ha/issues/53) | Energy- und Kartentests sichern absolute UTC-Zeitpunkte, beide wiederholten Herbststunden, 23-/25-Stunden-Tage und Teilstundenoffsete ab. Der Adapter erhält die Energie auch beim Teilen an lokaler Mitternacht. Die lokale Rundung des fremden Energy-Frontends bleibt ein externer Fehler. |
+
+Das unabhängige Review ergab keinen Codebefund. 195 gezielte Python-Tests
+für Energy, Kartenvertrag, Archiv und Messaggregation sowie 50 Kartentests
+bestanden; anschließend bestand auch die vollständige Suite mit 1.114 Python-Tests.
+Diese Prüfungen bestätigen die eigenen Daten- und Darstellungsverträge;
+sie beheben die externen Fehler #52 und #53 nicht. Beide bleiben als bekannte
+Grenzen offen und blockieren keine Arbeiten in diesem Repository.
