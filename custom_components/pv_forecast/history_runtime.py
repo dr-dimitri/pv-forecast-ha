@@ -217,6 +217,7 @@ class ArchiveManager:
         self.coordinator = coordinator
         self.measurements = measurements
         self.timezone = str(entry.data[CONF_TIME_ZONE])
+        self._capture_configuration_id = _configuration_id(entry)
         self.enabled = entry.options.get("history_enabled") is True
         self._archive = HistoryArchive(self.timezone)
         self._store = _history_store(hass, entry.entry_id)
@@ -394,8 +395,14 @@ class ArchiveManager:
     def _updated(self) -> None:
         if not self._running or self._mutation_in_progress:
             return
+        # Der Options-Reload ist asynchron. Ein inzwischen fertig gewordener
+        # Alt-Abruf darf niemals unter den neuen Anlagen-/Quellenparametern
+        # eingefroren werden. Erst der neue Laufzeitmanager erfasst sie wieder.
+        configuration_id = _configuration_id(self.entry)
+        if configuration_id != self._capture_configuration_id:
+            return
         now = dt_util.utcnow()
-        changed = self._archive.note_configuration(_configuration_id(self.entry), now)
+        changed = self._archive.note_configuration(configuration_id, now)
         fetched_at = self.coordinator.last_update_success_time
         calibration = (
             self.calibration.capture_parameters()
@@ -420,7 +427,7 @@ class ArchiveManager:
                 getattr(self.coordinator, "raw_data", None) or self.coordinator.data,
                 fetched_at,
                 now,
-                _configuration_id(self.entry),
+                configuration_id,
                 _configured_measurements(self.entry),
                 self._comparison(now),
                 inverter_max_power_kw=self.entry.options.get(
