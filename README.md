@@ -484,3 +484,7 @@ oder `release:patch` wird der gewünschte Teil der Versionsnummer erhöht.
 ## Optionaler Mehrtageshorizont
 
 Unter **Konfigurieren → Prognosehorizont** lassen sich zwei bis sieben lokale Tage wählen. Standard sind zwei. Die Karte ergänzt eine datierte Mehrtagesaussicht und die Solarzeitfensterplanung berücksichtigt den geladenen Zeitraum. Spätere Tage heißen Tendenz; eine gemessene Güte wird dafür noch nicht behauptet. Energy und die bisherigen Sensoren bleiben auf ihren bekannten Tagen. Details und ein geprüftes Planungsbeispiel: [Mehrtagesprognose](docs/mehrtagesprognose.md).
+
+## Mehrere unabhängige Anlagen
+
+Die Integration kann mehrfach eingerichtet werden. Jede logische Anlage erhält eigene Dächer, AC-Grenzen, Sensoren, Messquellen und Stores. Weitere Anlagen benötigen einen unterscheidbaren Namen; am selben Ort ist ihre Unabhängigkeit ausdrücklich zu bestätigen. Für eine Doppeleinrichtung derselben Anlage bitte den vorhandenen Eintrag bearbeiten. Bestehende IDs bleiben erhalten. Details: [Mehrere Anlagen](docs/mehrere-anlagen.md).

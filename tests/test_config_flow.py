@@ -934,18 +934,30 @@ async def test_connection_test_errors_and_retry(hass, error, expected: str) -> N
 
 @pytest.mark.asyncio
 async def test_duplicate_setup_is_aborted(hass) -> None:
-    """Die Integration repräsentiert genau eine PV-Prognose-Konfiguration."""
+    """Derselbe Standort benötigt eine ausdrücklich getrennte logische Anlage."""
 
     entry = MockConfigEntry(
         domain=DOMAIN,
         title="PV-Ertragsprognose",
         unique_id=DOMAIN,
-        data=LOCATION | {CONF_TIME_ZONE: "Europe/Berlin"},
+        data={
+            CONF_LATITUDE: hass.config.latitude,
+            CONF_LONGITUDE: hass.config.longitude,
+            CONF_TIME_ZONE: hass.config.time_zone,
+            CONF_LOCATION_NAME: "Bestand",
+        },
         options={CONF_ROOFS: [persisted_roof()]},
     )
     entry.add_to_hass(hass)
     result = await hass.config_entries.flow.async_init(
         DOMAIN, context={"source": SOURCE_USER}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_LOCATION_SOURCE: LOCATION_SOURCE_HOME_ASSISTANT}
+    )
+    assert result["step_id"] == "plant"
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"plant_name": "Doppelt", "confirm_separate_plant": False}
     )
     assert result["type"] is FlowResultType.ABORT
     assert result["reason"] == "already_configured"
