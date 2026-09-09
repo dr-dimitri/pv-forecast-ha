@@ -23,6 +23,7 @@ from homeassistant.util import dt as dt_util
 from .api import OpenMeteoClient, OpenMeteoError, OpenMeteoRetryError
 from .calculations import (
     InvalidConfigurationError,
+    apply_calibration,
     calculate_forecast,
     calculate_planning_values,
 )
@@ -65,6 +66,30 @@ class PvForecastCoordinator(TimestampDataUpdateCoordinator[ForecastResult]):
         self._cancel_minute: Callable[[], None] | None = None
         self._update_in_progress = False
         self.planning_values: PlanningValues | None = None
+        self.raw_data: ForecastResult | None = None
+        self.calibration_factor = 1.0
+        self.calibration_candidate_id: str | None = None
+
+    @callback
+    def async_set_calibration(self, factor: float, candidate_id: str | None) -> None:
+        """Vorhandene Wetterbasis lokal anwenden, ohne den Abrufzustand zu ändern."""
+
+        if (factor, candidate_id) == (
+            self.calibration_factor,
+            self.calibration_candidate_id,
+        ):
+            return
+        forecast = self.raw_data
+        if forecast is not None:
+            self.data = apply_calibration(
+                forecast,
+                factor,
+                self._entry.options.get(CONF_INVERTER_MAX_POWER_KW),
+                ZoneInfo(str(self._entry.data[CONF_TIME_ZONE])),
+            )
+        self.calibration_factor = factor
+        self.calibration_candidate_id = candidate_id
+        self.async_update_listeners()
 
     @callback
     def async_start_day_updates(self) -> None:
@@ -213,7 +238,11 @@ class PvForecastCoordinator(TimestampDataUpdateCoordinator[ForecastResult]):
                     or dt_util.now().astimezone(timezone).date() == requested_date
                 ):
                     break
-            return forecast
+            effective = apply_calibration(
+                forecast, self.calibration_factor, inverter_limit, timezone
+            )
+            self.raw_data = forecast
+            return effective
         except OpenMeteoRetryError as err:
             raise UpdateFailed(
                 f"PV-Prognose pausiert wegen eines vorübergehenden API-Fehlers: {err}",

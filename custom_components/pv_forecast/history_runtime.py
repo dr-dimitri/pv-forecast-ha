@@ -11,7 +11,7 @@ import logging
 from contextlib import suppress
 from datetime import UTC, datetime, timedelta
 from math import isfinite
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 from zoneinfo import ZoneInfo
 
 from homeassistant.config_entries import ConfigEntry
@@ -39,16 +39,33 @@ from .history import HistoryArchive
 from .measurement_runtime import MeasurementManager
 from .measurements import SourceConfig
 
+if TYPE_CHECKING:
+    from .calibration_runtime import CalibrationManager
+
 _LOGGER = logging.getLogger(__name__)
-STORAGE_VERSION = 1
+STORAGE_VERSION = 2
 SAVE_DELAY = 300
 MAX_STORAGE_BYTES = 32 * 1024 * 1024
 MAX_RECORDS = 6000
 ASSESSMENT_RETENTION = timedelta(days=7)
 
 
+class _HistoryStore(Store[dict[str, Any]]):
+    """Alte Archive ohne rückwirkend erfundene Kalibrierungsbasis übernehmen."""
+
+    async def _async_migrate_func(
+        self, old_major_version: int, old_minor_version: int, old_data: dict[str, Any]
+    ) -> dict[str, Any]:
+        if old_major_version != 1:
+            raise NotImplementedError
+        # Die optionalen neuen Recordfelder werden beim Lesen ergänzt. Der
+        # vorhandene Inhalt bleibt bei dieser Migration vollständig erhalten.
+        HistoryArchive.from_dict(old_data["archive"], old_data["archive"]["timezone"])
+        return old_data
+
+
 def _history_store(hass: HomeAssistant, entry_id: str) -> Store[dict[str, Any]]:
-    return Store(
+    return _HistoryStore(
         hass,
         STORAGE_VERSION,
         f"{DOMAIN}.history.{entry_id}",
@@ -66,6 +83,9 @@ async def async_remove_history_store(hass: HomeAssistant, entry_id: str) -> None
 async def async_delete_history_data(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Bewusst das gesamte Archiv auch bei pausierter Erfassung löschen."""
 
+    from .calibration_runtime import async_delete_calibration_data
+
+    await async_delete_calibration_data(hass, entry)
     manager = getattr(getattr(entry, "runtime_data", None), "history", None)
     if manager is not None:
         await manager.async_delete_data()
@@ -78,6 +98,9 @@ async def async_delete_history_source_data(
 ) -> None:
     """Messkopien einer bestätigten Quelle auch aus einem entladenen Archiv löschen."""
 
+    from .calibration_runtime import async_delete_calibration_data
+
+    await async_delete_calibration_data(hass, entry)
     manager = getattr(getattr(entry, "runtime_data", None), "history", None)
     if manager is not None and manager.loaded:
         await manager.async_delete_measurement_source(source_id)
@@ -166,6 +189,8 @@ class ArchiveManager:
         self._assessment_task: asyncio.Task[None] | None = None
         self._assessment_requested = False
         self._mutation_in_progress = False
+        self.calibration: CalibrationManager | None = None
+        self._last_calibration_capture: tuple[Any, ...] | None = None
 
     @property
     def running(self) -> bool:
@@ -309,21 +334,39 @@ class ArchiveManager:
         now = dt_util.utcnow()
         changed = self._archive.note_configuration(_configuration_id(self.entry), now)
         fetched_at = self.coordinator.last_update_success_time
+        calibration = (
+            self.calibration.capture_parameters()
+            if self.calibration is not None
+            else {}
+        )
+        calibration_signature = tuple(calibration.items())
         if (
             self.coordinator.last_update_success
             and self.coordinator.data is not None
             and fetched_at is not None
-            and (self._last_fetched_at is None or fetched_at > self._last_fetched_at)
+            and (
+                self._last_fetched_at is None
+                or fetched_at > self._last_fetched_at
+                or (
+                    self._last_calibration_capture is not None
+                    and calibration_signature != self._last_calibration_capture
+                )
+            )
         ):
             changed |= self._archive.capture(
-                self.coordinator.data,
+                getattr(self.coordinator, "raw_data", None) or self.coordinator.data,
                 fetched_at,
                 now,
                 _configuration_id(self.entry),
                 _configured_measurements(self.entry),
                 self._comparison(now),
+                inverter_max_power_kw=self.entry.options.get(
+                    CONF_INVERTER_MAX_POWER_KW
+                ),
+                **calibration,
             )
             self._last_fetched_at = fetched_at
+            self._last_calibration_capture = calibration_signature
             changed = True
         if changed:
             self._dirty = True
@@ -373,6 +416,8 @@ class ArchiveManager:
                 ):
                     self._dirty = True
                     self._schedule_save()
+                if self.calibration is not None:
+                    self.calibration.async_reconcile()
         finally:
             self._assessment_task = None
 
@@ -436,6 +481,8 @@ class ArchiveManager:
             running=self.running,
             storage_error=self._storage_error,
         )
+        if self.calibration is not None:
+            result["calibration"] = self.calibration.snapshot()
         return result
 
     @callback

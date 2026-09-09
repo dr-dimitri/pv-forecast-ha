@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
-from typing import Literal
+from itertools import pairwise
+from math import isfinite
+from typing import Any, Literal
 
 type ForecastDay = Literal["today", "tomorrow"]
 
@@ -120,3 +122,73 @@ class OpenMeteoForecast:
     """Validierte Antwort für genau eine Dachgeometrie."""
 
     intervals: tuple[WeatherInterval, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class ForecastBasisInterval:
+    """Unveränderte Gesamtleistung vor Clipping für ein absolutes UTC-Intervall."""
+
+    start: datetime
+    end: datetime
+    dc_power_kw: float
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "start": self.start.isoformat(),
+            "end": self.end.isoformat(),
+            "dc_power_kw": self.dc_power_kw,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> ForecastBasisInterval:
+        start, end = datetime.fromisoformat(data["start"]), datetime.fromisoformat(
+            data["end"]
+        )
+        power = data["dc_power_kw"]
+        if (
+            start.utcoffset() is None
+            or end.utcoffset() is None
+            or end.astimezone(UTC) <= start.astimezone(UTC)
+            or isinstance(power, bool)
+            or not isinstance(power, int | float)
+            or not isfinite(power)
+            or power < 0
+        ):
+            raise ValueError("Die gespeicherte Kalibrierungsbasis ist ungültig")
+        return cls(start.astimezone(UTC), end.astimezone(UTC), float(power))
+
+
+@dataclass(frozen=True, slots=True)
+class ForecastCalibrationBasis:
+    """Lückenlose eingefrorene Rohleistung mit dem damaligen AC-Limit."""
+
+    intervals: tuple[ForecastBasisInterval, ...]
+    inverter_max_power_kw: float | None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "intervals": [item.to_dict() for item in self.intervals],
+            "inverter_max_power_kw": self.inverter_max_power_kw,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> ForecastCalibrationBasis:
+        intervals = tuple(
+            ForecastBasisInterval.from_dict(item) for item in data["intervals"]
+        )
+        limit = data["inverter_max_power_kw"]
+        if (
+            not intervals
+            or any(left.end != right.start for left, right in pairwise(intervals))
+            or (
+                limit is not None
+                and (
+                    isinstance(limit, bool)
+                    or not isinstance(limit, int | float)
+                    or not isfinite(limit)
+                    or limit <= 0
+                )
+            )
+        ):
+            raise ValueError("Die gespeicherte Kalibrierungsbasis ist ungültig")
+        return cls(intervals, float(limit) if limit is not None else None)

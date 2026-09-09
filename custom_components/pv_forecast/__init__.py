@@ -10,6 +10,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.typing import ConfigType
 
+from .calibration_runtime import CalibrationManager, async_remove_calibration_store
 from .const import DOMAIN, PLATFORMS
 from .coordinator import PvForecastCoordinator
 from .frontend import async_setup_frontend
@@ -30,6 +31,7 @@ class PvForecastRuntimeData:
     coordinator: PvForecastCoordinator
     measurements: MeasurementManager | None = None
     history: ArchiveManager | None = None
+    calibration: CalibrationManager | None = None
 
 
 type PvForecastConfigEntry = ConfigEntry[PvForecastRuntimeData]
@@ -57,16 +59,23 @@ async def async_setup_entry(hass: HomeAssistant, entry: PvForecastConfigEntry) -
 
     measurements = MeasurementManager(hass, entry)
     history = ArchiveManager(hass, entry, coordinator, measurements)
-    entry.runtime_data = PvForecastRuntimeData(coordinator, measurements, history)
+    calibration = CalibrationManager(hass, entry, coordinator, history)
+    entry.runtime_data = PvForecastRuntimeData(
+        coordinator, measurements, history, calibration
+    )
     try:
         await measurements.async_start()
         await history.async_start()
+        await calibration.async_start()
         await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     except (Exception, CancelledError):
         try:
-            await history.async_stop()
+            await calibration.async_stop()
         finally:
-            await measurements.async_stop()
+            try:
+                await history.async_stop()
+            finally:
+                await measurements.async_stop()
         raise
     return True
 
@@ -77,11 +86,15 @@ async def async_unload_entry(hass: HomeAssistant, entry: PvForecastConfigEntry) 
     unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unloaded:
         try:
-            if entry.runtime_data.history is not None:
-                await entry.runtime_data.history.async_stop()
+            if entry.runtime_data.calibration is not None:
+                await entry.runtime_data.calibration.async_stop()
         finally:
-            if entry.runtime_data.measurements is not None:
-                await entry.runtime_data.measurements.async_stop()
+            try:
+                if entry.runtime_data.history is not None:
+                    await entry.runtime_data.history.async_stop()
+            finally:
+                if entry.runtime_data.measurements is not None:
+                    await entry.runtime_data.measurements.async_stop()
     return unloaded
 
 
@@ -89,9 +102,12 @@ async def async_remove_entry(hass: HomeAssistant, entry: PvForecastConfigEntry) 
     """Beim Entfernen einer Anlage ihre lokalen Messdaten und ihr Archiv löschen."""
 
     try:
-        await async_remove_history_store(hass, entry.entry_id)
+        await async_remove_calibration_store(hass, entry.entry_id)
     finally:
-        await async_remove_measurement_store(hass, entry.entry_id)
+        try:
+            await async_remove_history_store(hass, entry.entry_id)
+        finally:
+            await async_remove_measurement_store(hass, entry.entry_id)
 
 
 async def _async_update_listener(

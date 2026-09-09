@@ -9,12 +9,13 @@ from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime, time, timedelta
 from hashlib import sha256
 from itertools import pairwise
-from math import fsum, isfinite
+from math import fsum, isclose, isfinite
 from typing import Any, Literal
 from zoneinfo import ZoneInfo
 
+from .calculations import calibrated_energy, forecast_basis
 from .measurements import SourceConfig
-from .models import ForecastResult, TotalForecastInterval
+from .models import ForecastCalibrationBasis, ForecastResult, TotalForecastInterval
 
 type Horizon = Literal["daily_previous_18", "daily_same_06", "hourly_1h", "hourly_3h"]
 HORIZONS: tuple[Horizon, ...] = (
@@ -58,6 +59,21 @@ def _strings(value: object) -> tuple[str, ...]:
     ):
         raise ValueError("Archivmarkierungen müssen eine Zeichenkettenliste sein")
     return tuple(value)
+
+
+def _factor(value: object) -> float:
+    result = _energy(value)
+    if not 0.5 <= result <= 1.5:
+        raise ValueError(
+            "Der archivierte Anlagenfaktor muss zwischen 0,5 und 1,5 liegen"
+        )
+    return result
+
+
+def _candidate_id(value: object) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError("Der archivierte Kandidat benötigt eine Identität")
+    return value
 
 
 def _day_bounds(day: date, timezone: ZoneInfo) -> tuple[datetime, datetime]:
@@ -219,11 +235,24 @@ class ArchiveRecord:
     assessment_revisions: tuple[Assessment, ...] = ()
     deleted_sources: tuple[str, ...] = ()
     model_version: str = MODEL_VERSION
-    calibrated_energy_kwh: None = None
+    calibrated_energy_kwh: float | None = None
+    basis: ForecastCalibrationBasis | None = None
+    applied_factor: float | None = None
+    applied_candidate_id: str | None = None
+    candidate_factor: float | None = None
+    candidate_id: str | None = None
+    candidate_energy_kwh: float | None = None
 
     @property
     def config_fingerprint(self) -> str:
         return self.configuration_id
+
+    @property
+    def effective_energy_kwh(self) -> float:
+        """Den tatsächlich wirksamen, am Stichtag beobachteten Stand verwenden."""
+        if self.calibrated_energy_kwh is not None:
+            return self.calibrated_energy_kwh
+        return self.raw_energy_kwh
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -243,7 +272,13 @@ class ArchiveRecord:
                 source.to_dict() for source in self.measurement_sources
             ],
             "raw_energy_kwh": self.raw_energy_kwh,
-            "calibrated_energy_kwh": None,
+            "calibrated_energy_kwh": self.calibrated_energy_kwh,
+            "basis": self.basis.to_dict() if self.basis else None,
+            "applied_factor": self.applied_factor,
+            "applied_candidate_id": self.applied_candidate_id,
+            "candidate_factor": self.candidate_factor,
+            "candidate_id": self.candidate_id,
+            "candidate_energy_kwh": self.candidate_energy_kwh,
             "quality_flags": list(self.quality_flags),
             "comparison": self.comparison.to_dict() if self.comparison else None,
             "assessment": self.assessment.to_dict() if self.assessment else None,
@@ -306,11 +341,27 @@ class HistoryArchive:
         configuration_id: str,
         measurement_sources: Sequence[SourceConfig | Mapping[str, Any]],
         comparison: Mapping[str, Mapping[str, Any]] | None = None,
+        *,
+        inverter_max_power_kw: float | None = None,
+        applied_factor: float = 1.0,
+        applied_candidate_id: str | None = None,
+        trial_factor: float | None = None,
+        trial_candidate_id: str | None = None,
     ) -> bool:
         """Nur vorab definierte und rechtzeitig beobachtete Stände auswählen."""
         fetched_at, observed_at = _utc(fetched_at), _utc(observed_at)
         if fetched_at > observed_at:
             raise ValueError("Eine Prognose kann nicht vor ihrem Abruf beobachtet sein")
+        applied_factor = _factor(applied_factor)
+        if applied_candidate_id is not None:
+            applied_candidate_id = _candidate_id(applied_candidate_id)
+        elif applied_factor != 1:
+            raise ValueError("Ein wirksamer Anlagenfaktor benötigt seinen Kandidaten")
+        if (trial_factor is None) != (trial_candidate_id is None):
+            raise ValueError("Ein Prüfstand benötigt Faktor und Kandidatenidentität")
+        if trial_factor is not None:
+            trial_factor = _factor(trial_factor)
+            trial_candidate_id = _candidate_id(trial_candidate_id)
         if (
             self._latest_observed_at is not None
             and observed_at < self._latest_observed_at
@@ -373,6 +424,12 @@ class HistoryArchive:
                     energy,
                     flags,
                     existing,
+                    forecast,
+                    inverter_max_power_kw,
+                    applied_factor,
+                    applied_candidate_id,
+                    trial_factor,
+                    trial_candidate_id,
                 )
         for interval in intervals:
             start, end = _utc(interval.start), _utc(interval.end)
@@ -401,6 +458,12 @@ class HistoryArchive:
                     energy,
                     tuple(interval.quality_flags),
                     None,
+                    forecast,
+                    inverter_max_power_kw,
+                    applied_factor,
+                    applied_candidate_id,
+                    trial_factor,
+                    trial_candidate_id,
                 )
         return changed
 
@@ -419,14 +482,31 @@ class HistoryArchive:
         energy: float,
         flags: tuple[str, ...],
         comparison: ComparisonForecast | None,
+        forecast: ForecastResult,
+        inverter_max_power_kw: float | None,
+        applied_factor: float,
+        applied_candidate_id: str | None,
+        trial_factor: float | None,
+        trial_candidate_id: str | None,
     ) -> bool:
         if not cutoff - max_age <= fetched_at <= observed_at <= cutoff:
             return False
         record_id = _record_id(horizon, start, end)
         previous = self.records.get(record_id)
-        if previous is not None and fetched_at <= previous.fetched_at:
+        if previous is not None and fetched_at < previous.fetched_at:
             return False
-        self.records[record_id] = ArchiveRecord(
+        basis = forecast_basis(forecast, start, end, inverter_max_power_kw)
+        calibrated = (
+            calibrated_energy(basis, applied_factor)
+            if basis is not None and applied_candidate_id is not None
+            else None
+        )
+        candidate = (
+            calibrated_energy(basis, trial_factor)
+            if basis is not None and trial_factor is not None
+            else None
+        )
+        record = ArchiveRecord(
             record_id,
             start,
             end,
@@ -441,7 +521,49 @@ class HistoryArchive:
             energy,
             flags,
             comparison,
+            calibrated_energy_kwh=calibrated,
+            basis=basis,
+            applied_factor=applied_factor if calibrated is not None else None,
+            applied_candidate_id=(
+                applied_candidate_id if calibrated is not None else None
+            ),
+            candidate_factor=trial_factor if candidate is not None else None,
+            candidate_id=trial_candidate_id if candidate is not None else None,
+            candidate_energy_kwh=candidate,
         )
+        if previous is not None and fetched_at == previous.fetched_at:
+            # Ein lokaler Faktorwechsel benötigt keinen neuen Wetterabruf. Derselbe
+            # Stand darf nur vor seinem Stichtag neue Kalibrierfelder erhalten.
+            if (
+                observed_at < previous.observed_at
+                or configuration_id != previous.configuration_id
+                or energy != previous.raw_energy_kwh
+            ) or all(
+                getattr(previous, field) == getattr(record, field)
+                for field in (
+                    "basis",
+                    "calibrated_energy_kwh",
+                    "applied_factor",
+                    "applied_candidate_id",
+                    "candidate_factor",
+                    "candidate_id",
+                    "candidate_energy_kwh",
+                )
+            ):
+                return False
+            record = replace(
+                previous,
+                observed_at=observed_at,
+                comparison=record.comparison,
+                basis=record.basis,
+                calibrated_energy_kwh=record.calibrated_energy_kwh,
+                applied_factor=record.applied_factor,
+                applied_candidate_id=record.applied_candidate_id,
+                candidate_factor=record.candidate_factor,
+                candidate_id=record.candidate_id,
+                candidate_energy_kwh=record.candidate_energy_kwh,
+            )
+        self.records[record_id] = record
         return True
 
     def assess(
@@ -643,13 +765,16 @@ class HistoryArchive:
                 {
                     "start": left.isoformat(),
                     "end": right.isoformat(),
-                    "energy_kwh": record.raw_energy_kwh
+                    "energy_kwh": record.effective_energy_kwh
                     * ((right - left) / (record.end - record.start)),
-                    "ac_power_kw": record.raw_energy_kwh
+                    "ac_power_kw": record.effective_energy_kwh
                     / ((record.end - record.start).total_seconds() / 3600),
                     "source_start": record.start.isoformat(),
                     "source_end": record.end.isoformat(),
                     "raw_energy_kwh": record.raw_energy_kwh,
+                    "calibrated_energy_kwh": record.calibrated_energy_kwh,
+                    "applied_factor": record.applied_factor,
+                    "applied_candidate_id": record.applied_candidate_id,
                     "quality_flags": list(record.quality_flags),
                     "fetched_at": record.fetched_at.isoformat(),
                     "cutoff": record.cutoff.isoformat(),
@@ -707,6 +832,9 @@ class HistoryArchive:
                 for record in valid
             ]
             paired = [record for record in valid if record.comparison is not None]
+            calibrated = [
+                record for record in valid if record.calibrated_energy_kwh is not None
+            ]
             horizons[horizon] = {
                 "count_expected": expected,
                 "count_forecasts": len(selected),
@@ -718,11 +846,38 @@ class HistoryArchive:
                     key: value for key, value in sorted(exclusions.items()) if value
                 },
                 "calibrated_comparison": {
-                    "count": 0,
-                    "raw_mae_kwh": None,
-                    "calibrated_mae_kwh": None,
-                    "raw_bias_kwh": None,
-                    "calibrated_bias_kwh": None,
+                    "count": len(calibrated),
+                    "raw_mae_kwh": _mean(
+                        [
+                            abs(
+                                record.raw_energy_kwh
+                                - record.assessment.actual_energy_kwh
+                            )
+                            for record in calibrated
+                        ]
+                    ),
+                    "calibrated_mae_kwh": _mean(
+                        [
+                            abs(
+                                record.calibrated_energy_kwh
+                                - record.assessment.actual_energy_kwh
+                            )
+                            for record in calibrated
+                        ]
+                    ),
+                    "raw_bias_kwh": _mean(
+                        [
+                            record.raw_energy_kwh - record.assessment.actual_energy_kwh
+                            for record in calibrated
+                        ]
+                    ),
+                    "calibrated_bias_kwh": _mean(
+                        [
+                            record.calibrated_energy_kwh
+                            - record.assessment.actual_energy_kwh
+                            for record in calibrated
+                        ]
+                    ),
                 },
                 "existing_comparison": {
                     "count": len(paired),
@@ -963,6 +1118,50 @@ def _expected_hours(start_day: date, end_day: date, timezone: ZoneInfo) -> int:
     return max(0, int((end - first + HOUR - timedelta(microseconds=1)) // HOUR))
 
 
+def _calibration_from_dict(
+    data: Mapping[str, Any], start: datetime, end: datetime, raw_energy_kwh: float
+) -> dict[str, Any]:
+    """Alte Rohstände ohne Lernbasis erhalten; neue eingefrorene Werte prüfen."""
+    basis = (
+        ForecastCalibrationBasis.from_dict(data["basis"])
+        if data.get("basis") is not None
+        else None
+    )
+    if basis is not None and (
+        not basis.intervals
+        or basis.intervals[0].start != start
+        or basis.intervals[-1].end != end
+        or not isclose(
+            calibrated_energy(basis, 1), raw_energy_kwh, rel_tol=1e-12, abs_tol=1e-12
+        )
+    ):
+        raise ValueError("Die Lernbasis gehört nicht zum archivierten Rohstand")
+    result: dict[str, Any] = {"basis": basis}
+    for energy_field, factor_field, id_field in (
+        ("calibrated_energy_kwh", "applied_factor", "applied_candidate_id"),
+        ("candidate_energy_kwh", "candidate_factor", "candidate_id"),
+    ):
+        values = (data.get(energy_field), data.get(factor_field), data.get(id_field))
+        if all(value is None for value in values):
+            result.update({energy_field: None, factor_field: None, id_field: None})
+            continue
+        if basis is None or any(value is None for value in values):
+            raise ValueError("Ein korrigierter Archivstand benötigt Basis und Kandidat")
+        energy, factor, identity = (
+            _energy(values[0]),
+            _factor(values[1]),
+            _candidate_id(values[2]),
+        )
+        if not isclose(
+            energy, calibrated_energy(basis, factor), rel_tol=1e-12, abs_tol=1e-12
+        ):
+            raise ValueError(
+                "Die korrigierte Archivenergie passt nicht zu ihrem Faktor"
+            )
+        result.update({energy_field: energy, factor_field: factor, id_field: identity})
+    return result
+
+
 def _record_from_dict(data: Mapping[str, Any], timezone: ZoneInfo) -> ArchiveRecord:
     horizon = data["horizon"]
     if (
@@ -1053,18 +1252,15 @@ def _record_from_dict(data: Mapping[str, Any], timezone: ZoneInfo) -> ArchiveRec
         or any(a.assessed_at > b.assessed_at for a, b in pairwise(all_assessments))
     ):
         raise ValueError("Die Bewertungsrevisionen sind ungültig")
-    if (
-        data.get("calibrated_energy_kwh") is not None
-        or data.get("model_issued_at") is not None
-    ):
-        raise ValueError(
-            "Dieses Archiv kennt keine Kalibrierung oder Modell-Ausgabezeit"
-        )
+    if data.get("model_issued_at") is not None:
+        raise ValueError("Dieses Archiv kennt keine Modell-Ausgabezeit")
     deleted_sources = _strings(data["deleted_sources"])
     if deleted_sources and (
         all_assessments or expected_source_ids.intersection(deleted_sources)
     ):
         raise ValueError("Gelöschte Messkopien sind noch im Archiv enthalten")
+    raw_energy_kwh = _energy(data["raw_energy_kwh"])
+    calibration = _calibration_from_dict(data, start, end, raw_energy_kwh)
     return ArchiveRecord(
         record_id,
         start,
@@ -1077,10 +1273,11 @@ def _record_from_dict(data: Mapping[str, Any], timezone: ZoneInfo) -> ArchiveRec
         timezone.key,
         data["config_fingerprint"],
         sources,
-        _energy(data["raw_energy_kwh"]),
+        raw_energy_kwh,
         _strings(data["quality_flags"]),
         comparison,
         assessment,
         revisions,
         deleted_sources,
+        **calibration,
     )

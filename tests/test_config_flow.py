@@ -959,6 +959,7 @@ async def test_options_flow_menu_offers_removal_of_last_roof(hass) -> None:
         "system",
         "measurements",
         "history",
+        "calibration",
     }
     assert "Süddach" in result["description_placeholders"]["roofs"]
 
@@ -982,6 +983,7 @@ async def test_options_flow_menu_hides_edit_and_remove_without_roofs(hass) -> No
         "system",
         "measurements",
         "history",
+        "calibration",
     }
     assert result["description_placeholders"]["roofs"] == ""
 
@@ -1009,6 +1011,7 @@ async def test_options_flow_add_roof_does_not_touch_existing_roofs(hass) -> None
         "system",
         "measurements",
         "history",
+        "calibration",
     }
     result = await hass.config_entries.options.async_configure(
         result["flow_id"], {"next_step_id": "add_roof"}
@@ -1150,6 +1153,7 @@ async def test_options_flow_removing_roof_requires_confirmation(hass) -> None:
         "system",
         "measurements",
         "history",
+        "calibration",
     }
     result = await hass.config_entries.options.async_configure(
         result["flow_id"], {"next_step_id": "remove_roof"}

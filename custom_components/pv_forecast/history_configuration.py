@@ -395,9 +395,16 @@ def _format_report(report: dict[str, Any]) -> str:
                     f"fremde Prognose {_age(comparison['mean_existing_age_seconds'])}.",
                 ]
             )
+        calibrated = metrics.get("calibrated_comparison") or {}
+        if calibrated.get("count", 0):
+            lines.append(
+                f"Angewendete Kalibrierung, dieselben {calibrated['count']} Messpaare: "
+                f"Roh-MAE {_metric(calibrated['raw_mae_kwh'])}, "
+                f"korrigierte MAE {_metric(calibrated['calibrated_mae_kwh'])}."
+            )
     lines.append(
-        "Kalibrierung: keine bewertbare korrigierte Variante vorhanden. "
-        "Ein Fremdvergleich erscheint nur bei gemeinsamen gültigen Messpaaren."
+        "Vergleiche erscheinen nur bei gemeinsamen gültigen Messpaaren. "
+        "Reine Testkandidaten zählen nicht als angewendete Kalibrierung."
     )
     return "\n\n".join(lines)
 

@@ -31,6 +31,7 @@ from homeassistant.helpers.selector import (
 
 from .api import OpenMeteoConnectionError, OpenMeteoDataError
 from .calculations import InvalidConfigurationError, validate_coordinates
+from .calibration_configuration import CalibrationFlowMixin
 from .configuration import roof_from_dict
 from .const import (
     CONF_ADD_ANOTHER,
@@ -646,7 +647,9 @@ class PvForecastConfigFlow(
         return await self.async_step_system()
 
 
-class PvForecastOptionsFlow(HistoryFlowMixin, MeasurementFlowMixin, OptionsFlow):
+class PvForecastOptionsFlow(
+    CalibrationFlowMixin, HistoryFlowMixin, MeasurementFlowMixin, OptionsFlow
+):
     """Menübasierter Options Flow zum gezielten Bearbeiten einzelner Dachflächen.
 
     Jede Aktion (hinzufügen, bearbeiten, entfernen, Wechselrichterlimit) wirkt
@@ -727,6 +730,7 @@ class PvForecastOptionsFlow(HistoryFlowMixin, MeasurementFlowMixin, OptionsFlow)
         menu_options.append("system")
         menu_options.append("measurements")
         menu_options.append("history")
+        menu_options.append("calibration")
         return self.async_show_menu(
             step_id="init",
             menu_options=menu_options,
