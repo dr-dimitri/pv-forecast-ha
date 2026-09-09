@@ -224,7 +224,7 @@ def calculate_forecast(
                 TotalForecastInterval(
                     start=start,
                     end=end,
-                    energy_kwh=power * (end - start).total_seconds() / 3600,
+                    energy_kwh=power * ((end - start).total_seconds() / 3600),
                     ac_power_kw=power,
                     quality_flags=tuple(sorted(flags)),
                     is_complete=is_complete,
@@ -303,11 +303,10 @@ def _covered_window_energy(
             continue
         if overlap_start != cursor or not interval.is_complete:
             return None
-        energy += (
-            interval.energy_kwh
-            * (overlap_end - overlap_start).total_seconds()
-            / (interval_end - interval_start).total_seconds()
-        )
+        overlap_fraction = (overlap_end - overlap_start).total_seconds() / (
+            interval_end - interval_start
+        ).total_seconds()
+        energy += interval.energy_kwh * overlap_fraction
         cursor = overlap_end
     return energy if cursor == end else None
 

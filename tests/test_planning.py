@@ -265,3 +265,19 @@ def test_last_hour_window_requires_full_remaining_coverage() -> None:
     assert planning.remaining_today_kwh == pytest.approx(0.5)
     assert planning.next_60_minutes_kwh is None
     assert planning.power_now_kw == 1
+
+
+@pytest.mark.parametrize("zone", ["Europe/Berlin", "Asia/Kolkata", "Asia/Kathmandu"])
+def test_large_finite_energy_survives_time_fractions(zone: str) -> None:
+    """Zeitquoten dürfen große gültige Energien nicht durch Sekundenprodukte überlaufen."""
+
+    timezone = ZoneInfo(zone)
+    result = _complete_forecast(timezone=timezone, power=1e305)
+    values = calculate_planning_values(
+        result, datetime(2026, 8, 23, 10, 30, tzinfo=timezone), timezone
+    )
+    assert result.total.today == pytest.approx(24e305)
+    assert result.total.tomorrow == pytest.approx(24e305)
+    assert values.remaining_today_kwh == pytest.approx(13.5e305)
+    assert values.next_60_minutes_kwh == pytest.approx(1e305)
+    assert values.power_now_kw == pytest.approx(1e305)
