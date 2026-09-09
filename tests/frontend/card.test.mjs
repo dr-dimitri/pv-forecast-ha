@@ -629,3 +629,16 @@ test("Ungültige Eingabe, fehlende Rechte und unbekannter Planungsvertrag bleibe
     assert.match(card._planning.message, /Keine Leseberechtigung für Planungsdaten/);
   } finally { card.disconnectedCallback(); }
 });
+
+
+test("Kurzfristiger Vergleich bleibt eine Beobachtung mit eigenem Prüffenster", () => {
+  const data = { horizons: { hourly_1h: {} }, short_term: { schema_version: 1, rule_version: 1, enabled: true, window_days: 60, minimum_days: 30, horizons: { hourly_1h: { days: 30, count: 90, baseline_mae_kwh: 0.4, candidate_mae_kwh: 0.3, baseline_bias_kwh: 0.2, candidate_bias_kwh: 0.1, criterion_met: true } } } };
+  const html = renderReport({data}, 7);
+  assert.match(html, /Eigenes Prüffenster: 60 abgeschlossene Tage/);
+  assert.match(html, /MAE Basis 0,4 kWh; Kandidat 0,3 kWh/);
+  assert.match(html, /weiterhin nur Beobachtung/);
+  assert.match(html, /Produktive Prognose unverändert/);
+  data.short_term.rule_version = 99;
+  assert.match(renderReport({data}, 7), /unbekannte Datenversion/);
+  assert.doesNotMatch(renderReport({data}, 7), /Kandidat 0,3/);
+});

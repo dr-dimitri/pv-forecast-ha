@@ -91,3 +91,12 @@ Anlagenzeitzonen. Bestehende Daten werden im bisherigen Kontext migriert.
 Alte Tagesgrenzen und Zuordnungen ändern ihre Bedeutung nicht. Ein physischer
 Wechsel beginnt neue aktive Segmente und übernimmt keine alte Lernfreigabe.
 Unbekannte oder unlesbare Stores verhindern die Änderung.
+
+
+### Archivversion 4: optionaler kurzfristiger Beobachtungsversuch
+
+Seit dem Folgeschritt zu #30 ergänzt der Archiv-Store rechtzeitig eingefrorene
+Korrekturkandidaten und optionale Resttagsstände ab 12 Uhr. Die Versionen 1 bis 3
+werden verlustfrei gelesen; ältere Datensätze erhalten keine erfundenen
+Versuchsbelege. Config-Entry-Schema 1.1 und Mess-/Lern-Store bleiben unverändert.
+Details: [Kurzfristiger Vergleich](kurzfristiger-vergleich.md).

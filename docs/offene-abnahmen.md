@@ -36,9 +36,9 @@ kein Nachweis tatsächlicher Erträge oder einer erreichten Prognosegüte.
   Für gleitende Restfenster und beliebige Laufdauern fehlen passende rechtzeitig
   archivierte historische Fenster. Diese Bandbreiten bleiben ausdrücklich
   nicht verfügbar; Tagesgrenzen werden nicht auf Stunden übertragen.
-- **#30:** Ein gesondert vorab festgelegter Zukunftsvergleich für eine
-  kurzfristige Korrektur ist noch umzusetzen und mit mindestens 30 gültigen
-  Testtagen zu prüfen. Das Qualitätsziel von fünf Prozent geringerem MAE ist
+- **#30:** Der abschaltbare [Beobachtungsversuch](kurzfristiger-vergleich.md) friert
+  Zukunftskandidaten rechtzeitig ein. Sein Nutzen ist noch mit mindestens 30
+  gültigen späteren Testtagen zu prüfen. Das Qualitätsziel von fünf Prozent geringerem MAE ist
   kein behauptetes Resultat. Die jetzige Tagesaussicht wendet keinen Faktor an.
 - **#17:** Ein anderes Temperaturmodell benötigt zuerst einen dokumentierten
   Vergleich mit Parameterherkunft auf gleichen späteren Messintervallen.

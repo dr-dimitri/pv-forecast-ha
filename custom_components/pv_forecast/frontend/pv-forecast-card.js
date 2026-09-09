@@ -276,13 +276,24 @@ function renderTable(state) {
   return `<details id="values"><summary id="values-toggle">Intervallwerte anzeigen <span>${rows.length} Intervalle</span></summary><p class="hint">kWh je angegebenem Intervall. „—“ bedeutet fehlend; 0 ist ein gültiger Wert. Zeitangaben gelten für ${escapeHtml(view.timezone)}.</p><table><caption class="sr-only">Intervallenergie in kWh</caption><thead><tr><th scope="col">Zeit</th><th scope="col">Prognose</th><th scope="col">1 Stunde<br>vorher</th><th scope="col">Ist</th></tr></thead><tbody>${rows.map((row) => `<tr><th scope="row"><time datetime="${escapeHtml(row.start)}">${escapeHtml(formatPlantTime(row.start, view.timezone))}</time><span class="until">bis ${escapeHtml(formatPlantTime(row.end, view.timezone))}</span></th><td>${energyText(row.forecast)}</td><td>${energyText(row.history)}</td><td>${energyText(row.actual)}</td></tr>`).join("")}</tbody></table></details>`;
 }
 
+function renderShortTerm(report) {
+  if (!report) return "";
+  if (report.schema_version !== 1 || report.rule_version !== 1) return '<p class="hint">Kurzfristiger Vergleich: unbekannte Datenversion.</p>';
+  const labels = { hourly_1h: "Eine Stunde Vorlauf", hourly_3h: "Drei Stunden Vorlauf", daily_remaining_12: "Resttag ab 12 Uhr" };
+  return `<h3>Kurzfristiger Vergleich</h3><p class="hint">${report.enabled ? "Beobachtung aktiviert" : "Beobachtung ausgeschaltet"}. Produktive Prognose unverändert. Eigenes Prüffenster: ${escapeHtml(report.window_days)} abgeschlossene Tage, mindestens ${escapeHtml(report.minimum_days)} belegte Tage je Horizont.</p>${Object.entries(labels).map(([key, label]) => {
+    const value = report.horizons?.[key];
+    if (!value) return "";
+    return `<p class="hint"><strong>${label}</strong>: ${escapeHtml(value.days)} Tage, ${escapeHtml(value.count)} Messpaare.<br>MAE Basis ${energyText(value.baseline_mae_kwh)} kWh; Kandidat ${energyText(value.candidate_mae_kwh)} kWh. Bias Basis ${energyText(value.baseline_bias_kwh)} kWh; Kandidat ${energyText(value.candidate_bias_kwh)} kWh.<br>${value.criterion_met ? "Vorab festgelegtes Prüfziel erreicht; weiterhin nur Beobachtung." : "Noch kein ausreichender Nutzennachweis."}</p>`;
+  }).join("")}`;
+}
+
 export function renderReport(report, days) {
   if (!report) return `<p class="hint" role="status">Bericht wird geladen …</p>`;
   if (report.message) return `<p class="hint" role="status">${escapeHtml(report.message)}</p>`;
   const data = report.data;
   const metrics = data?.horizons?.hourly_1h;
   if (!metrics) return `<p class="hint">Noch keine abgeschlossenen Zielintervalle im Archiv.</p>`;
-  return `<p class="hint">${days} abgeschlossene lokale Tage · ${ARCHIVE_LABEL}. Nur vollständig belegte, vergleichbare Intervalle gehen in die Fehlermaße ein.</p><dl class="report-metrics"><div><dt>MAE</dt><dd>${energyText(metrics.mae_kwh)} <small>kWh</small></dd></div><div><dt>Bias</dt><dd>${energyText(metrics.bias_kwh)} <small>kWh</small></dd></div><div><dt>Stichprobe</dt><dd>${escapeHtml(metrics.count_valid ?? 0)} <small>Intervalle</small></dd></div><div><dt>Abdeckung</dt><dd>${finite(metrics.coverage) ? energyText(metrics.coverage * 100) : "—"} <small>%</small></dd></div></dl><p class="hint">MAE: mittlerer absoluter Fehler. Bias: Prognose minus Messung; positive Werte bedeuten Überschätzung.${data.retention_truncated ? " Die Aufbewahrungsgrenze hat ältere Daten gekürzt." : ""}${data.enabled === false ? " Die Erfassung ist pausiert." : ""}</p>`;
+  return `<p class="hint">${days} abgeschlossene lokale Tage · ${ARCHIVE_LABEL}. Nur vollständig belegte, vergleichbare Intervalle gehen in die Fehlermaße ein.</p><dl class="report-metrics"><div><dt>MAE</dt><dd>${energyText(metrics.mae_kwh)} <small>kWh</small></dd></div><div><dt>Bias</dt><dd>${energyText(metrics.bias_kwh)} <small>kWh</small></dd></div><div><dt>Stichprobe</dt><dd>${escapeHtml(metrics.count_valid ?? 0)} <small>Intervalle</small></dd></div><div><dt>Abdeckung</dt><dd>${finite(metrics.coverage) ? energyText(metrics.coverage * 100) : "—"} <small>%</small></dd></div></dl><p class="hint">MAE: mittlerer absoluter Fehler. Bias: Prognose minus Messung; positive Werte bedeuten Überschätzung.${data.retention_truncated ? " Die Aufbewahrungsgrenze hat ältere Daten gekürzt." : ""}${data.enabled === false ? " Die Erfassung ist pausiert." : ""}</p>${renderShortTerm(data.short_term)}`;
 }
 
 const plantStamp = (value, timezone) => finite(millis(value)) ? `${formatPlantDate(value, timezone)}, ${formatPlantTime(value, timezone)}` : "unbekannt";

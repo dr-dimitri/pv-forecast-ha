@@ -41,6 +41,7 @@ export function fixture(scenario = "sunny", { day = "today", roof_id } = {}) {
     horizons: { hourly_1h: { count_expected: 168, count_forecasts: 153, count_valid: 136, coverage: 136 / 168, mae_kwh: 0.18, bias_kwh: -0.07 } },
     current_targets: { view_version: 1, as_of: iso(asOf), timezone, horizon: "hourly_1h", label: "Jeweils 1 Stunde vorher", intervals: intervals.filter((item, index) => Date.parse(item.start) - hour <= asOf && !(scenario === "gaps" && [10, 11].includes(index))).map((item, index) => ({ ...item, energy_kwh: [0, 0, 0, 0, 0, 0, 0.05, 0.28, 0.9, 1.4, 2.8, 3.3, 3.4, 3.1, 2.6][index] ?? 0, fetched_at: iso(Date.parse(item.start) - hour - 900_000), cutoff: iso(Date.parse(item.start) - hour) })) },
   };
+  if (scenario === "experience") history.short_term = { schema_version: 1, rule_version: 1, enabled: true, window_days: 60, minimum_days: 30, horizons: { hourly_1h: { days: 18, count: 90, baseline_mae_kwh: 0.4, candidate_mae_kwh: 0.38, baseline_bias_kwh: 0.1, candidate_bias_kwh: 0.08, criterion_met: false }, hourly_3h: { days: 15, count: 60, baseline_mae_kwh: 0.5, candidate_mae_kwh: 0.52, baseline_bias_kwh: 0.15, candidate_bias_kwh: 0.12, criterion_met: false }, daily_remaining_12: { days: 16, count: 16, baseline_mae_kwh: 2.1, candidate_mae_kwh: 2.0, baseline_bias_kwh: 0.4, candidate_bias_kwh: 0.3, criterion_met: false } } };
   if (scenario === "empty" || day === "tomorrow") history.current_targets.intervals = [];
   const available = !["gaps", "empty", "stale"].includes(scenario);
   history.uncertainty = {

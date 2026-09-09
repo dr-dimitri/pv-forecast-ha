@@ -173,6 +173,9 @@ class HistoryFlowMixin:
             self._history_options()[CONF_HISTORY_ENABLED] = bool(
                 user_input.get(CONF_HISTORY_ENABLED)
             )
+            self._history_options()["short_term_enabled"] = bool(
+                user_input.get("short_term_enabled")
+            )
             return await self.async_step_history()
         return self.async_show_form(
             step_id="history_settings",
@@ -182,6 +185,12 @@ class HistoryFlowMixin:
                         CONF_HISTORY_ENABLED,
                         default=self._history_options().get(
                             CONF_HISTORY_ENABLED, False
+                        ),
+                    ): BooleanSelector(),
+                    vol.Optional(
+                        "short_term_enabled",
+                        default=self._history_options().get(
+                            "short_term_enabled", False
                         ),
                     ): BooleanSelector(),
                 }
