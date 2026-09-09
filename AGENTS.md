@@ -114,7 +114,7 @@ menschliche Abnahme und wird durch Offline-Tests nicht ersetzt.
 ## Optionales Prognosearchiv aus #27 und Statistikentscheidung #4
 
 Das Archiv ist per UI opt-in und speichert tatsächlich rechtzeitig beobachtete
-Prognosestände in einem getrennten HA-Store (seit #30 Version 4). Festgelegte Stichtage:
+Prognosestände in einem getrennten HA-Store (seit #17 Version 5). Festgelegte Stichtage:
 18 Uhr am Vortag und 06 Uhr am Zieltag für lokale Tageswerte (maximal zwei
 Stunden alte Prognose), Vorlauf eine beziehungsweise drei Stunden für
 UTC-Intervalle (maximal eine Stunde alte Prognose). Nach dem Stichtag werden
@@ -486,3 +486,13 @@ Die Archivoption „Kurzfristige Korrektur beobachten“ ist standardmäßig aus
 Versuchsregel 1 verwendet drei aufeinanderfolgende vollständig bewertete Stunden derselben Anlagen-/Quellenbasis, deren Ende höchstens 90 Minuten zurückliegt und deren Bewertung zum Beobachtungszeitpunkt bekannt war. Mindestens 0,3 kWh Basisenergie, keine Eingabefallbacks oder bekannten Abregelungs-/Wartungstage. Ein Verhältnis außerhalb 0,5–1,5 liefert einen Leerzustand. Innerhalb dieses Bereichs wird der Faktor auf 0,8–1,2 begrenzt und seine Wirkung linear innerhalb sechs Stunden bis null reduziert. Er betrifft nur zukünftige Intervalle des laufenden lokalen Tages. Die eingefrorene DC-Basis wird vor Gruppen- und Gesamtclipping skaliert; der langfristige Anlagenfaktor bleibt unverändert. Ohne Basis entsteht kein Kandidat.
 
 Kandidat, Beobachtungszeit und Inhaltsfingerprints der drei damals bekannten Mess-/Forecastbelege werden im bestehenden Archivdatensatz bewahrt. Änderungen oder fehlende Belege verhindern seine Verwendung im Vergleich. Die vorhandene berechtigungsgeprüfte Archivaktion liefert getrennt nach Vorlauf MAE, Bias, Stichprobe, Abdeckung und Ausschlüsse auf denselben späteren Messintervallen. Mindestens 30 abgeschlossene lokale Tage und mindestens fünf Prozent geringerer MAE bei positivem Basis-MAE sind das vorab festgelegte Prüfziel; große Fehler bleiben enthalten. Die jüngsten 60 Tage werden geprüft. Selbst bei erreichtem Ziel bleibt die Korrektur in dieser Stufe ausschließlich beobachtend. Freigabe produktiver Anwendung benötigt einen gesonderten belegten Auswertungsschritt. Löschung und Aufbewahrung folgen dem bestehenden Archiv; keine zusätzlichen Wetterabrufe, Stores, Entities oder Aktionen.
+
+## Prospektiver Temperaturvergleich zu #17
+
+Eine standardmäßig ausgeschaltete Archivoption vergleicht das unveränderte Rohmodell mit einer Ross-Zelltemperatur-Näherung. Sie verwendet ausschließlich bereits geladene GTI- und Außentemperaturintervalle. Die reine Berechnung ist `T_Zelle = T_Luft + k × GTI`; der kWp×GTI-Ansatz, Verlustfaktor und beide AC-Clippingstufen bleiben erhalten. Referenzparameter aus der offiziellen pvlib-Dokumentation: gut belüftetes Schrägdach 0,02, freistehend 0,0208, gut belüftetes Flachdach 0,026 und schwach belüftetes Schrägdach 0,0342 K m²/W. Das Modell setzt vereinfachend 1 m/s Wind und stationäre beziehungsweise langsam veränderliche Einstrahlung voraus; der tatsächliche Wind am Modul wird nicht behauptet.
+
+Je Dach wird eine Vergleichsannahme bewusst ausgewählt; Standard ist „nicht festgelegt“. Ohne vollständige Dachzuordnung entsteht kein Anlagenvergleich. Keine Pflichtangaben oder vorsorgliche Änderung bestehender Dachmodelle. Die Auswahl gilt nur für die Beobachtung; Sensoren, gemeinsame wirksame Zeitreihe, Kalibrierungsfreigabe und Anwenderverluste bleiben unverändert. Parameteränderungen beginnen durch eine eigene Kennung eine neue Vergleichsgruppe, reine Dachnamenänderungen nicht.
+
+Neue Archivstände speichern ausschließlich rechtzeitig mit derselben Wetterantwort berechnete Alternativenergie mit eigener Modell-/Parameterkennung. Archiv-Store 5 migriert Versionen 1–4 ohne erfundene alte Vergleichsstände. Konfigurationsschema 1.1, Mess- und Lern-Store sowie Schreib-/Aufbewahrungsgrenzen bleiben erhalten. Fehlende Eingaben bleiben Qualitätsmängel und gehen nicht als fehlerfreie Vergleichsfälle ein. Die bestehende Archivaktion berichtet MAE/Bias und Stichprobe auf identischen späteren gültigen Messintervallen, getrennt nach Horizont und Parameterkennung. Ein belegter Nutzen und die Prüfung mit echten Anlagen stehen aus; diese Stufe ändert kein Standardmodell und übernimmt keine bisherige Lernfreigabe in ein anderes Modell. Keine zusätzliche Bibliothek, Wettervariable, HTTP-Abfrage, Entity, Aktion oder Speicherung außerhalb des Archivs.
+
+Referenz: https://pvlib-python.readthedocs.io/en/stable/reference/generated/pvlib.temperature.ross.html

@@ -37,6 +37,7 @@ from .const import (
     UPDATE_INTERVAL,
 )
 from .models import ForecastDay, ForecastResult, PlanningValues
+from .temperature_comparison import COEFFICIENTS, mountings_from_options
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -67,6 +68,8 @@ class PvForecastCoordinator(TimestampDataUpdateCoordinator[ForecastResult]):
         self._update_in_progress = False
         self.planning_values: PlanningValues | None = None
         self.raw_data: ForecastResult | None = None
+        self.temperature_data: ForecastResult | None = None
+        self.temperature_mountings: dict[str, str] | None = None
         self.calibration_factor = 1.0
         self.calibration_candidate_id: str | None = None
 
@@ -244,6 +247,31 @@ class PvForecastCoordinator(TimestampDataUpdateCoordinator[ForecastResult]):
                 forecast, self.calibration_factor, inverter_limit, timezone
             )
             self.raw_data = forecast
+            self.temperature_data = None
+            self.temperature_mountings = None
+            if (
+                self._entry.options.get("temperature_comparison_enabled") is True
+                and self._entry.options.get("history_enabled") is True
+            ):
+                mountings = mountings_from_options(self._entry.options, roofs)
+                if mountings is not None:
+                    try:
+                        self.temperature_data = calculate_forecast(
+                            roofs,
+                            weather_by_roof,
+                            inverter_limit,
+                            requested_date,
+                            timezone,
+                            inverter_groups=inverter_groups,
+                            temperature_coefficients={
+                                key: COEFFICIENTS[value]
+                                for key, value in mountings.items()
+                            },
+                        )
+                        self.temperature_mountings = mountings
+                    except (InvalidConfigurationError, ValueError, OverflowError):
+                        # Ein fehlgeschlagener Vergleich ersetzt keine gültige Prognose.
+                        self.temperature_data = None
             return effective
         except OpenMeteoRetryError as err:
             raise UpdateFailed(

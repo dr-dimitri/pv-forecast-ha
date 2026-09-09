@@ -142,7 +142,8 @@
           "remove_comparison_forecast": "Vergleichszuordnung entfernen",
           "history_report": "Soll-Ist-Bericht ansehen (7/30/90 Tage)",
           "delete_history": "Lokales Prognosearchiv löschen",
-          "history_done": "Fertig"
+          "history_done": "Fertig",
+          "temperature_roof": "Temperaturvergleich je Dach vorbereiten"
         }
       },
       "history_settings": {
@@ -150,10 +151,12 @@
         "description": "Gespeichert werden tatsächlich rechtzeitig beobachtete Prognosen: Tageswerte bis 18 Uhr am Vortag und 06 Uhr am Zieltag sowie Stundenintervalle mit einer oder drei Stunden Vorlauf. Fehlende Vergangenheit wird nicht nachträglich ergänzt.\n\n**Lokale Speichergrenzen:** Stundenstände 90 Tage, Tagesbewertungen 365 Tage; höchstens 6.000 Zieldatensätze, je drei frühere Bewertungsrevisionen und insgesamt 32 MiB. Erreichte Grenzen werden im Bericht kenntlich gemacht. Reguläre Schreibungen werden auf höchstens 288 pro Tag gebündelt.\n\nPausieren beendet neue Erfassung und Bewertung. Bereits gespeicherte Daten bleiben lesbar und exportierbar. Die Prognose funktioniert unabhängig vom Archiv; es entstehen keine zusätzlichen Geräte- oder Wetterabrufe.",
         "data": {
           "history_enabled": "Prognosen und nachvollziehbare Bewertungen lokal archivieren",
-          "short_term_enabled": "Kurzfristige Korrektur beobachten"
+          "short_term_enabled": "Kurzfristige Korrektur beobachten",
+          "temperature_comparison_enabled": "Temperaturmodell beobachten"
         },
         "data_description": {
-          "short_term_enabled": "Optionaler Zukunftsvergleich im aktivierten Archiv. Produktive Prognosen bleiben unverändert. Benötigt bestätigte AC-Energiequellen und genügend gültige Stundenmessungen."
+          "short_term_enabled": "Optionaler Zukunftsvergleich im aktivierten Archiv. Produktive Prognosen bleiben unverändert. Benötigt bestätigte AC-Energiequellen und genügend gültige Stundenmessungen.",
+          "temperature_comparison_enabled": "Separater Ross-Vergleich ohne Änderung der Prognose. Aktiviertes Archiv und eine bewusst gewählte Vergleichsannahme je Dach erforderlich."
         }
       },
       "comparison_forecast": {
@@ -197,6 +200,20 @@
         "title": "Standortänderung prüfen",
         "description": "**Standort:** {location}\n\n**Breitengrad:** {latitude}\n\n**Längengrad:** {longitude}\n\n**Anlagenzeitzone:** {timezone}\n\nBeim Speichern bleiben Dachflächen, Sensor-IDs und Optionen erhalten. Geänderte Koordinaten oder eine andere Anlagenzeitzone beginnen eine neue Mess- und Vergleichsgrundlage. Vorhandene Daten behalten ihren ursprünglichen Standortbezug. Ein bisheriger Lernfaktor wird für den neuen Standort nicht übernommen.",
         "submit": "Geprüften Standort speichern"
+      },
+      "temperature_roof": {
+        "title": "Dach für den Temperaturvergleich",
+        "description": "Wähle ein Dach. Die Annahme gilt nur für einen optionalen Modellvergleich. Anschließend kannst du weitere Dächer zuordnen.",
+        "data": {
+          "id": "Dachfläche"
+        }
+      },
+      "temperature_mounting": {
+        "title": "Vergleichsannahme für {roof}",
+        "description": "Wähle eine repräsentative Montageannahme. Die Literaturwerte ersetzen keine Messung an deiner Anlage. Ross nimmt 1 m/s Wind und langsam wechselnde Einstrahlung an. Für unbekannte oder andere Montagearten bleibt der Vergleich offen. Bestehende Prognosen und Dachwerte ändern sich nicht.",
+        "data": {
+          "mounting": "Montageannahme für den Vergleich"
+        }
       }
     },
     "error": {
@@ -222,7 +239,8 @@
       "comparison_confirmation_required": "Bestätige den Tagesbezug in der Anlagenzeitzone und dieselbe AC-Gesamtmessgrenze.",
       "history_unavailable": "Für diese Anlage ist das Prognosearchiv noch nicht verfügbar. Lade die Anlage, um gespeicherte Daten zu lesen.",
       "history_delete_failed": "Das Archiv konnte nicht gelöscht werden. Prüfe die lokale Speicherung und versuche es erneut.",
-      "reconfigure_storage_unavailable": "Die bisherigen Mess-, Archiv- oder Lerndaten können nicht sicher übernommen werden oder die Anlage lässt sich nicht entladen. Der gespeicherte Standort bleibt unverändert."
+      "reconfigure_storage_unavailable": "Die bisherigen Mess-, Archiv- oder Lerndaten können nicht sicher übernommen werden oder die Anlage lässt sich nicht entladen. Der gespeicherte Standort bleibt unverändert.",
+      "temperature_roof_invalid": "Wähle eine vorhandene Dachfläche und eine angebotene Vergleichsannahme."
     },
     "abort": {
       "already_configured": "Eine PV-Ertragsprognose ist bereits eingerichtet.",
@@ -391,7 +409,8 @@
           "remove_comparison_forecast": "Vergleichszuordnung entfernen",
           "history_report": "Soll-Ist-Bericht ansehen (7/30/90 Tage)",
           "delete_history": "Lokales Prognosearchiv löschen",
-          "history_done": "Fertig"
+          "history_done": "Fertig",
+          "temperature_roof": "Temperaturvergleich je Dach vorbereiten"
         }
       },
       "history_settings": {
@@ -399,10 +418,12 @@
         "description": "Gespeichert werden tatsächlich rechtzeitig beobachtete Prognosen: Tageswerte bis 18 Uhr am Vortag und 06 Uhr am Zieltag sowie Stundenintervalle mit einer oder drei Stunden Vorlauf. Fehlende Vergangenheit wird nicht nachträglich ergänzt.\n\n**Lokale Speichergrenzen:** Stundenstände 90 Tage, Tagesbewertungen 365 Tage; höchstens 6.000 Zieldatensätze, je drei frühere Bewertungsrevisionen und insgesamt 32 MiB. Erreichte Grenzen werden im Bericht kenntlich gemacht. Reguläre Schreibungen werden auf höchstens 288 pro Tag gebündelt.\n\nPausieren beendet neue Erfassung und Bewertung. Bereits gespeicherte Daten bleiben lesbar und exportierbar. Die Prognose funktioniert unabhängig vom Archiv; es entstehen keine zusätzlichen Geräte- oder Wetterabrufe.",
         "data": {
           "history_enabled": "Prognosen und nachvollziehbare Bewertungen lokal archivieren",
-          "short_term_enabled": "Kurzfristige Korrektur beobachten"
+          "short_term_enabled": "Kurzfristige Korrektur beobachten",
+          "temperature_comparison_enabled": "Temperaturmodell beobachten"
         },
         "data_description": {
-          "short_term_enabled": "Optionaler Zukunftsvergleich im aktivierten Archiv. Produktive Prognosen bleiben unverändert. Benötigt bestätigte AC-Energiequellen und genügend gültige Stundenmessungen."
+          "short_term_enabled": "Optionaler Zukunftsvergleich im aktivierten Archiv. Produktive Prognosen bleiben unverändert. Benötigt bestätigte AC-Energiequellen und genügend gültige Stundenmessungen.",
+          "temperature_comparison_enabled": "Separater Ross-Vergleich ohne Änderung der Prognose. Aktiviertes Archiv und eine bewusst gewählte Vergleichsannahme je Dach erforderlich."
         }
       },
       "comparison_forecast": {
@@ -528,6 +549,20 @@
         "data": {
           "confirm_remove": "Diese AC-Gruppe jetzt entfernen"
         }
+      },
+      "temperature_roof": {
+        "title": "Dach für den Temperaturvergleich",
+        "description": "Wähle ein Dach. Die Annahme gilt nur für einen optionalen Modellvergleich. Anschließend kannst du weitere Dächer zuordnen.",
+        "data": {
+          "id": "Dachfläche"
+        }
+      },
+      "temperature_mounting": {
+        "title": "Vergleichsannahme für {roof}",
+        "description": "Wähle eine repräsentative Montageannahme. Die Literaturwerte ersetzen keine Messung an deiner Anlage. Ross nimmt 1 m/s Wind und langsam wechselnde Einstrahlung an. Für unbekannte oder andere Montagearten bleibt der Vergleich offen. Bestehende Prognosen und Dachwerte ändern sich nicht.",
+        "data": {
+          "mounting": "Montageannahme für den Vergleich"
+        }
       }
     },
     "error": {
@@ -550,7 +585,8 @@
       "calibration_exclusion_date": "Wähle einen Tag innerhalb der letzten 365 lokalen Kalendertage einschließlich heute.",
       "calibration_exclusion_limit": "Es sind bereits 90 Tage markiert. Nimm zuerst eine bestehende Tagesmarkierung zurück.",
       "calibration_reset_failed": "Der Lernzustand konnte nicht zurückgesetzt werden. Prüfe die lokale Speicherung und versuche es erneut.",
-      "invalid_inverter_group": "Bitte wähle einen eindeutigen Namen, eine positive endliche AC-Leistung und mindestens eine noch nicht anderweitig zugeordnete Dachfläche."
+      "invalid_inverter_group": "Bitte wähle einen eindeutigen Namen, eine positive endliche AC-Leistung und mindestens eine noch nicht anderweitig zugeordnete Dachfläche.",
+      "temperature_roof_invalid": "Wähle eine vorhandene Dachfläche und eine angebotene Vergleichsannahme."
     },
     "abort": {
       "reconfigure_entry_changed": "Die Anlage wurde während der Bearbeitung anderweitig geändert. Bitte starte die Bearbeitung erneut."
@@ -574,6 +610,15 @@
         "west": "West",
         "north_west": "Nordwest",
         "custom": "Genauen Kompasswinkel verwenden"
+      }
+    },
+    "temperature_mounting": {
+      "options": {
+        "unknown": "Nicht festgelegt – kein vollständiger Anlagenvergleich",
+        "pitched_ventilated": "Schrägdach, gut belüftet (k = 0,02)",
+        "free_standing": "Freistehend (k = 0,0208)",
+        "flat_ventilated": "Flachdach, gut belüftet (k = 0,026)",
+        "pitched_poorly_ventilated": "Schrägdach, schwach belüftet (k = 0,0342)"
       }
     }
   },

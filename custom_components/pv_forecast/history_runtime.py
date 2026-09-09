@@ -21,7 +21,7 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
-from .configuration import inverter_groups_from_options
+from .configuration import inverter_groups_from_options, roofs_from_options
 from .const import (
     CONF_AZIMUTH,
     CONF_INSTALLED_POWER_KWP,
@@ -40,13 +40,14 @@ from .history import HistoryArchive
 from .measurement_runtime import MeasurementManager
 from .measurements import SourceConfig
 from .short_term import trial_report
+from .temperature_comparison import comparison_report, mountings_from_options
 from .uncertainty_data import current_experience_bands
 
 if TYPE_CHECKING:
     from .calibration_runtime import CalibrationManager
 
 _LOGGER = logging.getLogger(__name__)
-STORAGE_VERSION = 4
+STORAGE_VERSION = 5
 SAVE_DELAY = 300
 MAX_STORAGE_BYTES = 32 * 1024 * 1024
 MAX_RECORDS = 6000
@@ -59,12 +60,13 @@ class _HistoryStore(Store[dict[str, Any]]):
     async def _async_migrate_func(
         self, old_major_version: int, old_minor_version: int, old_data: dict[str, Any]
     ) -> dict[str, Any]:
-        if old_major_version not in (1, 2, 3):
+        if old_major_version not in (1, 2, 3, 4):
             raise NotImplementedError
         # Version 1 erhält weiterhin keine erfundene Kalibrierungsbasis.
         # Version 3 erlaubt verschiedene, je Record unverändert validierte
         # Tageszeitzonen. Version 4 ergänzt ausschließlich neue Versuchsdaten;
-        # keine Vorgängerversion erhält nachträgliche Kandidaten.
+        # keine Vorgängerversion erhält nachträgliche Kandidaten. Version 5
+        # ergänzt nur neue Temperaturvergleiche, keine historischen Modellwerte.
         HistoryArchive.from_dict(old_data["archive"], old_data["archive"]["timezone"])
         return old_data
 
@@ -388,6 +390,12 @@ class ArchiveManager:
                     CONF_INVERTER_MAX_POWER_KW
                 ),
                 **calibration,
+                temperature_forecast=getattr(
+                    self.coordinator, "temperature_data", None
+                ),
+                temperature_mountings=getattr(
+                    self.coordinator, "temperature_mountings", None
+                ),
                 short_term_enabled=self.entry.options.get("short_term_enabled") is True,
                 excluded_dates={
                     date.fromisoformat(item["date"])
@@ -526,6 +534,18 @@ class ArchiveManager:
         )
         result["short_term"]["enabled"] = (
             self.enabled and self.entry.options.get("short_term_enabled") is True
+        )
+        result["temperature_comparison"] = comparison_report(
+            tuple(self._archive.records.values()),
+            now or dt_util.utcnow(),
+            _configuration_id(self.entry),
+            mountings_from_options(
+                self.entry.options, roofs_from_options(self.entry.options)
+            ),
+        )
+        result["temperature_comparison"]["enabled"] = (
+            self.enabled
+            and self.entry.options.get("temperature_comparison_enabled") is True
         )
         if self.calibration is not None:
             result["calibration"] = self.calibration.snapshot()

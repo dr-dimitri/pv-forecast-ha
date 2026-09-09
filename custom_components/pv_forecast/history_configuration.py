@@ -23,6 +23,7 @@ from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN
 from .measurements import normalize_reading_value
+from .temperature_comparison import COEFFICIENTS
 
 CONF_HISTORY_ENABLED = "history_enabled"
 CONF_COMPARISON_FORECAST = "comparison_forecast"
@@ -140,6 +141,7 @@ class HistoryFlowMixin:
             "history_settings": "Archivierung aktivieren oder pausieren",
             "comparison_forecast": "Vorhandene Tagesprognose zum Vergleich zuordnen",
         }
+        menu["temperature_roof"] = "Temperaturvergleich je Dach vorbereiten"
         if comparison:
             menu["remove_comparison_forecast"] = "Vergleichszuordnung entfernen"
         if self._history_entry() is not None:
@@ -173,6 +175,9 @@ class HistoryFlowMixin:
             self._history_options()[CONF_HISTORY_ENABLED] = bool(
                 user_input.get(CONF_HISTORY_ENABLED)
             )
+            self._history_options()["temperature_comparison_enabled"] = bool(
+                user_input.get("temperature_comparison_enabled")
+            )
             self._history_options()["short_term_enabled"] = bool(
                 user_input.get("short_term_enabled")
             )
@@ -188,11 +193,90 @@ class HistoryFlowMixin:
                         ),
                     ): BooleanSelector(),
                     vol.Optional(
+                        "temperature_comparison_enabled",
+                        default=self._history_options().get(
+                            "temperature_comparison_enabled", False
+                        ),
+                    ): BooleanSelector(),
+                    vol.Optional(
                         "short_term_enabled",
                         default=self._history_options().get(
                             "short_term_enabled", False
                         ),
                     ): BooleanSelector(),
+                }
+            ),
+        )
+
+    async def async_step_temperature_roof(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Eine Vergleichsannahme für ein bewusst gewähltes Dach setzen."""
+        roofs = self._history_options().get("roofs", [])
+        errors = {}
+        if user_input is not None:
+            if user_input.get("id") in {roof["id"] for roof in roofs}:
+                self._selected_temperature_roof = user_input["id"]
+                return await self.async_step_temperature_mounting()
+            errors["base"] = "temperature_roof_invalid"
+        return self.async_show_form(
+            step_id="temperature_roof",
+            errors=errors,
+            data_schema=vol.Schema(
+                {
+                    vol.Required("id"): SelectSelector(
+                        SelectSelectorConfig(
+                            options=[
+                                SelectOptionDict(value=roof["id"], label=roof["name"])
+                                for roof in roofs
+                            ]
+                        )
+                    )
+                }
+            ),
+        )
+
+    async def async_step_temperature_mounting(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Die Annahme ohne Änderung an Dachwerten oder produktivem Modell speichern."""
+        selected = getattr(self, "_selected_temperature_roof", None)
+        roof = next(
+            (
+                roof
+                for roof in self._history_options().get("roofs", [])
+                if roof["id"] == selected
+            ),
+            None,
+        )
+        if roof is None:
+            return await self.async_step_temperature_roof()
+        mountings = dict(self._history_options().get("temperature_mountings", {}))
+        errors = {}
+        if user_input is not None:
+            mounting = user_input.get("mounting")
+            if mounting == "unknown" or mounting in COEFFICIENTS:
+                if mounting == "unknown":
+                    mountings.pop(selected, None)
+                else:
+                    mountings[selected] = mounting
+                self._history_options()["temperature_mountings"] = mountings
+                return await self.async_step_history()
+            errors["base"] = "temperature_roof_invalid"
+        return self.async_show_form(
+            step_id="temperature_mounting",
+            errors=errors,
+            description_placeholders={"roof": roof["name"]},
+            data_schema=vol.Schema(
+                {
+                    vol.Required(
+                        "mounting", default=mountings.get(selected, "unknown")
+                    ): SelectSelector(
+                        SelectSelectorConfig(
+                            options=["unknown", *COEFFICIENTS],
+                            translation_key="temperature_mounting",
+                        )
+                    )
                 }
             ),
         )

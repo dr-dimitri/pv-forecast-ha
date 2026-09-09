@@ -102,7 +102,28 @@ def temperature_factor(
     return max(0.0, factor)
 
 
-def calculate_dc_power_kw(roof: PvRoof, weather: WeatherInterval) -> float:
+def ross_cell_temperature(
+    ambient_temperature_c: float | None, gti_w_m2: float, coefficient: float
+) -> float | None:
+    """Ross-Näherung mit explizitem k; kein gemessener Wind oder Temperaturwert."""
+
+    if (
+        isinstance(coefficient, bool)
+        or not math.isfinite(coefficient)
+        or not 0 < coefficient <= 0.1
+    ):
+        raise InvalidConfigurationError("Ungültiger Ross-Vergleichsparameter")
+    if ambient_temperature_c is None or not math.isfinite(ambient_temperature_c):
+        return None
+    irradiance = max(0.0, gti_w_m2) if math.isfinite(gti_w_m2) else 0.0
+    return _finite_result(
+        ambient_temperature_c + coefficient * irradiance, "Ross-Zelltemperatur"
+    )
+
+
+def calculate_dc_power_kw(
+    roof: PvRoof, weather: WeatherInterval, *, ross_coefficient: float | None = None
+) -> float:
     """Verlust- und temperaturkorrigierte DC-Leistung berechnen."""
 
     validate_roof(roof)
@@ -110,8 +131,11 @@ def calculate_dc_power_kw(roof: PvRoof, weather: WeatherInterval) -> float:
     raw_power_kw = _finite_result(
         roof.installed_power_kwp * gti_w_m2 / 1000, "Rohleistung"
     )
+    temperature = weather.ambient_temperature_c
+    if ross_coefficient is not None:
+        temperature = ross_cell_temperature(temperature, gti_w_m2, ross_coefficient)
     corrected_power_kw = _finite_result(
-        raw_power_kw * temperature_factor(weather.ambient_temperature_c),
+        raw_power_kw * temperature_factor(temperature),
         "temperaturkorrigierte Leistung",
     )
     return max(0.0, corrected_power_kw * (1 - roof.loss_fraction))
@@ -210,6 +234,7 @@ def calculate_forecast(
     *,
     calibration_factor: float = 1.0,
     inverter_groups: tuple[AcInverterGroup, ...] = (),
+    temperature_coefficients: Mapping[str, float] | None = None,
 ) -> ForecastResult:
     """Zeitreihen aller Dächer berechnen, clippen und für zwei Tage summieren."""
 
@@ -218,6 +243,10 @@ def calculate_forecast(
     for roof in roofs:
         validate_roof(roof)
     validate_inverter_groups(inverter_groups, tuple(roof.id for roof in roofs))
+    if temperature_coefficients is not None and set(temperature_coefficients) != {
+        roof.id for roof in roofs
+    }:
+        raise InvalidConfigurationError("Der Temperaturvergleich benötigt alle Dächer")
 
     # Wiederholte Ortsstunden beim DST-Rücksprung sind nur in UTC eindeutig.
     weather_maps = {
@@ -245,7 +274,17 @@ def calculate_forecast(
         for roof in roofs:
             point = points[roof.id]
             dc_by_roof[roof.id] = (
-                calculate_dc_power_kw(roof, point) if point is not None else 0.0
+                calculate_dc_power_kw(
+                    roof,
+                    point,
+                    ross_coefficient=(
+                        temperature_coefficients[roof.id]
+                        if temperature_coefficients is not None
+                        else None
+                    ),
+                )
+                if point is not None
+                else 0.0
             )
         ac_by_roof = apply_inverter_limits(
             dc_by_roof, inverter_max_power_kw, inverter_groups
@@ -291,6 +330,12 @@ def calculate_forecast(
                 continue
             power = sum(ac_by_roof[roof_id] for roof_id in covered)
             flags = {flag for point in covered.values() for flag in point.quality_flags}
+            if temperature_coefficients is not None and any(
+                point.ambient_temperature_c is None
+                or not math.isfinite(point.ambient_temperature_c)
+                for point in covered.values()
+            ):
+                flags.add("missing_temperature")
             is_complete = len(covered) == len(roofs)
             if not is_complete:
                 flags.add("missing_roof_data")

@@ -108,6 +108,7 @@ async def test_setup_archive_is_optional_and_persists_independent_changes(hass):
         assert result["data_schema"]({}) == {
             CONF_HISTORY_ENABLED: False,
             "short_term_enabled": False,
+            "temperature_comparison_enabled": False,
         }
         result = await hass.config_entries.flow.async_configure(
             result["flow_id"], {CONF_HISTORY_ENABLED: True}
@@ -429,3 +430,29 @@ async def test_short_term_observation_persists_and_can_be_disabled(hass):
     result = await _choose(hass, result, "history_done")
     assert result["data"]["short_term_enabled"] is False
     assert result["data"]["roofs"] == entry.options["roofs"]
+
+
+async def test_temperature_mounting_is_explicit_per_roof_and_preserves_roof_options(
+    hass,
+):
+    entry = _entry(hass, enabled=True)
+    before = dict(entry.options)
+    result = await _choose(hass, await _menu(hass, entry), "temperature_roof")
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"id": "roof_1"}
+    )
+    assert result["step_id"] == "temperature_mounting"
+    assert result["data_schema"]({})["mounting"] == "unknown"
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"mounting": "free_standing"}
+    )
+    result = await _choose(hass, result, "history_settings")
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {CONF_HISTORY_ENABLED: True, "temperature_comparison_enabled": True},
+    )
+    result = await _choose(hass, result, "history_done")
+    assert result["data"]["temperature_mountings"] == {"roof_1": "free_standing"}
+    assert result["data"]["temperature_comparison_enabled"] is True
+    assert result["data"]["roofs"] == before["roofs"]
+    assert result["data"]["inverter_max_power_kw"] == before["inverter_max_power_kw"]
