@@ -334,7 +334,7 @@ def test_different_horizons_are_never_pooled_or_summed():
     result = evaluate(records(), day_record(92, horizon="daily_same_06"))
     assert result["status"] == "unavailable"
     assert result["training_count"] == 0
-    hourly = replace(day_record(92), horizon="hourly_1h")
+    hourly = replace(day_record(92), horizon="rolling_60_minutes")
     assert evaluate(records(), hourly)["reasons"] == ["unsupported_horizon"]
 
 

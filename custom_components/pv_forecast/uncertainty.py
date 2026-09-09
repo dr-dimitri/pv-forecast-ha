@@ -1,4 +1,4 @@
-"""Tages-Erfahrungsbänder aus rechtzeitig bekannten, getrennten Archivfällen."""
+"""Erfahrungsbänder aus rechtzeitig bekannten, getrennten Archivfällen."""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from math import ceil, fsum, isfinite, sqrt
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from .history import MODEL_VERSION, ArchiveRecord, Assessment
 
@@ -18,6 +19,14 @@ WINDOW_DAYS = 180
 TARGET_COVERAGE = 0.8
 MINIMUM_COVERAGE = 0.7
 DAILY_HORIZONS = ("daily_previous_18", "daily_same_06")
+HOURLY_HORIZONS = ("hourly_1h", "hourly_3h")
+
+
+def _local_slot(record: ArchiveRecord) -> tuple[int, int, int]:
+    """Nur gleiche Ortsstunden vergleichen; wiederholte DST-Stunden trennen."""
+
+    start = record.start.astimezone(ZoneInfo(record.timezone))
+    return start.hour, start.minute, start.fold
 
 
 @dataclass(frozen=True, slots=True)
@@ -152,7 +161,7 @@ def evaluate_experience_band(
     *,
     as_of: datetime,
 ) -> dict[str, Any]:
-    """Ein festes Tagesband mit 60 früheren und 30 späteren Fällen prüfen.
+    """Ein festes Band mit 60 früheren und 30 späteren Tagen prüfen.
 
     Training, breite Referenz und Band bleiben während der ganzen Prüfung fest.
     Tagesresiduen werden nicht aus Stundenquantilen zusammengesetzt. Rohmodell
@@ -164,11 +173,13 @@ def evaluate_experience_band(
     result = unavailable_band("insufficient_training_days")
     calibrated = target.calibrated_energy_kwh is not None
     result.update(
-        rule_version=RULE_VERSION,
+        rule_version=2 if target.horizon in HOURLY_HORIZONS else RULE_VERSION,
         target_date=target.target_date.isoformat(),
         horizon=target.horizon,
         cutoff=target.cutoff.isoformat(),
         forecast_observed_at=target.observed_at.isoformat(),
+        start=target.start.isoformat(),
+        end=target.end.isoformat(),
         variant="applied_calibration_rule_1" if calibrated else "raw_model",
         target_coverage=TARGET_COVERAGE,
         minimum_validation_coverage=MINIMUM_COVERAGE,
@@ -181,7 +192,7 @@ def evaluate_experience_band(
             "coverage_uncertainty_assumes_independent_days",
         ],
     )
-    if target.horizon not in DAILY_HORIZONS:
+    if target.horizon not in (*DAILY_HORIZONS, *HOURLY_HORIZONS):
         result["reasons"] = ["unsupported_horizon"]
         return result
     if target.cutoff > now:
@@ -190,6 +201,17 @@ def evaluate_experience_band(
     if target.model_version != MODEL_VERSION:
         result["reasons"] = ["unsupported_model_version"]
         return result
+    if target.horizon in HOURLY_HORIZONS:
+        if (
+            _utc(target.end) - _utc(target.start) != timedelta(hours=1)
+            or target.start.minute
+            or target.start.second
+            or target.start.microsecond
+        ):
+            result["reasons"] = ["target_basis_invalid"]
+            return result
+        result["local_slot"] = list(_local_slot(target))
+        result["sample_unit"] = "one_matching_hour_per_local_day"
     if target.quality_flags or target.deleted_sources or not _sources(target):
         result["reasons"] = ["target_basis_invalid"]
         return result
@@ -207,6 +229,11 @@ def evaluate_experience_band(
     seen: set = set()
     for record in sorted(records, key=lambda item: (item.target_date, item.record_id)):
         if record.horizon != target.horizon:
+            continue
+        if target.horizon in HOURLY_HORIZONS and (
+            _local_slot(record) != _local_slot(target)
+            or _utc(record.end) - _utc(record.start) != timedelta(hours=1)
+        ):
             continue
         reason = None
         if (

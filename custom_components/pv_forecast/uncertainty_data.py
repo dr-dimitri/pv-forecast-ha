@@ -4,7 +4,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from .history import HistoryArchive
-from .uncertainty import evaluate_experience_band, unavailable_band
+from .uncertainty import HOURLY_HORIZONS, evaluate_experience_band, unavailable_band
 
 
 def current_experience_bands(
@@ -36,6 +36,18 @@ def current_experience_bands(
             continue
         target = max(targets, key=lambda record: record.cutoff)
         days[name] = evaluate_experience_band(records, target, as_of=now)
+    hourly_targets = sorted(
+        (
+            record
+            for record in records
+            if record.horizon in HOURLY_HORIZONS
+            and record.configuration_id == configuration_id
+            and record.timezone == archive.timezone.key
+            and record.cutoff <= now <= record.start
+            and today <= record.target_date <= today + timedelta(days=1)
+        ),
+        key=lambda record: (record.start, record.horizon),
+    )
     return {
         "schema_version": 1,
         "label": "Erfahrungsband",
@@ -44,6 +56,10 @@ def current_experience_bands(
         "basis": "frozen_daily_forecast",
         "retention_truncated": archive.retention_truncated,
         "days": days,
+        "frozen_hours": [
+            evaluate_experience_band(records, target, as_of=now)
+            for target in hourly_targets
+        ],
         "remaining_today": unavailable_band("unsupported_horizon"),
         "next_60_minutes": unavailable_band("unsupported_horizon"),
     }

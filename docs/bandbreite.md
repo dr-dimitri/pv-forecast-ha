@@ -131,3 +131,36 @@ haben. Aufbewahrungsgrenzen werden nicht zugunsten einer Freigabe vergrößert.
 Fehlt eine tragfähige Basis, lautet die Darstellung „Bandbreite noch nicht
 belastbar“. Es gibt keine ersatzweise erfundene Prozentspanne. Karte und
 Automationen lesen dieselben backendseitig berechneten Grenzen.
+
+
+## Feste Stundenbänder (Regel 2, Issue #29)
+
+`uncertainty.frozen_hours` ergänzt vorhandene zukünftige volle UTC-Stunden, deren
+Stichtag bereits erreicht ist. `hourly_1h` und `hourly_3h` werden unabhängig
+bewertet. Der Vorlauf bezeichnet den Zeitpunkt des eingefrorenen Stands,
+nicht die Länge des Energieintervalls: Beide liefern die Energie **einer** Stunde.
+Die Karte zeigt dieselben Werte ohne eigene Bandberechnung. Start, Ende und
+Stichtag erscheinen in der Anlagenzeitzone einschließlich UTC-Offset.
+
+Jede Stichprobe enthält genau die gleiche lokale Startstunde und Minute sowie
+den gleichen DST-Fold. Es zählen 60 frühere Trainingstage und 30 spätere Prüftage,
+höchstens ein Intervall pro Tag. Viele Stunden weniger Tage ersetzen diese
+Mindestdauer nicht. Beide wiederholten Herbststunden bleiben getrennt; für die
+seltene zweite Stunde ist deshalb typischerweise kein Band verfügbar. Bei
+Teilstundenzeitzonen werden vollständige UTC-Stunden mit ihrer lokalen Minute
+verglichen; gekürzte Randintervalle sind keine Stundenfälle.
+
+Quellen- und Konfigurationstrennung, Bewertungskorrekturen, physikalische Grenzen,
+Zielabdeckung und Prüfung der Breite folgen den oben beschriebenen Regeln.
+Der Tagesvertrag bleibt bei Regelversion 1. Stundenbänder melden Regelversion 2
+sowie `start`, `end`, `local_slot` (Stunde, Minute, Fold) und
+`sample_unit: one_matching_hour_per_local_day`. Die Aufbewahrung bleibt bei
+90 Tagen für Stunden und kann bei Lücken oder Größenkürzung zu wenig Daten liefern.
+Dies wird als fehlende Stichprobe ausgewiesen, ohne die Speichergrenzen aufzuheben.
+
+Die Auswahl wird bei jeder Anfrage erneut anhand des Beobachtungszeitpunkts des
+festen Zielstands geprüft. Vergangene oder noch nicht eingefrorene Stunden
+erscheinen nicht als zukünftige Stundenbänder. Gleitende 60 Minuten, Resttag und
+beliebige Verbraucherfenster erhalten weiterhin keine übertragenen Grenzen.
+Eine reale Prüfung der Prognosegüte bleibt offen; synthetische Tests prüfen nur
+die Auswahl und den mathematischen Vertrag.

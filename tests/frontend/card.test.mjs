@@ -489,6 +489,29 @@ test("Erfahrungsband gehört sichtbar zur eigenen eingefrorenen Prognose", async
   assert.doesNotMatch(renderUncertainty(state), /17,2–28,4/);
 });
 
+test("Stundenband zeigt nur die gelieferten festen Grenzen und seinen Vorlauf", async () => {
+  const { state } = await load("experience");
+  const band = {
+    ...state.history.data.uncertainty.days.today,
+    rule_version: 2, horizon: "hourly_3h",
+    start: "2026-09-10T10:00:00Z", end: "2026-09-10T11:00:00Z",
+    lower_kwh: 1.23, central_kwh: 2.34, upper_kwh: 3.45,
+  };
+  state.history.data.uncertainty.frozen_hours = [band];
+  const html = renderUncertainty(state);
+  assert.match(html, /Eingefrorene zukünftige Stunden/);
+  assert.match(html, /Stand 3 Stunden vorher: 1,23–3,45 kWh/);
+  assert.match(html, /damalige Prognose 2,34 kWh/);
+  assert.match(html, /Eine Stunde Energie, keine Summe des Vorlaufs/);
+  band.rule_version = 99;
+  assert.doesNotMatch(renderUncertainty(state), /1,23–3,45/);
+  band.rule_version = 2;
+  band.status = "unavailable";
+  assert.doesNotMatch(renderUncertainty(state), /1,23–3,45/);
+  band.target_date = "2026-09-11";
+  assert.doesNotMatch(renderUncertainty(state), /Eingefrorene zukünftige Stunden/);
+});
+
 for (const scenario of ["fold", "kolkata"]) test(`${scenario}: Planung bietet absolute Grenzen mit Datum und Offset für beide Tage`, async () => {
   const { state } = await load(scenario);
   const choices = planningChoices(state);
