@@ -592,7 +592,9 @@ async def test_async_measurement_snapshot_reuses_sources_and_yields_between_them
     assert len(calls) == 2
     assert calls[1][1] > calls[0][1]
     assert result["total_energy"] == expected
-    assert result == manager.snapshot(NOW - timedelta(hours=1), NOW, NOW)
+    public = manager.snapshot(NOW - timedelta(hours=1), NOW, NOW)
+    assert public.pop("current_location_total_energy") == expected
+    assert result == public
 
 
 async def test_immediate_stop_applies_storage_limits_before_pending_assessment(hass):

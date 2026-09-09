@@ -40,6 +40,14 @@ Tagesertrag angezeigt oder als vollständige Lerngrundlage benutzt werden.
 Leistungssensoren tragen nichts zu dieser Summe bei. Die Quellanzahl und die
 Vollständigkeit der Einzelquellen bleiben ausgewiesen.
 
+Die ergänzende Summe `current_location_total_energy` verwendet dieselben
+Felder und dasselbe angefragte UTC-Fenster, berücksichtigt aber ausschließlich
+das aktuelle Standortsegment. `total_energy` und die Einzelquellen behalten
+auch historische Messanteile. Die Karte verwendet den aktuellen Teilwert für
+„Ist heute“; fehlende oder unvollständige Messung nach einem Standortwechsel
+wird nicht durch früheren Ertrag ersetzt. Mit einem älteren Backend ohne das
+Zusatzfeld verwendet die Karte weiterhin dessen `total_energy`.
+
 ## Lücken und Auflösung
 
 Beispiel: Ein fortlaufender Zähler meldet um 10:00 Uhr 100 kWh und nach einem
@@ -78,7 +86,9 @@ unterschiedlichen Anlagen ableiten.
 ## Speicherung und Berechtigungen
 
 Der private lokale HA-Store `pv_forecast.measurements.<entry_id>` hat eine
-eigene Version 1. Die gespeicherten Messungen und Differenzen sind begrenzt auf
+eigene Version 2. Seit #23 behalten die Messsegmente ihren ursprünglichen Standort-
+und Zeitzonenbezug. Die Migration aus Version 1 ergänzt diesen im bisherigen
+Anlagenkontext, ohne Werte zu verändern. Die gespeicherten Messungen und Differenzen sind begrenzt auf
 sieben Tage, 20.000 Messpunkte und höchstens 20.000 zugehörige
 Zählerdifferenzen je Quelle. Bei hoher Meldefrequenz kann zuerst
 das Mengenlimit greifen. Die Speicherung bündelt Schreibvorgänge auf einen feststehenden Termin

@@ -8,6 +8,16 @@ import {
 import { fixture, fixtureHass } from "./fixtures.mjs";
 
 const config = { config_entry_id: "demo-plant", day: "today" };
+test("Ist-Kennzahl verwendet nach Standortwechsel nur aktuelle Messanteile", async () => {
+  const { state } = await load();
+  state.measurement.data.total_energy = { energy_kwh: 99, energy_complete: true };
+  state.measurement.data.current_location_total_energy = { energy_kwh: 2, energy_complete: false };
+  const html = renderContent(config, state);
+  assert.match(html, /Ist heute<\/dt><dd>2 <small>kWh<\/small>/);
+  assert.match(html, /Unvollständig erfasst/);
+  assert.doesNotMatch(html, /Ist heute<\/dt><dd>99 /);
+});
+
 const flush = async () => { for (let index = 0; index < 30; index++) await Promise.resolve(); };
 async function load(scenario = "sunny", options = {}) {
   const calls = [], states = [];

@@ -27,7 +27,7 @@ from .calculations import (
     calculate_forecast,
     calculate_planning_values,
 )
-from .configuration import roofs_from_options
+from .configuration import inverter_groups_from_options, roofs_from_options
 from .const import (
     CONF_INVERTER_MAX_POWER_KW,
     CONF_LATITUDE,
@@ -211,6 +211,7 @@ class PvForecastCoordinator(TimestampDataUpdateCoordinator[ForecastResult]):
             timezone_name = str(self._entry.data[CONF_TIME_ZONE])
             timezone = ZoneInfo(timezone_name)
             roofs = roofs_from_options(self._entry.options)
+            inverter_groups = inverter_groups_from_options(self._entry.options, roofs)
             raw_inverter_limit = self._entry.options.get(CONF_INVERTER_MAX_POWER_KW)
             inverter_limit = (
                 float(raw_inverter_limit) if raw_inverter_limit is not None else None
@@ -232,6 +233,7 @@ class PvForecastCoordinator(TimestampDataUpdateCoordinator[ForecastResult]):
                     inverter_limit,
                     requested_date,
                     timezone,
+                    inverter_groups=inverter_groups,
                 )
                 if (
                     self._shutdown_requested

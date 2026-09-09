@@ -16,6 +16,7 @@ from pytest_homeassistant_custom_component.common import (
 
 from custom_components.pv_forecast.const import CONF_ROOFS, CONF_TIME_ZONE, DOMAIN
 from custom_components.pv_forecast.measurement_runtime import (
+    STORAGE_VERSION,
     MeasurementManager,
     async_delete_measurement_source_data,
     async_remove_measurement_store,
@@ -325,7 +326,9 @@ async def test_future_store_version_disables_capture_without_overwrite(hass):
 
     with freeze_time(START, real_asyncio=True) as clock:
         entry = _entry(hass, _source())
-        future_store = Store(hass, 2, f"{DOMAIN}.measurements.{entry.entry_id}")
+        future_store = Store(
+            hass, STORAGE_VERSION + 1, f"{DOMAIN}.measurements.{entry.entry_id}"
+        )
         payload = {"future_data": {"must_survive": True}}
         await future_store.async_save(payload)
         manager = MeasurementManager(hass, entry)

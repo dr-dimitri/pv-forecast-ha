@@ -10,6 +10,7 @@ from itertools import pairwise
 
 from .const import DEFAULT_TEMPERATURE_COEFFICIENT, REFERENCE_TEMPERATURE_C
 from .models import (
+    AcInverterGroup,
     DailyYield,
     ForecastBasisInterval,
     ForecastCalibrationBasis,
@@ -136,6 +137,70 @@ def proportional_clipping(
     return {roof_id: power * factor for roof_id, power in sanitized.items()}
 
 
+def validate_inverter_groups(
+    groups: Sequence[AcInverterGroup], roof_ids: Sequence[str]
+) -> None:
+    """Reale AC-Gruppen mit eindeutiger, überschneidungsfreier Dachzuordnung prüfen."""
+
+    known_roofs = set(roof_ids)
+    assigned: set[str] = set()
+    identities: set[str] = set()
+    for group in groups:
+        try:
+            valid_limit = (
+                not isinstance(group.max_power_kw, bool)
+                and isinstance(group.max_power_kw, int | float)
+                and math.isfinite(group.max_power_kw)
+                and group.max_power_kw > 0
+            )
+        except OverflowError:
+            valid_limit = False
+        if (
+            not isinstance(group.id, str)
+            or not group.id.strip()
+            or group.id in identities
+            or not isinstance(group.name, str)
+            or not group.name.strip()
+            or not valid_limit
+            or not isinstance(group.roof_ids, tuple)
+            or not group.roof_ids
+            or any(not isinstance(roof_id, str) for roof_id in group.roof_ids)
+        ):
+            raise InvalidConfigurationError("Die AC-Wechselrichtergruppe ist ungültig")
+        members = set(group.roof_ids)
+        if (
+            len(members) != len(group.roof_ids)
+            or not members <= known_roofs
+            or members & assigned
+        ):
+            raise InvalidConfigurationError(
+                "Jedes Dach darf genau einer bestehenden AC-Gruppe zugeordnet werden"
+            )
+        assigned.update(members)
+        identities.add(group.id)
+
+
+def apply_inverter_limits(
+    dc_power_by_roof: Mapping[str, float],
+    inverter_max_power_kw: float | None,
+    groups: Sequence[AcInverterGroup] = (),
+) -> dict[str, float]:
+    """Zuerst reale AC-Gruppen, anschließend die gemeinsame AC-Grenze anwenden."""
+
+    if not groups:
+        return proportional_clipping(dc_power_by_roof, inverter_max_power_kw)
+    validate_inverter_groups(groups, tuple(dc_power_by_roof))
+    staged = dict(dc_power_by_roof)
+    for group in groups:
+        staged.update(
+            proportional_clipping(
+                {roof_id: staged[roof_id] for roof_id in sorted(group.roof_ids)},
+                group.max_power_kw,
+            )
+        )
+    return proportional_clipping(staged, inverter_max_power_kw)
+
+
 def calculate_forecast(
     roofs: tuple[PvRoof, ...],
     weather_by_roof: Mapping[str, tuple[WeatherInterval, ...]],
@@ -144,6 +209,7 @@ def calculate_forecast(
     timezone: tzinfo,
     *,
     calibration_factor: float = 1.0,
+    inverter_groups: tuple[AcInverterGroup, ...] = (),
 ) -> ForecastResult:
     """Zeitreihen aller Dächer berechnen, clippen und für zwei Tage summieren."""
 
@@ -151,6 +217,7 @@ def calculate_forecast(
         raise InvalidConfigurationError("Mindestens eine Dachfläche ist erforderlich")
     for roof in roofs:
         validate_roof(roof)
+    validate_inverter_groups(inverter_groups, tuple(roof.id for roof in roofs))
 
     # Wiederholte Ortsstunden beim DST-Rücksprung sind nur in UTC eindeutig.
     weather_maps = {
@@ -180,7 +247,9 @@ def calculate_forecast(
             dc_by_roof[roof.id] = (
                 calculate_dc_power_kw(roof, point) if point is not None else 0.0
             )
-        ac_by_roof = proportional_clipping(dc_by_roof, inverter_max_power_kw)
+        ac_by_roof = apply_inverter_limits(
+            dc_by_roof, inverter_max_power_kw, inverter_groups
+        )
         for roof in roofs:
             point = points[roof.id]
             if point is None:
@@ -261,6 +330,7 @@ def calculate_forecast(
             tomorrow=aggregate_energy_for_day(combined_intervals, tomorrow, timezone),
         ),
         total_intervals=combined_intervals,
+        inverter_groups=inverter_groups,
     )
     return apply_calibration(
         result, calibration_factor, inverter_max_power_kw, timezone
@@ -294,15 +364,17 @@ def apply_calibration(
         for roof_id, roof in raw_forecast.roofs.items()
     }
     powers = {
-        end: proportional_clipping(
+        end: apply_inverter_limits(
             {
                 roof_id: _finite_result(
-                    items[end].dc_power_kw * factor, "kalibrierte Dachleistung"
+                    (items[end].dc_power_kw if end in items else 0.0) * factor,
+                    "kalibrierte Dachleistung",
                 )
                 for roof_id, items in by_end.items()
-                if end in items
+                if end in items or raw_forecast.inverter_groups
             },
             inverter_max_power_kw,
+            raw_forecast.inverter_groups,
         )
         for end in {end for items in by_end.values() for end in items}
     }
@@ -390,6 +462,10 @@ def forecast_basis(
         return None
     cursor = start
     result = []
+    groups = forecast.inverter_groups
+    grouped_roofs = {roof_id for group in groups for roof_id in group.roof_ids}
+    if not grouped_roofs <= set(forecast.roofs):
+        return None
     for item in forecast.total_intervals:
         left, right = max(start, item.start.astimezone(UTC)), min(
             end, item.end.astimezone(UTC)
@@ -399,7 +475,8 @@ def forecast_basis(
         if left != cursor or not item.is_complete:
             return None
         powers = []
-        for roof in forecast.roofs.values():
+        roof_powers = {}
+        for roof_id, roof in forecast.roofs.items():
             matches = [
                 interval.dc_power_kw
                 for interval in roof.intervals
@@ -409,15 +486,42 @@ def forecast_basis(
             if len(matches) != 1:
                 return None
             powers.extend(matches)
+            roof_powers[roof_id] = matches[0]
         result.append(
             ForecastBasisInterval(
-                left, right, _finite_result(sum(powers), "ungekürzte Gesamtleistung")
+                left,
+                right,
+                _finite_result(sum(powers), "ungekürzte Gesamtleistung"),
+                tuple(
+                    _finite_result(
+                        sum(roof_powers[roof_id] for roof_id in sorted(group.roof_ids)),
+                        "ungekürzte Gruppenleistung",
+                    )
+                    for group in groups
+                ),
+                (
+                    _finite_result(
+                        sum(
+                            power
+                            for roof_id, power in roof_powers.items()
+                            if roof_id not in grouped_roofs
+                        ),
+                        "ungekürzte unzugeordnete Leistung",
+                    )
+                    if groups
+                    else None
+                ),
             )
         )
         cursor = right
     if cursor != end:
         return None
-    return ForecastCalibrationBasis(tuple(result), inverter_max_power_kw)
+    return ForecastCalibrationBasis(
+        tuple(result),
+        inverter_max_power_kw,
+        tuple((group.id, group.max_power_kw) for group in groups),
+        bool(groups and set(forecast.roofs) - grouped_roofs),
+    )
 
 
 def calibrated_energy(basis: ForecastCalibrationBasis, factor: float) -> float:
@@ -426,12 +530,29 @@ def calibrated_energy(basis: ForecastCalibrationBasis, factor: float) -> float:
     _validate_calibration_factor(factor)
     values = []
     for interval in basis.intervals:
-        power = proportional_clipping(
-            {
-                "plant": _finite_result(
-                    interval.dc_power_kw * factor, "kalibrierte Leistung"
+        if basis.group_limits:
+            power_before_total = _finite_result(
+                math.fsum(
+                    min(
+                        limit,
+                        _finite_result(power * factor, "kalibrierte Gruppenleistung"),
+                    )
+                    for (_, limit), power in zip(
+                        basis.group_limits, interval.group_dc_power_kw, strict=True
+                    )
                 )
-            },
+                + _finite_result(
+                    interval.ungrouped_dc_power_kw * factor,
+                    "kalibrierte unzugeordnete Leistung",
+                ),
+                "gruppenbegrenzte Gesamtleistung",
+            )
+        else:
+            power_before_total = _finite_result(
+                interval.dc_power_kw * factor, "kalibrierte Leistung"
+            )
+        power = proportional_clipping(
+            {"plant": power_before_total},
             basis.inverter_max_power_kw,
         )["plant"]
         values.append(

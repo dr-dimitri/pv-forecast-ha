@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import math
+from copy import deepcopy
 from typing import Any, Literal, override
 from uuid import uuid4
 
@@ -16,6 +17,7 @@ from homeassistant.config_entries import (
     OptionsFlow,
 )
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.selector import (
     BooleanSelector,
@@ -34,14 +36,16 @@ from homeassistant.helpers.translation import async_get_translations
 from .api import OpenMeteoConnectionError, OpenMeteoDataError
 from .calculations import InvalidConfigurationError, validate_coordinates
 from .calibration_configuration import CalibrationFlowMixin
-from .configuration import roof_from_dict
+from .configuration import location_fingerprint, roof_from_dict
 from .const import (
     CONF_ADD_ANOTHER,
     CONF_AZIMUTH,
     CONF_CONFIRM_REMOVE,
     CONF_COUNTRY,
     CONF_CUSTOM_AZIMUTH,
+    CONF_GROUP_ROOF_IDS,
     CONF_INSTALLED_POWER_KWP,
+    CONF_INVERTER_GROUPS,
     CONF_INVERTER_MAX_POWER_KW,
     CONF_LATITUDE,
     CONF_LOCATION_NAME,
@@ -70,7 +74,9 @@ from .geocoding import (
     NominatimClient,
 )
 from .history_configuration import HistoryFlowMixin
+from .inverter_configuration import InverterGroupFlowMixin, groups_for_remaining_roofs
 from .measurement_configuration import MeasurementFlowMixin
+from .reconfiguration import ReconfigurationChangedError, async_prepare_location_change
 from .runtime import async_get_open_meteo_client
 
 _LOGGER = logging.getLogger(__name__)
@@ -365,6 +371,10 @@ class PvForecastConfigFlow(
         self._roofs: list[dict[str, Any]] = []
         self._roof_index = 0
         self._options: dict[str, Any] = {}
+        self._reconfigure_entry: ConfigEntry | None = None
+        self._reconfigure_original_data: dict[str, Any] = {}
+        self._reconfigure_original_options: dict[str, Any] = {}
+        self._reconfigure_tested = False
 
     def _measurement_options(self) -> dict[str, Any]:
         """Messquellen zusammen mit den übrigen Einrichtungseingaben halten."""
@@ -404,8 +414,9 @@ class PvForecastConfigFlow(
     ) -> ConfigFlowResult:
         """Standortquelle in einem lokalisierten Formular wählen."""
 
-        await self.async_set_unique_id(DOMAIN)
-        self._abort_if_unique_id_configured()
+        if self._reconfigure_entry is None:
+            await self.async_set_unique_id(DOMAIN)
+            self._abort_if_unique_id_configured()
         errors: dict[str, str] = {}
         if user_input is not None:
             location_source = user_input.get(CONF_LOCATION_SOURCE)
@@ -500,9 +511,121 @@ class PvForecastConfigFlow(
     async def _async_location_complete(self) -> ConfigFlowResult:
         """Nach einer Standortänderung vorhandene Dächer erneut prüfen."""
 
+        if self._reconfigure_entry is not None:
+            self._reconfigure_tested = False
+            return await self.async_step_reconfigure_confirm()
         if self._roofs:
             return await self.async_step_system()
         return await self.async_step_roof()
+
+    async def async_step_reconfigure(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Den Standort bewusst bearbeiten und unabhängige Optionen bewahren."""
+
+        if self._reconfigure_entry is None:
+            entry = self._get_reconfigure_entry()
+            await self.async_set_unique_id(entry.unique_id)
+            self._reconfigure_entry = entry
+            self._reconfigure_original_data = deepcopy(dict(entry.data))
+            self._reconfigure_original_options = deepcopy(dict(entry.options))
+            self._location = dict(entry.data)
+            self._roofs = [dict(roof) for roof in entry.options[CONF_ROOFS]]
+        return await self.async_step_user(user_input)
+
+    async def async_step_reconfigure_confirm(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Geprüften Standort bestätigen und bestehende Mess-/Archivgrenzen bewahren."""
+
+        entry = self._reconfigure_entry
+        assert entry is not None
+        if (
+            dict(entry.data) != self._reconfigure_original_data
+            or dict(entry.options) != self._reconfigure_original_options
+        ):
+            return self.async_abort(reason="reconfigure_entry_changed")
+        errors: dict[str, str] = {}
+        if not self._reconfigure_tested:
+            client = async_get_open_meteo_client(self.hass)
+            try:
+                if not self._roofs:
+                    raise InvalidConfigurationError(
+                        "Eine Dachfläche ist für den Verbindungstest erforderlich"
+                    )
+                if CONF_TIME_ZONE not in self._location:
+                    self._location[CONF_TIME_ZONE] = (
+                        await client.async_resolve_timezone(
+                            self._location[CONF_LATITUDE],
+                            self._location[CONF_LONGITUDE],
+                        )
+                    )
+                await client.async_fetch_roofs(
+                    self._location[CONF_LATITUDE],
+                    self._location[CONF_LONGITUDE],
+                    self._location[CONF_TIME_ZONE],
+                    tuple(roof_from_dict(roof) for roof in self._roofs),
+                )
+                self._reconfigure_tested = True
+            except OpenMeteoConnectionError:
+                errors["base"] = "cannot_connect"
+            except OpenMeteoDataError:
+                errors["base"] = "invalid_response"
+            except InvalidConfigurationError:
+                errors["base"] = "invalid_roof"
+        if user_input is not None and self._reconfigure_tested:
+            physical_changed = location_fingerprint(
+                self._location
+            ) != location_fingerprint(entry.data)
+            try:
+                if physical_changed:
+                    await async_prepare_location_change(self.hass, entry)
+            except ReconfigurationChangedError:
+                return self.async_abort(reason="reconfigure_entry_changed")
+            except (
+                HomeAssistantError,
+                NotImplementedError,
+                ValueError,
+                KeyError,
+                TypeError,
+                OSError,
+            ):
+                _LOGGER.exception(
+                    "Standortwechsel scheitert an der bestehenden Datengrundlage"
+                )
+                errors["base"] = "reconfigure_storage_unavailable"
+            else:
+                if (
+                    dict(entry.data) != self._reconfigure_original_data
+                    or dict(entry.options) != self._reconfigure_original_options
+                ):
+                    if physical_changed:
+                        self.hass.config_entries.async_schedule_reload(entry.entry_id)
+                    return self.async_abort(reason="reconfigure_entry_changed")
+                # Ein physischer Wechsel hat die bisherigen Update-Listener beim
+                # Entladen beendet. Sonst plant der vorhandene Listener den Reload.
+                has_reload_listener = bool(entry.update_listeners)
+                unchanged = dict(entry.data) == self._location
+                result = self.async_update_and_abort(entry, data=self._location)
+                if not has_reload_listener or unchanged:
+                    self.hass.config_entries.async_schedule_reload(entry.entry_id)
+                return result
+        translations = await _async_ui_translations(self.hass)
+        return self.async_show_form(
+            step_id="reconfigure_confirm",
+            data_schema=vol.Schema({}),
+            errors=errors,
+            description_placeholders={
+                "location": str(self._location[CONF_LOCATION_NAME]),
+                "latitude": str(self._location[CONF_LATITUDE]),
+                "longitude": str(self._location[CONF_LONGITUDE]),
+                "timezone": str(
+                    self._location.get(
+                        CONF_TIME_ZONE, translations["common.timezone_pending"]
+                    )
+                ),
+            },
+        )
 
     async def async_step_roof(
         self, user_input: dict[str, Any] | None = None
@@ -681,7 +804,11 @@ class PvForecastConfigFlow(
 
 
 class PvForecastOptionsFlow(
-    CalibrationFlowMixin, HistoryFlowMixin, MeasurementFlowMixin, OptionsFlow
+    InverterGroupFlowMixin,
+    CalibrationFlowMixin,
+    HistoryFlowMixin,
+    MeasurementFlowMixin,
+    OptionsFlow,
 ):
     """Menübasierter Options Flow zum gezielten Bearbeiten einzelner Dachflächen.
 
@@ -694,6 +821,7 @@ class PvForecastOptionsFlow(
         """Options-Flow-Zwischenzustand initialisieren."""
 
         self._selected_roof_id: str | None = None
+        self._roof_removal_groups: list[dict[str, Any]] | None = None
         self._measurement_draft: dict[str, Any] | None = None
 
     def _measurement_options(self) -> dict[str, Any]:
@@ -734,6 +862,11 @@ class PvForecastOptionsFlow(
 
         options: dict[str, Any] = dict(self.config_entry.options)
         options[CONF_ROOFS] = roofs
+        if CONF_INVERTER_GROUPS in options:
+            options[CONF_INVERTER_GROUPS] = groups_for_remaining_roofs(
+                options[CONF_INVERTER_GROUPS],
+                {str(roof[CONF_ROOF_ID]) for roof in roofs},
+            )
         options.pop(CONF_INVERTER_MAX_POWER_KW, None)
         if inverter_limit is not None:
             options[CONF_INVERTER_MAX_POWER_KW] = inverter_limit
@@ -761,6 +894,7 @@ class PvForecastOptionsFlow(
         if roofs:
             menu_options.extend(["edit_roof", "remove_roof"])
         menu_options.append("system")
+        menu_options.append("inverter_groups")
         menu_options.append("measurements")
         menu_options.append("history")
         menu_options.append("calibration")
@@ -891,6 +1025,8 @@ class PvForecastOptionsFlow(
         )
         if user_input is not None:
             if bool(user_input.get(CONF_CONFIRM_REMOVE)):
+                if self._roof_removal_groups != self._inverter_groups():
+                    return self.async_abort(reason="reconfigure_entry_changed")
                 remaining = [
                     candidate
                     for candidate in roofs
@@ -899,12 +1035,26 @@ class PvForecastOptionsFlow(
                 return self._finish_with_unchanged_inverter(remaining)
             return await self.async_step_init()
 
+        texts = await self._async_inverter_texts()
+        self._roof_removal_groups = deepcopy(self._inverter_groups())
+        changes = []
+        for group in self._inverter_groups():
+            if self._selected_roof_id in group[CONF_GROUP_ROOF_IDS]:
+                key = (
+                    "inverter_group_remove_empty"
+                    if len(group[CONF_GROUP_ROOF_IDS]) == 1
+                    else "inverter_group_remove_roof"
+                )
+                changes.append(texts[key].format(name=group[CONF_NAME]))
         return self.async_show_form(
             step_id="confirm_remove_roof",
             data_schema=vol.Schema(
                 {vol.Required(CONF_CONFIRM_REMOVE, default=False): BooleanSelector()}
             ),
-            description_placeholders={"roof_name": str(roof[CONF_NAME])},
+            description_placeholders={
+                "roof_name": str(roof[CONF_NAME]),
+                "inverter_group_changes": "\n\n".join(changes),
+            },
         )
 
     async def async_step_system(

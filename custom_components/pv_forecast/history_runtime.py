@@ -21,6 +21,7 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
+from .configuration import inverter_groups_from_options
 from .const import (
     CONF_AZIMUTH,
     CONF_INSTALLED_POWER_KWP,
@@ -43,7 +44,7 @@ if TYPE_CHECKING:
     from .calibration_runtime import CalibrationManager
 
 _LOGGER = logging.getLogger(__name__)
-STORAGE_VERSION = 2
+STORAGE_VERSION = 3
 SAVE_DELAY = 300
 MAX_STORAGE_BYTES = 32 * 1024 * 1024
 MAX_RECORDS = 6000
@@ -51,15 +52,16 @@ ASSESSMENT_RETENTION = timedelta(days=7)
 
 
 class _HistoryStore(Store[dict[str, Any]]):
-    """Alte Archive ohne rückwirkend erfundene Kalibrierungsbasis übernehmen."""
+    """Alte Archive mit ihrer ursprünglichen Modell- und Tagesbasis bewahren."""
 
     async def _async_migrate_func(
         self, old_major_version: int, old_minor_version: int, old_data: dict[str, Any]
     ) -> dict[str, Any]:
-        if old_major_version != 1:
+        if old_major_version not in (1, 2):
             raise NotImplementedError
-        # Die optionalen neuen Recordfelder werden beim Lesen ergänzt. Der
-        # vorhandene Inhalt bleibt bei dieser Migration vollständig erhalten.
+        # Version 1 erhält weiterhin keine erfundene Kalibrierungsbasis.
+        # Version 3 erlaubt verschiedene, je Record unverändert validierte
+        # Tageszeitzonen. Beide Vorgängerversionen bleiben verlustfrei erhalten.
         HistoryArchive.from_dict(old_data["archive"], old_data["archive"]["timezone"])
         return old_data
 
@@ -154,6 +156,19 @@ def _configuration_id(entry: ConfigEntry) -> str:
             key=lambda value: value[0],
         ),
     }
+    groups = inverter_groups_from_options(entry.options)
+    if groups:
+        physical["inverter_groups"] = sorted(
+            [
+                {
+                    "id": group.id,
+                    "max_power_kw": float(group.max_power_kw),
+                    "roof_ids": sorted(group.roof_ids),
+                }
+                for group in groups
+            ],
+            key=lambda group: group["id"],
+        )
     encoded = json.dumps(
         physical, sort_keys=True, separators=(",", ":"), allow_nan=False
     )
@@ -273,6 +288,12 @@ class ArchiveManager:
             self._running = True
             self._cancel_listener = self.coordinator.async_add_listener(self._updated)
             self._updated()
+        elif self._archive.records and self._archive.note_configuration(
+            _configuration_id(self.entry), dt_util.utcnow()
+        ):
+            # Auch ein pausiertes Archiv darf alte Zielintervalle bei einem
+            # Standortwechsel nicht bis zur späteren Wiederaufnahme verlängern.
+            self._dirty = True
 
     async def async_stop(self) -> None:
         """Den gemeinsamen Listener beenden und ausstehende Daten speichern."""
@@ -475,7 +496,12 @@ class ArchiveManager:
     ) -> dict[str, Any]:
         """Metriken aus bereits vorhandenen Daten ohne Änderung des Archivs lesen."""
 
-        result = self._archive.snapshot(now or dt_util.utcnow(), days, include_records)
+        result = self._archive.snapshot(
+            now or dt_util.utcnow(),
+            days,
+            include_records,
+            configuration_id=_configuration_id(self.entry),
+        )
         result.update(
             enabled=self.enabled,
             running=self.running,
@@ -489,7 +515,7 @@ class ArchiveManager:
     def current_targets(self, now: datetime) -> dict[str, Any]:
         """Aktuelle feste Prognoseintervalle ohne neue Erfassung zurückgeben."""
 
-        return self._archive.current_targets(now)
+        return self._archive.current_targets(now, _configuration_id(self.entry))
 
     @callback
     def export(

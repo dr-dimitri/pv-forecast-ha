@@ -1,6 +1,7 @@
 """Reine Messwertauswertung ohne Gerätezugriff oder Stundeninterpolation."""
 
 from collections.abc import Iterable, Mapping
+from copy import copy
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from math import fsum, isfinite
@@ -233,6 +234,13 @@ class SourceHistory:
         self.readings: list[Reading] = []
         self.deltas: list[EnergyDelta] = []
         self._segments = {self.segment_id: source.to_dict()}
+        self._segment_contexts: dict[str, dict[str, Any]] = {
+            self.segment_id: {
+                "location_id": None,
+                "timezone": timezone,
+                "started_at": None,
+            }
+        }
         self._baseline: Reading | None = None
         self._pending_gap: set[str] = set()
         self._invalid_days: set[tuple[str, str]] = set()
@@ -282,19 +290,66 @@ class SourceHistory:
         """Ein unbeobachteter Zeitraum bleibt auch nach Neustart erkennbar."""
         self._pending_gap.add(flag)
 
+    def bind_location(
+        self, location_id: str, timezone: str, started_at: datetime
+    ) -> None:
+        """Eine neue physische Lage beginnt ohne Zählerbasis des früheren Standorts."""
+
+        current = self._segment_contexts[self.segment_id]
+        if current["location_id"] is None:
+            for context in self._segment_contexts.values():
+                context["location_id"] = location_id
+        elif current["location_id"] != location_id:
+            self._start_segment("location_changed")
+            self._segment_contexts[self.segment_id] = {
+                "location_id": location_id,
+                "timezone": timezone,
+                "started_at": _utc(started_at).isoformat(),
+            }
+        self.timezone = ZoneInfo(timezone)
+
+    def accepts_timestamp(self, timestamp: datetime) -> bool:
+        """Ein Zustand vor dem Standortwechsel ist keine neue Messbasis."""
+
+        start = self._segment_contexts[self.segment_id]["started_at"]
+        return start is None or _utc(timestamp) >= _parse_time(start)
+
+    def current_location_view(self) -> Self:
+        """Für aktuelle Planungsanzeigen nur Messungen dieses Standorts lesen."""
+
+        active_context = self._segment_contexts[self.segment_id]
+        segments = {
+            key
+            for key, context in self._segment_contexts.items()
+            if context == active_context
+        }
+        view = copy(self)
+        view.readings = [
+            reading for reading in self.readings if reading.segment_id in segments
+        ]
+        view.deltas = [delta for delta in self.deltas if delta.segment_id in segments]
+        return view
+
+    def _start_segment(self, reason: str) -> None:
+        context = self._segment_contexts[self.segment_id].copy()
+        self.segment_id = uuid4().hex
+        self._segment_contexts[self.segment_id] = context
+        self._segments[self.segment_id] = self.source.to_dict()
+        self._baseline = None
+        self._pending_gap = {reason}
+
     def replace_source(self, source: SourceConfig) -> None:
         """Eine andere Messgrenze oder Sensoridentität beginnt ein neues Segment."""
         if source.source_id != self.source.source_id:
             raise ValueError("Eine Historie gehört genau einer Zuordnungs-ID")
         if source.measurement_identity != self.source.measurement_identity:
-            self.segment_id = uuid4().hex
-            self._baseline = None
-            self._pending_gap = {"source_changed"}
+            self._start_segment("source_changed")
         self.source = source
         self._segments[self.segment_id] = source.to_dict()
 
-    def _local_day(self, timestamp: datetime) -> str:
-        return timestamp.astimezone(self.timezone).date().isoformat()
+    def _local_day(self, timestamp: datetime, segment_id: str | None = None) -> str:
+        context = self._segment_contexts[segment_id or self.segment_id]
+        return timestamp.astimezone(ZoneInfo(context["timezone"])).date().isoformat()
 
     def _append_delta(
         self, start: datetime, end: datetime, energy: float, flags: set[str]
@@ -346,6 +401,11 @@ class SourceHistory:
         reading = Reading(
             timestamp, value, frozenset(flags), last_reset, self.segment_id
         )
+        if not self.accepts_timestamp(timestamp):
+            return replace(
+                reading,
+                quality_flags=reading.quality_flags | {"before_location_change"},
+            )
         latest = max(self.readings, key=lambda item: item.timestamp, default=None)
         if latest is not None and timestamp <= latest.timestamp:
             if (
@@ -408,8 +468,7 @@ class SourceHistory:
                     )
                 else:
                     # Ohne belegten Reset könnte ein Zählerwechsel vorliegen.
-                    self.segment_id = uuid4().hex
-                    self._segments[self.segment_id] = self.source.to_dict()
+                    self._start_segment("counter_decrease")
             else:
                 invalid_day = (
                     self.segment_id,
@@ -445,14 +504,20 @@ class SourceHistory:
             self._baseline = None
             self.mark_gap("retention_gap")
         self._invalid_days = {
-            item for item in self._invalid_days if item[1] >= self._local_day(cutoff)
+            item
+            for item in self._invalid_days
+            if item[1] >= self._local_day(cutoff, item[0])
         }
         used = {r.segment_id for r in self.readings} | {
             d.segment_id for d in self.deltas
         }
         used.add(self.segment_id)
+        self._invalid_days = {item for item in self._invalid_days if item[0] in used}
         self._segments = {
             key: value for key, value in self._segments.items() if key in used
+        }
+        self._segment_contexts = {
+            key: value for key, value in self._segment_contexts.items() if key in used
         }
 
     def snapshot(self, start: datetime, end: datetime, now: datetime) -> dict[str, Any]:
@@ -473,8 +538,8 @@ class SourceHistory:
             item
             for item in self._invalid_days
             if item[0] in relevant_segments
-            and item[1] >= self._local_day(start)
-            and item[1] <= self._local_day(end - timedelta(microseconds=1))
+            and item[1] >= self._local_day(start, item[0])
+            and item[1] <= self._local_day(end - timedelta(microseconds=1), item[0])
         }
         if invalid_days:
             flags.add("daily_correction")
@@ -483,7 +548,8 @@ class SourceHistory:
             for d in overlapping
             if start <= d.start
             and d.end <= end
-            and (d.segment_id, self._local_day(d.start)) not in invalid_days
+            and (d.segment_id, self._local_day(d.start, d.segment_id))
+            not in invalid_days
         ]
         if any(d.start < start or d.end > end for d in overlapping):
             flags.add("boundary_gap")
@@ -537,6 +603,9 @@ class SourceHistory:
             "derived_energy": self.source.derived_energy,
             "segment_id": self.segment_id,
             "segments": {key: value.copy() for key, value in self._segments.items()},
+            "segment_contexts": {
+                key: value.copy() for key, value in self._segment_contexts.items()
+            },
             "latest_reading": latest.to_dict() if latest else None,
             "last_valid_reading": latest_valid.to_dict() if latest_valid else None,
             "energy_kwh": energy,
@@ -558,6 +627,9 @@ class SourceHistory:
             "source": self.source.to_dict(),
             "segment_id": self.segment_id,
             "segments": {key: value.copy() for key, value in self._segments.items()},
+            "segment_contexts": {
+                key: value.copy() for key, value in self._segment_contexts.items()
+            },
             "readings": [reading.to_dict() for reading in self.readings],
             "deltas": [delta.to_dict() for delta in self.deltas],
             "baseline": self._baseline.to_dict() if self._baseline else None,
@@ -591,11 +663,36 @@ class SourceHistory:
             ):
                 raise ValueError("Inkonsistente gespeicherte Messsegmente")
             history._segments = {key: item.to_dict() for key, item in segments.items()}
+            contexts = data.get("segment_contexts")
+            if contexts is None:
+                contexts = {
+                    key: {"location_id": None, "timezone": timezone, "started_at": None}
+                    for key in segments
+                }
+            if not isinstance(contexts, dict) or set(contexts) != set(segments):
+                raise ValueError("Die Standortkontexte der Messsegmente fehlen")
+            for key, context in contexts.items():
+                if not isinstance(context, dict) or (
+                    context.get("location_id") is not None
+                    and (
+                        not isinstance(context["location_id"], str)
+                        or not context["location_id"]
+                    )
+                ):
+                    raise ValueError("Ein Messsegment hat keinen gültigen Standort")
+                ZoneInfo(context["timezone"])
+                if context["started_at"] is not None:
+                    _parse_time(context["started_at"])
+                history._segment_contexts[key] = dict(context)
+            history.timezone = ZoneInfo(history._segment_contexts[segment]["timezone"])
             history.readings = [Reading.from_dict(item) for item in data["readings"]]
             history.deltas = [EnergyDelta.from_dict(item) for item in data["deltas"]]
             last_accepted: datetime | None = None
             seen: set[tuple[str, datetime]] = set()
             for reading in history.readings:
+                beginning = history._segment_contexts[reading.segment_id]["started_at"]
+                if beginning is not None and reading.timestamp < _parse_time(beginning):
+                    raise ValueError("Ein Messpunkt liegt vor seinem Standortsegment")
                 if reading.segment_id not in segments or (
                     reading.last_reset is not None
                     and reading.last_reset > reading.timestamp

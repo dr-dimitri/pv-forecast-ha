@@ -114,7 +114,7 @@ menschliche Abnahme und wird durch Offline-Tests nicht ersetzt.
 ## Optionales Prognosearchiv aus #27 und Statistikentscheidung #4
 
 Das Archiv ist per UI opt-in und speichert tatsächlich rechtzeitig beobachtete
-Prognosestände in einem getrennten HA-Store (seit #18 Version 2). Festgelegte Stichtage:
+Prognosestände in einem getrennten HA-Store (seit #22/#23 Version 3). Festgelegte Stichtage:
 18 Uhr am Vortag und 06 Uhr am Zieltag für lokale Tageswerte (maximal zwei
 Stunden alte Prognose), Vorlauf eine beziehungsweise drei Stunden für
 UTC-Intervalle (maximal eine Stunde alte Prognose). Nach dem Stichtag werden
@@ -231,6 +231,24 @@ Allowlist und enthält keine Standorte, Koordinaten, Namen, IDs, URLs,
 Fehlermeldungen, Haushalts- oder Ertragshistorien. Sie löst keine Wetterabrufe
 oder Speicheränderungen aus und benötigt keine zusätzlichen Entities.
 Home Assistant ergänzt seinen üblichen äußeren Diagnoserahmen.
+
+## Standortänderung mit erhaltenen Daten zu #23
+
+Der native Reconfigure-Flow erlaubt nachträgliche Standortkorrekturen über dieselben validierten Standortquellen wie das Setup. Ein Entwurf wird nach erfolgreichem Open-Meteo-Test und ausdrücklichem Abschluss gespeichert. Entry-ID, Unique-ID und Dach-/sonstige Optionen bleiben erhalten. Reine Namensänderungen ohne neue Koordinaten oder Zeitzone beginnen keine neue Vergleichsgrundlage.
+
+Ein physischer Standort- oder Zeitzonenwechsel beginnt neue Mess-/Archiv-/Lernsegmente. Mess-Store Version 2 ergänzt je Segment den ursprünglichen Standortkontext, die ursprüngliche Zeitzone und den Beginn. Die Migration des bisherigen Stores erfolgt verlustfrei im noch gültigen alten Standortkontext. Alte Zeitpunkte, Zählerdifferenzen und Korrekturen werden nicht in die neue Zone umgedeutet; vor dem Wechsel datierte HA-Zustände liefern keine neue Zählerbasis. Archiv-Store Version 3 erhält gemischte, individuell validierte Record-Zeitzonen. Neue Erfassung verwendet die aktive Zone; Berichte trennen Konfigurationskennung und Zeitzone. Die üblichen aktuellen Kennzahlen beziehen sich auf die aktuelle Vergleichsgrundlage. Alte Archivstände bleiben vorhanden.
+
+Vor einer physischen Änderung werden bekannte Stores im alten Kontext sicher vorbereitet. Unbekannte oder unlesbare Speicherversionen verhindern die Änderung, um keine noch nicht interpretierbare historische Standortinformation zu verlieren. Aktive Manager werden vor dem eigentlichen Config-Update beendet; dadurch dürfen alte laufende Abrufe keine Daten unter einer neuen Konfigurationskennung archivieren. Danach folgt genau ein Reload. Eine alte Kalibrierungsfreigabe wird nicht auf den neuen Standort übertragen. Config Entries bleiben bei Schema 1.1. Speicher-, Mess-, Rechte- und Aufbewahrungsgrenzen bleiben bestehen.
+
+## Echte AC-Wechselrichtergruppen zu #22
+
+Optional werden reale AC-Wechselrichtergruppen in den Optionen als stabile ID, Name, positive maximale AC-kW und zugeordnete stabile Dach-IDs geführt. Ein Dach gehört höchstens einer Gruppe an; mehrere Dächer dürfen ein gemeinsames Gerät teilen. Nicht zugeordnete Dächer unterliegen weiterhin dem bestehenden Anlagenlimit. Die UI erklärt AC-Gruppen ausdrücklich und deutet weder DC-MPPT-Grenzen noch Netzeinspeiselimits als zusätzliche Wechselrichter um.
+
+Eine zentrale reine Funktion begrenzt zuerst jede Gruppe proportional innerhalb ihrer Dachbeiträge und anschließend genau einmal die resultierende Gesamtleistung nach dem bisherigen Anlagenlimit. Gruppen beeinflussen keine fremden Dachbeiträge. Ohne Gruppen bleibt der bisherige Rechenweg identisch. Der optionale Anlagenkalibrierungsfaktor wird vor beiden Begrenzungsstufen angewendet.
+
+Neue archivierte Kalibrierungsbasen mit Gruppen erhalten einen eigenen Basisvertrag Version 2: je UTC-Intervall unveränderte DC-Leistung je Gruppe und unzugeordnete Leistung, dazu die damals geltenden Gruppen- und Gesamtlimits. Ihre Summe muss zur vorhandenen Gesamt-DC-Leistung passen. Basen ohne Gruppen behalten den bisherigen Vertrag und werden nicht nachträglich ergänzt oder umgedeutet. Der unabhängig versionierte Archiv-Store 3 enthält diese Erweiterung zusammen mit den Standortkontexten; Lern-Store 1 und Config-Entry-Schema 1.1 bleiben erhalten. Nichtleere Gruppen mit Zuordnungen und Limits erweitern den physischen Fingerprint und entziehen inkompatiblen Lernfaktoren die Freigabe; reine Gruppennamen tun dies nicht. Ohne Gruppen ändert sich der bestehende Fingerprint nicht.
+
+Die Leseaktionen, Energy und Karte bleiben auf derselben wirksamen Gesamtzeitreihe. Es gibt keine zusätzlichen Sensoren oder Wetterabrufe. Tests sichern getrennte Geräte, mehrere Dächer an einem Gerät, kombiniertes Anlagenlimit, Kalibrierung vor beiden Clippings, verlustfreie Basisübergänge und bitgleiche Ergebnisse ohne Gruppen ab.
 
 ## Konfiguration
 

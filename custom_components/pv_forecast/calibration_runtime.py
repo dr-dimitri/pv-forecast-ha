@@ -115,7 +115,10 @@ class CalibrationManager:
             stored = await self._store.async_load()
             if stored is not None:
                 self._state = CalibrationState.from_dict(stored["state"])
-                if self._state.timezone.key != self.timezone:
+                if (
+                    self._state.timezone.key != self.timezone
+                    or self._state.configuration_id != _configuration_id(self.entry)
+                ):
                     self._state = self._new_state()
         except (
             HomeAssistantError,

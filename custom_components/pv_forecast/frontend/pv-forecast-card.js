@@ -294,7 +294,7 @@ export function renderContent(config, state, width = 600, report = null, reportD
   const fetchedAt = forecast.envelope?.fetched_at;
   const weatherStamp = finite(millis(fetchedAt)) ? `${formatPlantDate(fetchedAt, view.timezone)}, ${formatPlantTime(fetchedAt, view.timezone)}` : "unbekannt";
   const measurement = state.measurement;
-  const total = measurement?.data?.total_energy;
+  const total = measurement?.data?.current_location_total_energy ?? measurement?.data?.total_energy;
   const actualComplete = total?.energy_complete === true;
   const actual = total?.energy_kwh;
   const actualHint = view.roof_id ? "Keine Dachmessung" : measurement?.status === "ready" ? actualComplete ? "Seit Tagesbeginn" : finite(actual) ? "Unvollständig erfasst" : "Noch keine Messwerte" : measurement?.status === "loading" ? "Messdaten laden …" : "Keine Messdaten";
@@ -306,7 +306,7 @@ export function renderContent(config, state, width = 600, report = null, reportD
     !view.complete ? "Prognose unvollständig. Schattierte Lücken werden nicht als null Ertrag dargestellt." : "",
     hasFlags ? "Eingabedaten enthalten Qualitätsmarkierungen. Das ist keine gemessene Prognosegüte." : "",
     statusText(measurement, "Messdaten"), statusText(state.history, "Archivdaten"),
-    measurement?.data?.total_energy?.quality_flags?.length ? "Messdaten enthalten Qualitätsmarkierungen; unvollständige Intervalle bleiben frei." : "",
+    total?.quality_flags?.length ? "Messdaten enthalten Qualitätsmarkierungen; unvollständige Intervalle bleiben frei." : "",
     selectedSeries(state).history.some((item) => item.quality_flags?.length) ? "Die archivierten Prognosestände enthalten Qualitätsmarkierungen ihrer Eingabedaten." : "",
     measurement?.status === "ready" && !actualComplete ? finite(actual) ? "Ist heute ist nur der bisher belegte Teil; die Tageserfassung ist unvollständig." : "Für heute sind noch keine belegten Messwerte verfügbar." : "",
     state.history?.status === "ready" && !selectedSeries(state).history.length ? "Für diesen Tag sind noch keine Stundenstände im Archiv eingefroren." : "",

@@ -28,8 +28,9 @@ Home-Assistant-Oberfläche. YAML wird nicht unterstützt.
   Systemwirkungsgrad
 - Übernahme des in Home Assistant hinterlegten Standorts oder einmalige
   Adressauflösung über Nominatim
-- optionales AC-Leistungslimit für einen gemeinsam genutzten Wechselrichter
+- optionale reale AC-Wechselrichtergruppen und ein gemeinsames Anlagenlimit
 - stabile Sensor-IDs, auch wenn eine Dachfläche umbenannt wird
+- bewusste Standortkorrektur mit erhaltenen IDs und getrennten historischen Daten
 - begrenzte Diagnosedaten für die Fehlersuche über Home Assistant
 - automatische Aktualisierung standardmäßig alle 30 Minuten
 
@@ -110,6 +111,12 @@ Optional kann die maximale AC-Leistung des gemeinsamen Wechselrichters in kW
 angegeben werden. Überschreitet die berechnete Gesamtleistung dieses Limit,
 werden die Beiträge der Dachflächen proportional reduziert.
 
+Bei mehreren realen Geräten kannst du später unter **Konfigurieren →
+AC-Wechselrichtergruppen** deren AC-Grenzen und Dachzuordnung festlegen. Mehrere
+Dächer am selben Gerät teilen eine Gruppe. Die vorhandene Gesamtgrenze greift
+anschließend auf die gesamte Anlage. Beispiele und Grenzen stehen unter
+[Wechselrichtergruppen](docs/wechselrichtergruppen.md).
+
 Vor dem Speichern prüft die Integration den Zugriff auf Open-Meteo und zeigt
 eine Zusammenfassung der Konfiguration. Standort, Dachflächen und
 Wechselrichterlimit lassen sich von dort gezielt korrigieren.
@@ -120,6 +127,12 @@ gezielt einzelne Aktionen an: eine Dachfläche hinzufügen, eine bestehende
 bearbeiten (ihre technische ID bleibt dabei erhalten), eine Dachfläche nach
 ausdrücklicher Bestätigung entfernen oder das Wechselrichterlimit ändern.
 Jede Aktion wirkt für sich allein, ohne die übrigen Dachflächen anzufassen.
+
+Eine Standortkorrektur erfolgt über **Neu konfigurieren** im Menü der
+Integration. Erst nach Standortprüfung und erfolgreichem Forecast-Test wird
+der Entwurf gespeichert. Bestehende IDs bleiben erhalten; Messung, Archiv und
+Lernen unterscheiden den früheren vom neuen Standort. Details stehen unter
+[Standortwechsel](docs/standortwechsel.md).
 
 ## Diagnosedaten
 
