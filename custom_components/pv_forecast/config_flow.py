@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import math
+from collections.abc import Mapping
 from copy import deepcopy
 from typing import Any, Literal, override
 from uuid import uuid4
@@ -17,6 +18,7 @@ from homeassistant.config_entries import (
     OptionsFlow,
 )
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.data_entry_flow import AbortFlow
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.selector import (
@@ -67,7 +69,7 @@ from .const import (
     LOCATION_SOURCE_HOME_ASSISTANT,
     ROOF_DIRECTION_CUSTOM,
 )
-from .dashboard import CONF_DASHBOARD_ENABLED
+from .dashboard import CONF_DASHBOARD_ENABLED, CONF_DASHBOARD_REVISION
 from .dashboard_configuration import DashboardFlowMixin
 from .geocoding import (
     AddressNotFoundError,
@@ -978,8 +980,54 @@ class PvForecastOptionsFlow(
         self._selected_roof_id: str | None = None
         self._roof_removal_groups: list[dict[str, Any]] | None = None
         self._measurement_draft: dict[str, Any] | None = None
+        self._original_data: dict[str, Any] | None = None
+        self._original_options: dict[str, Any] | None = None
+
+    def _check_options_unchanged(self) -> None:
+        """Veraltete Entwürfe vor Änderungen und vor dem Speichern zurückweisen."""
+
+        entry = self.config_entry
+        options = {
+            key: value
+            for key, value in entry.options.items()
+            if key != CONF_DASHBOARD_REVISION
+        }
+        if self._original_data is None:
+            self._original_data = deepcopy(dict(entry.data))
+            self._original_options = deepcopy(options)
+        elif (
+            self._original_data != dict(entry.data) or self._original_options != options
+        ):
+            raise AbortFlow("reconfigure_entry_changed")
+
+    @callback
+    @override
+    def async_create_entry(
+        self,
+        *,
+        title: str | None = None,
+        data: Mapping[str, Any],
+        description: str | None = None,
+        description_placeholders: Mapping[str, str] | None = None,
+    ) -> ConfigFlowResult:
+        """Nur einen aktuellen Entwurf mit der neuesten internen Fassung speichern."""
+
+        self._check_options_unchanged()
+        options = dict(data)
+        options.pop(CONF_DASHBOARD_REVISION, None)
+        if CONF_DASHBOARD_REVISION in self.config_entry.options:
+            options[CONF_DASHBOARD_REVISION] = self.config_entry.options[
+                CONF_DASHBOARD_REVISION
+            ]
+        return super().async_create_entry(
+            title=title,
+            data=options,
+            description=description,
+            description_placeholders=description_placeholders,
+        )
 
     def _dashboard_context(self) -> tuple[dict[str, Any], str, str]:
+        self._check_options_unchanged()
         entry = self.config_entry
         manager = getattr(getattr(entry, "runtime_data", None), "dashboard", None)
         return (
@@ -998,8 +1046,9 @@ class PvForecastOptionsFlow(
     def _measurement_options(self) -> dict[str, Any]:
         """Alle unabhängigen Optionen beim Bearbeiten der Quellen bewahren."""
 
+        self._check_options_unchanged()
         if self._measurement_draft is None:
-            self._measurement_draft = dict(self.config_entry.options)
+            self._measurement_draft = deepcopy(dict(self.config_entry.options))
         return self._measurement_draft
 
     def _measurement_entry(self) -> ConfigEntry:
@@ -1026,7 +1075,40 @@ class PvForecastOptionsFlow(
     def _roofs(self) -> list[dict[str, Any]]:
         """Aktuell gespeicherte Dachflächen als veränderbare Kopien lesen."""
 
+        self._check_options_unchanged()
         return [dict(roof) for roof in self.config_entry.options[CONF_ROOFS]]
+
+    async def async_step_confirm_measurement_delete(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Messdaten nur unter der im Dialog bestätigten Konfiguration löschen."""
+
+        self._check_options_unchanged()
+        return await super().async_step_confirm_measurement_delete(user_input)
+
+    async def async_step_delete_history(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Archivlöschung bei einem inzwischen veralteten Dialog verhindern."""
+
+        self._check_options_unchanged()
+        return await super().async_step_delete_history(user_input)
+
+    async def async_step_reset_calibration(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Lernzustand nur für die unverändert bestätigte Anlage zurücksetzen."""
+
+        self._check_options_unchanged()
+        return await super().async_step_reset_calibration(user_input)
+
+    async def async_step_underperformance_control(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Hinweisaktionen an einen noch aktuellen Optionsdialog binden."""
+
+        self._check_options_unchanged()
+        return await super().async_step_underperformance_control(user_input)
 
     def _finish(
         self, roofs: list[dict[str, Any]], inverter_limit: float | None

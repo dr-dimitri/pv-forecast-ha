@@ -1,6 +1,7 @@
 """Native HA-Energiehelfer beim bewussten Abschluss der Geräteauswahl einrichten."""
 
 import asyncio
+from collections.abc import Callable
 from typing import Any
 
 from homeassistant.config_entries import SOURCE_USER, ConfigEntry, ConfigEntryState
@@ -66,16 +67,21 @@ async def _wait_for_helper(hass: HomeAssistant, entry: ConfigEntry) -> er.Regist
 
 
 async def async_resolve_measurement_helpers(
-    hass: HomeAssistant, sources: list[dict[str, Any]]
+    hass: HomeAssistant,
+    sources: list[dict[str, Any]],
+    *,
+    check_current: Callable[[], None] | None = None,
 ) -> list[dict[str, Any]]:
     """Gleichzeitige Abschlüsse dürfen keine doppelten Helfer anlegen."""
     lock = hass.data.setdefault(f"{DOMAIN}_measurement_helper_lock", asyncio.Lock())
     async with lock:
-        return await _async_resolve_helpers(hass, sources)
+        return await _async_resolve_helpers(hass, sources, check_current)
 
 
 async def _async_resolve_helpers(
-    hass: HomeAssistant, sources: list[dict[str, Any]]
+    hass: HomeAssistant,
+    sources: list[dict[str, Any]],
+    check_current: Callable[[], None] | None,
 ) -> list[dict[str, Any]]:
     """Entwürfe auflösen und bei Fehlern nur neu erzeugte Helfer zurückrollen."""
 
@@ -84,6 +90,8 @@ async def _async_resolve_helpers(
     created: list[str] = []
     resolved = []
     try:
+        if check_current is not None:
+            check_current()
         for source in sources:
             if PENDING_HELPER not in source:
                 resolved.append(dict(source))
@@ -108,6 +116,8 @@ async def _async_resolve_helpers(
                 translations = await async_get_translations(
                     hass, "de", "common", integrations={DOMAIN}
                 )
+                if check_current is not None:
+                    check_current()
                 options = {
                     "name": translations[
                         f"component.{DOMAIN}.common.measurement_helper_name"
@@ -129,6 +139,8 @@ async def _async_resolve_helpers(
                 helper = result["result"]
                 created.append(helper.entry_id)
             registered = await _wait_for_helper(hass, helper)
+            if check_current is not None:
+                check_current()
             if any(
                 item.get("registry_id") == registered.id for item in resolved
             ) or any(
