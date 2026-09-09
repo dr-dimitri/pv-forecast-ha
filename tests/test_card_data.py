@@ -255,3 +255,29 @@ def test_naive_now_is_rejected() -> None:
     """Eine fehlende Zeitzone darf nicht still zur Maschinenzone werden."""
     with pytest.raises(ValueError, match="eindeutige Zeitpunkte"):
         view(forecast(), datetime(2026, 9, 9, 12))
+
+
+@pytest.mark.parametrize("selected_roof", [None, "garage"])
+@pytest.mark.parametrize(
+    ("day", "timezone"),
+    [
+        (DAY, "UTC"),
+        (date(2026, 3, 29), "Europe/Berlin"),
+        (date(2026, 10, 25), "Europe/Berlin"),
+        (DAY, "Asia/Kolkata"),
+    ],
+)
+def test_both_day_views_share_one_summary_and_preserve_backend_day_projection(
+    selected_roof, day, timezone
+):
+    """Tageswechsel wählt nur vorbereitete Felder desselben Serverzeitpunkts aus."""
+    data = forecast(day, timezone)
+    current = view(data, timezone=timezone, roof_id=selected_roof)
+    tomorrow = view(data, timezone=timezone, day="tomorrow", roof_id=selected_roof)
+    assert current["day_views"] == tomorrow["day_views"]
+    assert current["summary"] == tomorrow["summary"]
+    for name, expected in (("today", current), ("tomorrow", tomorrow)):
+        assert current["day_views"][name] == {
+            key: expected[key]
+            for key in ("day", "date", "start", "end", "intervals", "complete", "stale")
+        }

@@ -143,13 +143,26 @@ export function connectionCache(hass) {
   return caches.get(connection);
 }
 
+/** Nur fertige Tagesfelder auswählen; Kennzahlen und Messstand bleiben gemeinsam. */
+export function selectViewDay(state, day = "today") {
+  const view = state?.forecast?.data;
+  if (!view || view.day === day) return state;
+  const selected = view.day_views?.[day];
+  if (!selected || selected.day !== day || !validInterval(selected) || !Array.isArray(selected.intervals)) {
+    return { ...state, forecast: { status: "error", message: UPDATE_HINT } };
+  }
+  return { ...state, forecast: { ...state.forecast, data: { ...view, ...selected } } };
+}
+
 export async function loadView(hass, config, publish, active = () => true, cache = null) {
+  const emit = publish;
+  publish = (state) => emit(selectViewDay(state, config.day));
   const read = (service, data) => cache ? cache.request(JSON.stringify([service, data]), () => readService(hass, service, data)) : readService(hass, service, data);
   let view;
   const state = { loading: true, forecast: { status: "loading" }, measurement: { status: "idle" }, history: { status: "idle" } };
   publish({ ...state });
   try {
-    const data = await read("get_forecast", { config_entry_id: config.config_entry_id, include_view: true, day: config.day ?? "today", ...(config.roof_id ? { roof_id: config.roof_id } : {}) });
+    const data = await read("get_forecast", { config_entry_id: config.config_entry_id, include_view: true, day: "today", ...(config.roof_id ? { roof_id: config.roof_id } : {}) });
     if (!active()) return;
     view = validateView(data);
     state.forecast = { status: "ready", data: view, envelope: data };
@@ -585,12 +598,12 @@ export class PvForecastCard extends ElementBase {
     if (!this._connected || this._visible === false || !this._hass || !this._config) return;
     const cache = connectionCache(this._hass);
     const config = { ...this._config };
-    this._unsubscribe = cache.subscribe(JSON.stringify([config.config_entry_id, config.day, config.roof_id ?? null]), (publish, active) => loadView(this._hass, config, publish, active, cache), (state) => {
+    this._unsubscribe = cache.subscribe(JSON.stringify(["view", config.config_entry_id, config.roof_id ?? null]), (publish, active) => loadView(this._hass, { ...config, day: "today" }, publish, active, cache), (state) => {
       if (!this._connected) return;
       // Bei einer laufenden Auswahl bleiben Bedienelemente und Tastaturfokus bestehen.
       if (state.forecast?.status === "loading" && this._state?.forecast?.data) return;
       this._selectionPending = false;
-      this._state = state;
+      this._state = selectViewDay(state, this._config.day);
       this._render();
     });
     this._bindReport();

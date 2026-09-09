@@ -141,7 +141,7 @@ class DashboardManager:
                     webcomponent_name="pv-forecast-panel",
                     sidebar_title=dashboard_title(dict(self.entry.options), name),
                     sidebar_icon="mdi:solar-power-variant",
-                    module_url=f"{CARD_URL}?v=2",
+                    module_url=f"{CARD_URL}?v=3",
                     config={
                         "config_entry_id": self.entry.entry_id,
                         "menu_label": texts[

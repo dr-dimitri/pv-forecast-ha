@@ -300,7 +300,7 @@ deine vorhandenen Dashboards bleiben erhalten.
 
 Das Paket enthält **PV Forecast** außerdem als einzelne Lovelace-Karte für frei
 gestaltete Dashboards. Füge dafür unter **Einstellungen → Dashboards → Ressourcen** die URL
-`/pv_forecast/pv-forecast-card.js?v=1` als **JavaScript-Modul** hinzu. Danach
+`/pv_forecast/pv-forecast-card.js?v=3` als **JavaScript-Modul** hinzu. Danach
 kannst du die Karte über **Dashboard bearbeiten → Karte hinzufügen** und ihren
 visuellen Editor ohne YAML einrichten.
 

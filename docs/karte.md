@@ -43,7 +43,7 @@ belegte Panel-Adresse wird nicht überschrieben und als Konflikt angezeigt.
 1. Die Integration wie oben installieren beziehungsweise aktualisieren.
 2. Im Benutzerprofil gegebenenfalls den erweiterten Modus aktivieren. Unter
    **Einstellungen → Dashboards → Drei-Punkte-Menü → Ressourcen** eine Ressource
-   hinzufügen: URL `/pv_forecast/pv-forecast-card.js?v=1`, Typ **JavaScript-Modul**.
+   hinzufügen: URL `/pv_forecast/pv-forecast-card.js?v=3`, Typ **JavaScript-Modul**.
    Vorhandene Ressourcen nicht löschen. Bei einer späteren Modulversion die
    Versionskennung gemäß den Versionshinweisen ändern und den Browser neu laden.
 3. Das gewünschte Dashboard bearbeiten, **Karte hinzufügen → PV Forecast** wählen
@@ -109,7 +109,13 @@ Der Browser positioniert und formatiert diese Werte. Er fragt weder Open-Meteo
 noch den Recorder ab und berechnet kein zweites PV-Modell.
 
 Gleiche Kartenanfragen werden pro HA-Verbindung gemeinsam genutzt und im
-lokalen Minutentakt nachgeführt. Wenn keine sichtbare Karte die Daten nutzt
+lokalen Minutentakt nachgeführt. Heute und Morgen derselben Anlage/Dachauswahl
+verwenden dabei denselben Datenstand: Ein Tageswechsel wählt nur die bereits
+vom Backend vorbereitete Kurve aus. „Rest heute“, die Tageskennzahlen und der
+heutige Messstand bleiben dabei gleich, auch bei gleichzeitig sichtbaren Karten.
+Die kompatible Ergänzung `view.day_views` enthält die vorbereiteten Tagesfelder;
+die bisher angeforderte Einzelansicht bleibt im Lesevertrag erhalten.
+Wenn keine sichtbare Karte die Daten nutzt
 oder das Browserdokument ausgeblendet ist, endet der Abrufrhythmus. Beim erneuten
 Einblenden nimmt die Karte ihre Leseaufrufe wieder auf. Die üblichen
 30-Minuten-Wetterabrufe des Coordinators ändern sich nicht. Ein Leseaufruf

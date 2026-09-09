@@ -85,7 +85,13 @@ export function fixtureHass(scenario = "sunny", { calls = [], connection = {}, d
       if (scenario === "deleted-roof" && message.service === "get_forecast" && message.service_data.roof_id) throw { code: "home_assistant_error", translation_key: "roof_not_found" };
       if (scenario === "acl" && message.service !== "get_forecast") throw { code: "unauthorized" };
       const data = fixture(scenario, message.service_data);
-      if (message.service === "get_forecast") return { response: data.forecast };
+      if (message.service === "get_forecast") {
+        data.forecast.view.day_views = Object.fromEntries(["today", "tomorrow"].map((day) => {
+          const view = fixture(scenario, { ...message.service_data, day }).forecast.view;
+          return [day, Object.fromEntries(["day", "date", "start", "end", "intervals", "complete", "stale"].map((key) => [key, view[key]]))];
+        }));
+        return { response: data.forecast };
+      }
       if (message.service === "get_measurements") return { response: data.measurement };
       if (message.service === "get_history") return { response: { ...data.history, window_days: message.service_data.days } };
       throw new Error("Unbekannte Testaktion");
