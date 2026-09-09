@@ -60,3 +60,12 @@ sieben Tage und bis zu 20.000 Messpunkte sowie 20.000 zugehörige
 Zählerdifferenzen pro Quelle vorgehalten. Quellenwechsel
 werden als neue Segmente geführt und nicht mit alten Messreihen verrechnet.
 Der Datenvertrag ist in [Messdaten](messdaten.md) beschrieben.
+
+## Prognosearchiv ab #27
+
+`history_enabled` und die optionale bestätigte Zuordnung `comparison_forecast`
+sind kompatible Options-Ergänzungen des Schemas 1.1. Deaktivierte Erfassung
+löscht keine bestehenden Daten. Archivdaten verwenden separat Store-Version 1
+unter `pv_forecast.history.<entry_id>`. Der
+[Archivvertrag](prognosearchiv.md) nennt Zeitfenster, Rohprognose, Bewertungs-
+revisionen, Konfigurationsbezug, Aufbewahrungsgrenzen und Löschung.

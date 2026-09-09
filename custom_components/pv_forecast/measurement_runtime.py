@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from dataclasses import replace
 from datetime import datetime, timedelta
@@ -64,6 +65,9 @@ async def async_delete_measurement_source_data(
 ) -> None:
     """Bestätigt ausgewählte Quelldaten auch bei entladener Anlage löschen."""
 
+    from .history_runtime import async_delete_history_source_data
+
+    await async_delete_history_source_data(hass, entry, source_id)
     manager = getattr(getattr(entry, "runtime_data", None), "measurements", None)
     if manager is not None and manager.running:
         await manager.async_delete_source_data(source_id)
@@ -258,6 +262,44 @@ class MeasurementManager:
             result = history.snapshot(start, end, now)
             result["identity_unresolved"] = source_id in unresolved
             sources.append(result)
+        return self._snapshot_result(
+            start, end, now, tuple(self._histories.values()), sources
+        )
+
+    async def async_snapshot(
+        self, start: datetime, end: datetime, now: datetime
+    ) -> dict[str, Any]:
+        """Größere Bewertungen geben zwischen den Messquellen den Eventloop frei."""
+
+        while True:
+            histories = tuple(self._histories.items())
+            sources = []
+            for source_id, history in histories:
+                await asyncio.sleep(0)
+                if self._histories.get(source_id) is not history:
+                    break
+                result = history.snapshot(start, end, now)
+                result["identity_unresolved"] = source_id in self.identity_unresolved
+                sources.append(result)
+            else:
+                if histories == tuple(self._histories.items()):
+                    return self._snapshot_result(
+                        start,
+                        end,
+                        now,
+                        tuple(history for _, history in histories),
+                        sources,
+                    )
+
+    @callback
+    def _snapshot_result(
+        self,
+        start: datetime,
+        end: datetime,
+        now: datetime,
+        histories: tuple[SourceHistory, ...],
+        sources: list[dict[str, Any]],
+    ) -> dict[str, Any]:
         return {
             "schema_version": 1,
             "storage_error": self._storage_error,
@@ -266,7 +308,11 @@ class MeasurementManager:
             "end": end.isoformat(),
             "sources": sources,
             "total_energy": aggregate_energy(
-                tuple(self._histories.values()), start, end, now
+                histories,
+                start,
+                end,
+                now,
+                cached_snapshots={source["source_id"]: source for source in sources},
             ),
             "retention_days": RETENTION.days,
             "max_readings_per_source": MAX_READINGS,

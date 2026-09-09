@@ -79,19 +79,20 @@ def _sensor_setup(hass, roof_name: str = "Süddach"):
 
 
 @pytest.mark.asyncio
-async def test_sensor_values_and_metadata(hass) -> None:
+@pytest.mark.parametrize(("day", "expected"), [("today", 12.35), ("tomorrow", 20.13)])
+async def test_sensor_values_and_metadata(hass, day, expected) -> None:
     """Tagesprognosen behalten ihre Energieeinheit und Statistikmetadaten."""
 
     entry, coordinator = _sensor_setup(hass)
-    total = PvForecastTotalSensor(coordinator, entry, "today")
+    total = PvForecastTotalSensor(coordinator, entry, day)
     roof_sensor = PvForecastRoofSensor(
-        coordinator, entry, "stable_roof", "Süddach", "tomorrow"
+        coordinator, entry, "stable_roof", "Süddach", day
     )
-    assert total.native_value == 12.35
-    assert roof_sensor.native_value == 20.13
-    assert total.device_class is SensorDeviceClass.ENERGY
-    assert total.native_unit_of_measurement == UnitOfEnergy.KILO_WATT_HOUR
-    assert total.state_class is None
+    for sensor in (total, roof_sensor):
+        assert sensor.native_value == expected
+        assert sensor.device_class is SensorDeviceClass.ENERGY
+        assert sensor.native_unit_of_measurement == UnitOfEnergy.KILO_WATT_HOUR
+        assert sensor.state_class is None
 
 
 @pytest.mark.asyncio

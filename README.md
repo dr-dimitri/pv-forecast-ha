@@ -21,6 +21,7 @@ Home-Assistant-Oberfläche. YAML wird nicht unterstützt.
 - lesende Aktion für die gemeinsame Stundenprognose in Automationen
 - native Solarprognose im Home-Assistant-Energie-Dashboard
 - optionale lokale Erfassung bestehender PV-Ertragszähler mit Messdatenprüfung
+- optionales Prognosearchiv mit Soll-Ist-Berichten und bewusstem JSON-/CSV-Export
 - mehrere Dachflächen mit eigener Leistung, Ausrichtung, Neigung und eigenem
   Systemwirkungsgrad
 - Übernahme des in Home Assistant hinterlegten Standorts oder einmalige
@@ -160,7 +161,8 @@ begrenzt; häufige Meldungen können das verfügbare
 Zeitfenster verkürzen. Über die Quellenoptionen lassen sich ihre Daten gezielt
 löschen. Das entfernt nur die Kopie dieser Integration, weder den Originalsensor
 noch dessen HA-Historie. Beim Entfernen der Anlage wird ihr Messdatenspeicher
-mit entfernt. Langzeitarchiv und Lernen folgen separat.
+mit entfernt. Das unten beschriebene Prognosearchiv ist optional; Lernen folgt
+separat.
 
 Die lesende Aktion `pv_forecast.get_measurements` liefert die vorhandenen Daten
 für eine explizite Anlage und ein Zeitfenster. `start` und `end` verlangen
@@ -169,6 +171,38 @@ ISO-8601-Zeitpunkte mit Offset oder `Z`, beispielsweise
 Einzelquellen, beobachtete Energiemengen, Abdeckung und Qualitätsmarkierungen;
 die Leserechte der ursprünglichen Sensoren gelten auch hier. Der genaue
 [Datenvertrag](docs/messdaten.md) erläutert die Grenzen für spätere Vergleiche.
+
+## Prognosearchiv und Soll-Ist-Vergleich (optional)
+
+Aktiviere **Prognosearchiv** im Abschlussdialog oder unter **Konfigurieren**.
+Die Erfassung beginnt ab diesem Zeitpunkt; fehlende Vergangenheit wird nicht
+nachgebaut. Pausieren erhält die vorhandenen Daten für Bericht und Export.
+Ohne zugeordneten Energiezähler bleiben Bewertungen fehlend.
+
+Der Bericht zeigt für 7, 30 oder 90 abgeschlossene lokale Tage die Anzahl
+rechtzeitig erfasster Prognosen, gültige Messpaare, Abdeckung, MAE und Bias in
+kWh. Positiver Bias bedeutet Überschätzung. Die Horizonte sind getrennt:
+Tagesprognose bis 18 Uhr am Vortag, Tagesprognose bis 06 Uhr am Zieltag sowie
+Stundenprognosen mit einer und drei Stunden Vorlauf. Spätere Verbesserungen
+überschreiben die gewählten Prognosen nicht; Messkorrekturen bleiben als
+Bewertungsrevisionen nachvollziehbar. Ohne Stichprobe wird keine Genauigkeit
+behauptet.
+
+Optional kannst du vorhandene fremde Tagesprognosen für heute/morgen zuordnen,
+wenn Anlagenzeitzone, Tagesbezug und AC-Messgrenze übereinstimmen. Verglichen
+werden ausschließlich dieselben gültigen Messpaare; das Datenalter wird
+getrennt ausgewiesen. Die Integration ruft dafür keinen weiteren Wetteranbieter
+ab. Eine Lernfunktion ist noch nicht enthalten.
+
+Das Archiv ist lokal begrenzt: Stundenstände 90 Tage, Tagesbewertungen 365 Tage,
+maximal 6.000 Zieldatensätze und 32 MiB, mit je drei früheren Bewertungen.
+**Prognosearchiv löschen** entfernt es nach Bestätigung. Beim Löschen einer
+Messquelle werden auch ihre Messkopien im Archiv entfernt.
+`pv_forecast.get_history` liest den Bericht; `pv_forecast.export_history`
+liefert auf ausdrücklichen Aufruf JSON-/CSV-Inhalt mit Dateiname, ohne eine
+Datei automatisch zu veröffentlichen. Der
+[Archivvertrag](docs/prognosearchiv.md) erklärt Stichtage, Formeln, Grenzen und
+Leserechte. Die reale Nutzer- und Güteerprobung aus der Roadmap bleibt offen.
 
 ## Sensoren
 
@@ -193,8 +227,14 @@ Wetterauflösung. Bei gleicher Spitzenleistung zählt der früheste absolute
 Zeitpunkt; auf einem vollständig ertraglosen Tag bleibt der Zeitpunkt unbekannt.
 Bei Teilstundenzeitzonen wird der Beginn auf den heutigen Tagesanfang begrenzt.
 Ein vollständig abgedecktes Nullfenster ergibt 0, fehlende Zeitabdeckung dagegen
-keinen Zahlenwert. Die Sensoren erhalten vor der gemeinsamen Statistikentscheidung
-mit dem geplanten Prognosearchiv keine `state_class`.
+keinen Zahlenwert. Alle Prognosesensoren behalten dauerhaft keine `state_class`.
+Revidierte Tages-, Rest- und Stundenprognosen sind keine Erzeugungszähler:
+`total` würde Prognoseänderungen akkumulieren, `total_increasing` könnte
+Abwärtskorrekturen als Zählerrücksetzung interpretieren. Auch die geschätzte
+Leistung ist kein aktueller Erzeugungsmesswert. Die normale Recorder-Historie
+richtet sich nach deiner HA-Aufbewahrung; langfristige Soll-Ist-Vergleiche
+verwenden das datierte Prognosearchiv. Die native Energy-Anbindung benötigt
+keine Statistikklasse dieser Sensoren.
 
 Die Zuordnung zu heute und morgen wechselt zur Mitternacht am Anlagenstandort.
 Bis neue Wetterdaten vorliegen, kann der bisherige Morgenwert als heutige

@@ -679,7 +679,12 @@ def _covered_seconds(deltas: Iterable[EnergyDelta]) -> float:
 
 
 def aggregate_energy(
-    histories: Iterable[SourceHistory], start: datetime, end: datetime, now: datetime
+    histories: Iterable[SourceHistory],
+    start: datetime,
+    end: datetime,
+    now: datetime,
+    *,
+    cached_snapshots: Mapping[str, dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Disjunkte Erzeuger erst nach quelleneigener Resetprüfung addieren."""
     start, end, now = _utc(start), _utc(end), _utc(now)
@@ -694,7 +699,14 @@ def aggregate_energy(
     entities = [h.source.entity_id for h in energy_sources]
     if len(set(identities)) != len(identities) or len(set(entities)) != len(entities):
         raise ValueError("Eine Sensoridentität darf nicht doppelt addiert werden")
-    snapshots = [history.snapshot(start, end, now) for history in energy_sources]
+    snapshots = [
+        (
+            cached_snapshots[history.source.source_id]
+            if cached_snapshots is not None
+            else history.snapshot(start, end, now)
+        )
+        for history in energy_sources
+    ]
     flags = {flag for snapshot in snapshots for flag in snapshot["quality_flags"]}
     values = [
         snapshot["energy_kwh"]

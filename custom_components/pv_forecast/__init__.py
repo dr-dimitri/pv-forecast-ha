@@ -12,6 +12,8 @@ from homeassistant.helpers.typing import ConfigType
 
 from .const import DOMAIN, PLATFORMS
 from .coordinator import PvForecastCoordinator
+from .history_runtime import ArchiveManager, async_remove_history_store
+from .history_services import async_setup_history_services
 from .measurement_runtime import MeasurementManager, async_remove_measurement_store
 from .measurement_services import async_setup_measurement_services
 from .runtime import async_get_open_meteo_client
@@ -26,6 +28,7 @@ class PvForecastRuntimeData:
 
     coordinator: PvForecastCoordinator
     measurements: MeasurementManager | None = None
+    history: ArchiveManager | None = None
 
 
 type PvForecastConfigEntry = ConfigEntry[PvForecastRuntimeData]
@@ -36,6 +39,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 
     async_setup_services(hass)
     async_setup_measurement_services(hass)
+    async_setup_history_services(hass)
     return True
 
 
@@ -50,12 +54,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: PvForecastConfigEntry) -
     coordinator.async_start_planning_updates()
 
     measurements = MeasurementManager(hass, entry)
-    entry.runtime_data = PvForecastRuntimeData(coordinator, measurements)
+    history = ArchiveManager(hass, entry, coordinator, measurements)
+    entry.runtime_data = PvForecastRuntimeData(coordinator, measurements, history)
     try:
         await measurements.async_start()
+        await history.async_start()
         await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     except (Exception, CancelledError):
-        await measurements.async_stop()
+        try:
+            await history.async_stop()
+        finally:
+            await measurements.async_stop()
         raise
     return True
 
@@ -64,15 +73,23 @@ async def async_unload_entry(hass: HomeAssistant, entry: PvForecastConfigEntry) 
     """Alle Plattformen eines Config Entries sauber entladen."""
 
     unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
-    if unloaded and entry.runtime_data.measurements is not None:
-        await entry.runtime_data.measurements.async_stop()
+    if unloaded:
+        try:
+            if entry.runtime_data.history is not None:
+                await entry.runtime_data.history.async_stop()
+        finally:
+            if entry.runtime_data.measurements is not None:
+                await entry.runtime_data.measurements.async_stop()
     return unloaded
 
 
 async def async_remove_entry(hass: HomeAssistant, entry: PvForecastConfigEntry) -> None:
-    """Beim Entfernen einer Anlage ausschließlich deren Messdaten löschen."""
+    """Beim Entfernen einer Anlage ihre lokalen Messdaten und ihr Archiv löschen."""
 
-    await async_remove_measurement_store(hass, entry.entry_id)
+    try:
+        await async_remove_history_store(hass, entry.entry_id)
+    finally:
+        await async_remove_measurement_store(hass, entry.entry_id)
 
 
 async def _async_update_listener(

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Protocol, cast
 
 import voluptuous as vol
 from homeassistant.auth.permissions.const import CAT_ENTITIES, POLICY_READ
@@ -24,9 +24,20 @@ from .services import CONF_CONFIG_ENTRY_ID, _async_check_read_permission
 
 if TYPE_CHECKING:
     from . import PvForecastConfigEntry
-    from .measurement_runtime import MeasurementManager
 
 SERVICE_GET_MEASUREMENTS = "get_measurements"
+
+
+class SourceIdentityView(Protocol):
+    """Gemeinsame Leserechtsgrenze aktueller und archivierter Messquellen."""
+
+    @property
+    def entity_ids(self) -> tuple[str, ...]:
+        """Alle betroffenen aktuellen und früheren Quell-Entities."""
+
+    @property
+    def identity_unresolved(self) -> tuple[str, ...]:
+        """Nicht mehr eindeutig auflösbare Quellenidentitäten."""
 
 
 def _aware_datetime(value: object) -> datetime:
@@ -89,7 +100,7 @@ def async_setup_measurement_services(hass: HomeAssistant) -> None:
 
 
 async def _async_check_source_permissions(
-    hass: HomeAssistant, call: ServiceCall, manager: MeasurementManager
+    hass: HomeAssistant, call: ServiceCall, manager: SourceIdentityView
 ) -> None:
     """Auch die ausgewählten fremden Sensoren und historische Identitäten schützen."""
 

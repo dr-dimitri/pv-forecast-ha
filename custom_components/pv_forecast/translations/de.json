@@ -59,7 +59,8 @@
           "edit_location": "Standort ändern",
           "edit_roofs": "Dachflächen ändern",
           "edit_system": "Wechselrichterleistung ändern",
-          "measurements": "Echte PV-Messquellen zuordnen (optional)"
+          "measurements": "Echte PV-Messquellen zuordnen (optional)",
+          "history": "Prognosearchiv und Soll-Ist-Vergleich (optional)"
         },
         "menu_option_descriptions": {
           "finish": "Speichert die geprüfte Konfiguration und legt die Sensoren an.",
@@ -128,6 +129,62 @@
         "data": {
           "confirm_delete": "Messkopie dieser Quelle jetzt endgültig löschen"
         }
+      },
+      "history": {
+        "title": "Prognosearchiv und Soll-Ist-Vergleich",
+        "description": "**Erfassung:** {enabled}\n\n**Vergleich:** {comparison}\n\nDas lokale Archiv bewahrt rechtzeitig erfasste Prognosestände. Ohne passende echte Messwerte bleibt die Bewertung offen. Einstellungen gelten nach „Fertig“; Berichte zeigen den bereits gespeicherten Stand.",
+        "menu_options": {
+          "history_settings": "Archivierung aktivieren oder pausieren",
+          "comparison_forecast": "Vorhandene Tagesprognose zum Vergleich zuordnen",
+          "remove_comparison_forecast": "Vergleichszuordnung entfernen",
+          "history_report": "Soll-Ist-Bericht ansehen (7/30/90 Tage)",
+          "delete_history": "Lokales Prognosearchiv löschen",
+          "history_done": "Fertig"
+        }
+      },
+      "history_settings": {
+        "title": "Archivierung ausdrücklich aktivieren",
+        "description": "Gespeichert werden tatsächlich rechtzeitig beobachtete Prognosen: Tageswerte bis 18 Uhr am Vortag und 06 Uhr am Zieltag sowie Stundenintervalle mit einer oder drei Stunden Vorlauf. Fehlende Vergangenheit wird nicht nachträglich ergänzt.\n\n**Lokale Speichergrenzen:** Stundenstände 90 Tage, Tagesbewertungen 365 Tage; höchstens 6.000 Zieldatensätze, je drei frühere Bewertungsrevisionen und insgesamt 32 MiB. Erreichte Grenzen werden im Bericht kenntlich gemacht. Reguläre Schreibungen werden auf höchstens 288 pro Tag gebündelt.\n\nPausieren beendet neue Erfassung und Bewertung. Bereits gespeicherte Daten bleiben lesbar und exportierbar. Die Prognose funktioniert unabhängig vom Archiv; es entstehen keine zusätzlichen Geräte- oder Wetterabrufe.",
+        "data": {
+          "history_enabled": "Prognosen und nachvollziehbare Bewertungen lokal archivieren"
+        }
+      },
+      "comparison_forecast": {
+        "title": "Vorhandene Tagesprognose vergleichen",
+        "description": "Optional kannst du zwei bereits vorhandene Prognosesensoren für heute und morgen zuordnen. Sie müssen dieselbe AC-Gesamtanlage und dieselben lokalen Zieltage abbilden. Erzeugungszähler sind keine Prognosen. Die Sensoren brauchen energy und Wh/kWh, aber keine Zustandsklasse. Es wird kein zusätzlicher Anbieter abgefragt. Nicht verfügbare oder zu alte Vergleichswerte bleiben fehlend.",
+        "data": {
+          "today_entity_id": "Vorhandene Prognose für heute",
+          "tomorrow_entity_id": "Vorhandene Prognose für morgen",
+          "scope": "Gemeinsame AC-Messgrenze der verglichenen Gesamtanlage"
+        },
+        "data_description": {
+          "scope": "Zum Beispiel „Gesamte PV-Anlage hinter beiden Wechselrichtern, ohne Batterie“. Namen und Einheiten allein belegen keine gleiche Messgrenze."
+        }
+      },
+      "confirm_comparison_forecast": {
+        "title": "Vergleichbarkeit bestätigen",
+        "description": "**Heute:** {today}\n\n**Morgen:** {tomorrow}\n\n**Gemeinsame Messgrenze:** {scope}\n\n**Anlagenzeitzone:** {timezone}\n\nDie Werte werden beim eigenen Prognoseabruf gemeinsam gelesen und nach demselben Stichtag eingefroren. Unterschiede im tatsächlichen Datenalter bleiben sichtbar. Ein Quellenwechsel verändert bereits gespeicherte Prognosen nicht.",
+        "data": {
+          "confirmed_same_boundary": "Ich bestätige: beide Sensoren sind Tagesprognosen für heute/morgen in dieser Anlagenzeitzone und dieselbe AC-Gesamtmessgrenze ohne Netzexport, Verbrauch oder Batterieentladung."
+        }
+      },
+      "history_report": {
+        "title": "Auswertungszeitraum wählen",
+        "description": "Der Bericht verwendet vollständig abgeschlossene Kalendertage in der gespeicherten Anlagenzeitzone. Tages- und Stundenhorizonte werden getrennt bewertet. Es werden keine Daten nachgeladen.",
+        "data": {
+          "days": "Zeitraum"
+        }
+      },
+      "history_report_result": {
+        "title": "Ehrlicher Soll-Ist-Bericht",
+        "description": "{report}\n\n**MAE** ist der mittlere absolute Prognosefehler in kWh. **Bias** ist Prognose minus Messung: positiv bedeutet Überschätzung, negativ Unterschätzung. **Abdeckung** ist der Anteil gültiger Vergleichspaare an den erwarteten Zielintervallen, keine Prozentgenauigkeit. Große Fehler werden nicht zur Verbesserung der Kennzahl entfernt. Ohne gültige Stichprobe bleibt die Kennzahl offen.\n\nExportiere diese Daten bei Bedarf bewusst über die Aktionen „Prognosearchiv lesen“ oder „Prognosearchiv exportieren“. Es werden keine Dateien automatisch veröffentlicht."
+      },
+      "delete_history": {
+        "title": "Lokales Prognosearchiv endgültig löschen",
+        "description": "Die gespeicherten Prognosestände, Bewertungen, früheren Bewertungsrevisionen und Vergleichsprognosen dieser Anlage werden **sofort und endgültig** aus dem Archiv gelöscht. Es gibt keine Wiederherstellung aus späteren Wetterdaten.\n\nDachkonfiguration, aktuelle Prognose, Messquellen und deren getrennte Messkopien bleiben erhalten; ursprüngliche HA-Entities und Recorder-Daten werden nicht gelöscht. Bei weiterhin aktivierter Archivierung beginnt neue Erfassung ab dem nächsten geeigneten Prognosestand.",
+        "data": {
+          "confirm_delete": "Das Prognosearchiv dieser Anlage jetzt endgültig löschen"
+        }
       }
     },
     "error": {
@@ -146,7 +203,13 @@
       "invalid_measurement_source": "Wähle einen passenden vorhandenen PV-Sensor und eine verständliche Messgrenze. Das Meldeintervall muss positiv sein.",
       "invalid_measurement_metadata": "Einheit, Geräteklasse und Zustandsklasse passen nicht zur gewählten Messart. Energie: Wh/kWh, energy, total oder total_increasing. Leistung: W/kW, power, measurement.",
       "duplicate_measurement_source": "Diese Entity ist bereits zugeordnet. Wähle jede Messquelle nur einmal.",
-      "measurement_confirmation_required": "Bestätige die reine AC-PV-Erzeugung und die überschneidungsfreien Energiequellen."
+      "measurement_confirmation_required": "Bestätige die reine AC-PV-Erzeugung und die überschneidungsfreien Energiequellen.",
+      "invalid_comparison_scope": "Beschreibe die gemeinsame AC-Messgrenze der Gesamtanlage.",
+      "invalid_comparison_source": "Wähle einen vorhandenen fremden Prognosesensor mit Geräteklasse energy und Einheit Wh oder kWh.",
+      "duplicate_comparison_source": "Heute und morgen benötigen zwei unterschiedliche Prognosesensoren.",
+      "comparison_confirmation_required": "Bestätige den Tagesbezug in der Anlagenzeitzone und dieselbe AC-Gesamtmessgrenze.",
+      "history_unavailable": "Für diese Anlage ist das Prognosearchiv noch nicht verfügbar. Lade die Anlage, um gespeicherte Daten zu lesen.",
+      "history_delete_failed": "Das Archiv konnte nicht gelöscht werden. Prüfe die lokale Speicherung und versuche es erneut."
     },
     "abort": {
       "already_configured": "Eine PV-Ertragsprognose ist bereits eingerichtet."
@@ -162,14 +225,16 @@
           "edit_roof": "Dachfläche bearbeiten",
           "remove_roof": "Dachfläche entfernen",
           "system": "Wechselrichterleistung ändern",
-          "measurements": "Echte PV-Messquellen zuordnen (optional)"
+          "measurements": "Echte PV-Messquellen zuordnen (optional)",
+          "history": "Prognosearchiv und Soll-Ist-Vergleich (optional)"
         },
         "menu_option_descriptions": {
           "add_roof": "Erfasst eine zusätzliche Dachfläche, ohne die vorhandenen zu verändern.",
           "edit_roof": "Bearbeitet eine einzelne bestehende Dachfläche gezielt.",
           "remove_roof": "Entfernt eine Dachfläche nach ausdrücklicher Bestätigung.",
           "system": "Ändert die maximale AC-Wechselrichterleistung der Gesamtanlage.",
-          "measurements": "Vorhandene PV-Zähler zuordnen und lokale Messkopien verwalten."
+          "measurements": "Vorhandene PV-Zähler zuordnen und lokale Messkopien verwalten.",
+          "history": "Rechtzeitige Prognosen lokal archivieren, vergleichen und bewusst exportieren."
         }
       },
       "add_roof": {
@@ -291,6 +356,62 @@
         "data": {
           "confirm_delete": "Messkopie dieser Quelle jetzt endgültig löschen"
         }
+      },
+      "history": {
+        "title": "Prognosearchiv und Soll-Ist-Vergleich",
+        "description": "**Erfassung:** {enabled}\n\n**Vergleich:** {comparison}\n\nDas lokale Archiv bewahrt rechtzeitig erfasste Prognosestände. Ohne passende echte Messwerte bleibt die Bewertung offen. Einstellungen gelten nach „Fertig“; Berichte zeigen den bereits gespeicherten Stand.",
+        "menu_options": {
+          "history_settings": "Archivierung aktivieren oder pausieren",
+          "comparison_forecast": "Vorhandene Tagesprognose zum Vergleich zuordnen",
+          "remove_comparison_forecast": "Vergleichszuordnung entfernen",
+          "history_report": "Soll-Ist-Bericht ansehen (7/30/90 Tage)",
+          "delete_history": "Lokales Prognosearchiv löschen",
+          "history_done": "Fertig"
+        }
+      },
+      "history_settings": {
+        "title": "Archivierung ausdrücklich aktivieren",
+        "description": "Gespeichert werden tatsächlich rechtzeitig beobachtete Prognosen: Tageswerte bis 18 Uhr am Vortag und 06 Uhr am Zieltag sowie Stundenintervalle mit einer oder drei Stunden Vorlauf. Fehlende Vergangenheit wird nicht nachträglich ergänzt.\n\n**Lokale Speichergrenzen:** Stundenstände 90 Tage, Tagesbewertungen 365 Tage; höchstens 6.000 Zieldatensätze, je drei frühere Bewertungsrevisionen und insgesamt 32 MiB. Erreichte Grenzen werden im Bericht kenntlich gemacht. Reguläre Schreibungen werden auf höchstens 288 pro Tag gebündelt.\n\nPausieren beendet neue Erfassung und Bewertung. Bereits gespeicherte Daten bleiben lesbar und exportierbar. Die Prognose funktioniert unabhängig vom Archiv; es entstehen keine zusätzlichen Geräte- oder Wetterabrufe.",
+        "data": {
+          "history_enabled": "Prognosen und nachvollziehbare Bewertungen lokal archivieren"
+        }
+      },
+      "comparison_forecast": {
+        "title": "Vorhandene Tagesprognose vergleichen",
+        "description": "Optional kannst du zwei bereits vorhandene Prognosesensoren für heute und morgen zuordnen. Sie müssen dieselbe AC-Gesamtanlage und dieselben lokalen Zieltage abbilden. Erzeugungszähler sind keine Prognosen. Die Sensoren brauchen energy und Wh/kWh, aber keine Zustandsklasse. Es wird kein zusätzlicher Anbieter abgefragt. Nicht verfügbare oder zu alte Vergleichswerte bleiben fehlend.",
+        "data": {
+          "today_entity_id": "Vorhandene Prognose für heute",
+          "tomorrow_entity_id": "Vorhandene Prognose für morgen",
+          "scope": "Gemeinsame AC-Messgrenze der verglichenen Gesamtanlage"
+        },
+        "data_description": {
+          "scope": "Zum Beispiel „Gesamte PV-Anlage hinter beiden Wechselrichtern, ohne Batterie“. Namen und Einheiten allein belegen keine gleiche Messgrenze."
+        }
+      },
+      "confirm_comparison_forecast": {
+        "title": "Vergleichbarkeit bestätigen",
+        "description": "**Heute:** {today}\n\n**Morgen:** {tomorrow}\n\n**Gemeinsame Messgrenze:** {scope}\n\n**Anlagenzeitzone:** {timezone}\n\nDie Werte werden beim eigenen Prognoseabruf gemeinsam gelesen und nach demselben Stichtag eingefroren. Unterschiede im tatsächlichen Datenalter bleiben sichtbar. Ein Quellenwechsel verändert bereits gespeicherte Prognosen nicht.",
+        "data": {
+          "confirmed_same_boundary": "Ich bestätige: beide Sensoren sind Tagesprognosen für heute/morgen in dieser Anlagenzeitzone und dieselbe AC-Gesamtmessgrenze ohne Netzexport, Verbrauch oder Batterieentladung."
+        }
+      },
+      "history_report": {
+        "title": "Auswertungszeitraum wählen",
+        "description": "Der Bericht verwendet vollständig abgeschlossene Kalendertage in der gespeicherten Anlagenzeitzone. Tages- und Stundenhorizonte werden getrennt bewertet. Es werden keine Daten nachgeladen.",
+        "data": {
+          "days": "Zeitraum"
+        }
+      },
+      "history_report_result": {
+        "title": "Ehrlicher Soll-Ist-Bericht",
+        "description": "{report}\n\n**MAE** ist der mittlere absolute Prognosefehler in kWh. **Bias** ist Prognose minus Messung: positiv bedeutet Überschätzung, negativ Unterschätzung. **Abdeckung** ist der Anteil gültiger Vergleichspaare an den erwarteten Zielintervallen, keine Prozentgenauigkeit. Große Fehler werden nicht zur Verbesserung der Kennzahl entfernt. Ohne gültige Stichprobe bleibt die Kennzahl offen.\n\nExportiere diese Daten bei Bedarf bewusst über die Aktionen „Prognosearchiv lesen“ oder „Prognosearchiv exportieren“. Es werden keine Dateien automatisch veröffentlicht."
+      },
+      "delete_history": {
+        "title": "Lokales Prognosearchiv endgültig löschen",
+        "description": "Die gespeicherten Prognosestände, Bewertungen, früheren Bewertungsrevisionen und Vergleichsprognosen dieser Anlage werden **sofort und endgültig** aus dem Archiv gelöscht. Es gibt keine Wiederherstellung aus späteren Wetterdaten.\n\nDachkonfiguration, aktuelle Prognose, Messquellen und deren getrennte Messkopien bleiben erhalten; ursprüngliche HA-Entities und Recorder-Daten werden nicht gelöscht. Bei weiterhin aktivierter Archivierung beginnt neue Erfassung ab dem nächsten geeigneten Prognosestand.",
+        "data": {
+          "confirm_delete": "Das Prognosearchiv dieser Anlage jetzt endgültig löschen"
+        }
       }
     },
     "error": {
@@ -300,7 +421,13 @@
       "invalid_measurement_source": "Wähle einen passenden vorhandenen PV-Sensor und eine verständliche Messgrenze. Das Meldeintervall muss positiv sein.",
       "invalid_measurement_metadata": "Einheit, Geräteklasse und Zustandsklasse passen nicht zur gewählten Messart. Energie: Wh/kWh, energy, total oder total_increasing. Leistung: W/kW, power, measurement.",
       "duplicate_measurement_source": "Diese Entity ist bereits zugeordnet. Wähle jede Messquelle nur einmal.",
-      "measurement_confirmation_required": "Bestätige die reine AC-PV-Erzeugung und die überschneidungsfreien Energiequellen."
+      "measurement_confirmation_required": "Bestätige die reine AC-PV-Erzeugung und die überschneidungsfreien Energiequellen.",
+      "invalid_comparison_scope": "Beschreibe die gemeinsame AC-Messgrenze der Gesamtanlage.",
+      "invalid_comparison_source": "Wähle einen vorhandenen fremden Prognosesensor mit Geräteklasse energy und Einheit Wh oder kWh.",
+      "duplicate_comparison_source": "Heute und morgen benötigen zwei unterschiedliche Prognosesensoren.",
+      "comparison_confirmation_required": "Bestätige den Tagesbezug in der Anlagenzeitzone und dieselbe AC-Gesamtmessgrenze.",
+      "history_unavailable": "Für diese Anlage ist das Prognosearchiv noch nicht verfügbar. Lade die Anlage, um gespeicherte Daten zu lesen.",
+      "history_delete_failed": "Das Archiv konnte nicht gelöscht werden. Prüfe die lokale Speicherung und versuche es erneut."
     }
   },
   "selector": {
@@ -351,6 +478,42 @@
           "description": "Ende des UTC-Auswertungsfensters als ISO-8601-Zeitpunkt mit verpflichtendem UTC-Offset oder Z; muss nach dem Beginn liegen."
         }
       }
+    },
+    "get_history": {
+      "name": "Prognosearchiv lesen",
+      "description": "Liest Kennzahlen und auf Wunsch die unveränderlichen Prognosestände mit Bewertungsrevisionen aus dem lokalen Archiv, ohne neue Abrufe.",
+      "fields": {
+        "config_entry_id": {
+          "name": "PV-Anlage",
+          "description": "Anlage, deren Archiv gelesen wird."
+        },
+        "days": {
+          "name": "Abgeschlossene Tage",
+          "description": "7, 30 oder 90 abgeschlossene lokale Kalendertage."
+        },
+        "include_records": {
+          "name": "Einzelne Archivdatensätze einschließen",
+          "description": "Zusätzlich zu den Kennzahlen gespeicherte Prognosen und Bewertungen zurückgeben."
+        }
+      }
+    },
+    "export_history": {
+      "name": "Prognosearchiv exportieren",
+      "description": "Gibt das bewusst gewählte lokale Archivfenster als JSON oder CSV zurück. Es wird keine Datei automatisch veröffentlicht oder übertragen.",
+      "fields": {
+        "config_entry_id": {
+          "name": "PV-Anlage",
+          "description": "Anlage, deren Archiv exportiert wird."
+        },
+        "days": {
+          "name": "Abgeschlossene Tage",
+          "description": "7, 30 oder 90 abgeschlossene lokale Kalendertage."
+        },
+        "format": {
+          "name": "Exportformat",
+          "description": "JSON enthält die strukturierte Antwort, CSV tabellarische Daten mit Metadaten und Revisionen."
+        }
+      }
     }
   },
   "exceptions": {
@@ -368,6 +531,9 @@
     },
     "invalid_measurement_window": {
       "message": "Das Ende muss nach dem Beginn des Messfensters liegen."
+    },
+    "history_unavailable": {
+      "message": "Für diese Anlage ist das Prognosearchiv noch nicht verfügbar."
     }
   },
   "entity": {

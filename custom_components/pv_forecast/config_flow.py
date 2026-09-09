@@ -64,6 +64,7 @@ from .geocoding import (
     GeocodingDataError,
     NominatimClient,
 )
+from .history_configuration import HistoryFlowMixin
 from .measurement_configuration import MeasurementFlowMixin
 from .runtime import async_get_open_meteo_client
 
@@ -86,6 +87,7 @@ _SUMMARY_MENU_LABELS: dict[str, str] = {
     "edit_roofs": "Dachflächen ändern",
     "edit_system": "Wechselrichterleistung ändern",
     "measurements": "Echte PV-Messquellen zuordnen (optional)",
+    "history": "Prognosearchiv und Soll-Ist-Vergleich (optional)",
 }
 
 
@@ -328,7 +330,9 @@ def _ensure_unique_roof_name(
         raise DuplicateRoofNameError("Dachnamen müssen eindeutig sein")
 
 
-class PvForecastConfigFlow(MeasurementFlowMixin, ConfigFlow, domain=DOMAIN):
+class PvForecastConfigFlow(
+    HistoryFlowMixin, MeasurementFlowMixin, ConfigFlow, domain=DOMAIN
+):
     """Config Flow für genau eine PV-Prognose-Konfiguration."""
 
     VERSION = 1
@@ -356,6 +360,13 @@ class PvForecastConfigFlow(MeasurementFlowMixin, ConfigFlow, domain=DOMAIN):
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Nach der optionalen Zuordnung zum Abschlussdialog zurückkehren."""
+
+        return await self.async_step_summary()
+
+    async def async_step_history_done(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Nach der optionalen Archivierung zum Abschlussdialog zurückkehren."""
 
         return await self.async_step_summary()
 
@@ -635,7 +646,7 @@ class PvForecastConfigFlow(MeasurementFlowMixin, ConfigFlow, domain=DOMAIN):
         return await self.async_step_system()
 
 
-class PvForecastOptionsFlow(MeasurementFlowMixin, OptionsFlow):
+class PvForecastOptionsFlow(HistoryFlowMixin, MeasurementFlowMixin, OptionsFlow):
     """Menübasierter Options Flow zum gezielten Bearbeiten einzelner Dachflächen.
 
     Jede Aktion (hinzufügen, bearbeiten, entfernen, Wechselrichterlimit) wirkt
@@ -667,6 +678,13 @@ class PvForecastOptionsFlow(MeasurementFlowMixin, OptionsFlow):
         """Die bestätigten Messquellen speichern und den Options Flow abschließen."""
 
         return self.async_create_entry(title="", data=self._measurement_options())
+
+    async def async_step_history_done(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Archivoptionen mit allen unabhängigen Einstellungen speichern."""
+
+        return self.async_create_entry(title="", data=self._history_options())
 
     def _roofs(self) -> list[dict[str, Any]]:
         """Aktuell gespeicherte Dachflächen als veränderbare Kopien lesen."""
@@ -708,6 +726,7 @@ class PvForecastOptionsFlow(MeasurementFlowMixin, OptionsFlow):
             menu_options.extend(["edit_roof", "remove_roof"])
         menu_options.append("system")
         menu_options.append("measurements")
+        menu_options.append("history")
         return self.async_show_menu(
             step_id="init",
             menu_options=menu_options,
