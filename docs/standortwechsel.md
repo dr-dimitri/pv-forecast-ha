@@ -33,10 +33,11 @@ nicht als neue Basis übernommen; erst neue Meldungen belegen Energie am neuen
 Standort. Es gibt keine Zählerdifferenz über die Standortgrenze.
 
 Historische UTC-Abfragen liefern weiterhin alte Messwerte mit deren
-`segment_contexts` und ursprünglicher Tageszeitzone. Die explizit angefragten
+`segment_contexts` und ursprünglicher Tageszeitzone. Tagesaussicht und
 Kartenintervalle verwenden ausschließlich Messungen des aktuellen
-Standortsegments. Messlücken am Umzugstag bleiben erkennbar; die Speicherung
-füllt sie weder mit früherer Energie noch mit erfundenen Nullwerten auf.
+Standortsegments. Frühere Energie darf nicht mit der Prognose des neuen
+Standorts addiert werden. Ein unvollständig gemessener Umzugstag erhält keine
+erfundene vollständige Tagesaussicht.
 
 Die öffentliche Messabfrage ergänzt `current_location_total_energy` für das
 angefragte UTC-Fenster. Die Karte bevorzugt diesen Teilwert für „Ist heute“ und
@@ -69,6 +70,7 @@ wiederhergestellt wurde. Eine gültig wiederhergestellte Datei erlaubt den
 Wechsel, auch wenn die Diagnosekopie erhalten bleibt. Der verwendete
 [HA-Store-Vertrag](https://github.com/home-assistant/core/blob/2025.12.0/homeassistant/helpers/storage.py)
 ist bereits in der unterstützten Mindestversion vorhanden.
+Der Standortdialog löscht keine dieser Dateien.
 
 Die Config-Entry-Version bleibt 1.1. Die Speicher sind davon unabhängig
 versioniert. Die bestehenden Aufbewahrungs- und Größengrenzen gelten weiterhin

@@ -589,6 +589,10 @@
         "roof_id": {
           "name": "Dachfläche",
           "description": "Stabile Dach-ID für die optionale Kartenansicht; leer bedeutet Gesamtanlage."
+        },
+        "planning": {
+          "name": "Solarzeitfenster",
+          "description": "Laufdauer in ganzen Minuten, frühester Start und spätestes Ende mit UTC-Offset; optional bisheriger Start. Die Planung gilt für die Gesamtanlage."
         }
       }
     },
@@ -611,6 +615,10 @@
         "interval_windows": {
           "name": "Explizite Messintervalle",
           "description": "Bis zu 50 nicht überlappende absolute UTC-Fenster mit start und end; unvollständige Energie bleibt unbekannt."
+        },
+        "include_outlook": {
+          "name": "Tagesaussicht",
+          "description": "Belegte Messenergie seit Tagesbeginn, geschätzte Brücke seit letzter gemeinsamer Messung und Prognose ab jetzt getrennt ausgeben."
         }
       }
     },
@@ -676,6 +684,9 @@
     },
     "roof_not_found": {
       "message": "Die ausgewählte Dachfläche wurde nicht gefunden."
+    },
+    "invalid_planning_window": {
+      "message": "Der Planungszeitraum oder die Laufdauer ist ungültig."
     }
   },
   "entity": {

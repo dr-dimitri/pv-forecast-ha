@@ -25,6 +25,7 @@ from homeassistant.util import dt as dt_util
 from .card_data import UnknownRoofError, build_forecast_view
 from .const import CONF_TIME_ZONE, DOMAIN
 from .models import ForecastResult
+from .planning import plan_solar_window
 
 if TYPE_CHECKING:
     from . import PvForecastConfigEntry
@@ -32,12 +33,37 @@ if TYPE_CHECKING:
 SERVICE_GET_FORECAST = "get_forecast"
 CONF_CONFIG_ENTRY_ID = "config_entry_id"
 
+
+def _aware_datetime(value: object) -> datetime:
+    """Aktionsgrenzen brauchen einen eindeutigen absoluten Zeitpunkt."""
+    result = cv.datetime(value)
+    if result.utcoffset() is None:
+        raise vol.Invalid("Der Zeitpunkt benötigt einen UTC-Offset")
+    return result.astimezone(UTC)
+
+
+def _duration_minutes(value: object) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= 2880:
+        raise vol.Invalid("Die Laufdauer benötigt 1 bis 2880 ganze Minuten")
+    return value
+
+
+_PLANNING_SCHEMA = vol.Schema(
+    {
+        vol.Required("duration_minutes"): _duration_minutes,
+        vol.Required("earliest_start"): _aware_datetime,
+        vol.Required("latest_end"): _aware_datetime,
+        vol.Optional("previous_start"): _aware_datetime,
+    }
+)
+
 _GET_FORECAST_SCHEMA = vol.Schema(
     {
         vol.Required(CONF_CONFIG_ENTRY_ID): vol.All(cv.string, vol.Length(min=1)),
         vol.Optional("include_view", default=False): cv.boolean,
         vol.Optional("day", default="today"): vol.In(("today", "tomorrow")),
         vol.Optional("roof_id"): vol.All(cv.string, vol.Length(min=1)),
+        vol.Optional("planning"): _PLANNING_SCHEMA,
     }
 )
 
@@ -80,13 +106,30 @@ def async_setup_services(hass: HomeAssistant) -> None:
             coordinator.last_update_success_time,
             coordinator.last_update_success,
         )
+        now = dt_util.utcnow()
+        if "planning" in call.data:
+            try:
+                result["planning"] = plan_solar_window(
+                    coordinator.data,
+                    str(entry.data[CONF_TIME_ZONE]),
+                    now,
+                    coordinator.last_update_success_time,
+                    coordinator.last_update_success,
+                    **call.data["planning"],
+                )
+            except ValueError as err:
+                raise ServiceValidationError(
+                    "Der Planungszeitraum oder die Laufdauer ist ungültig.",
+                    translation_domain=DOMAIN,
+                    translation_key="invalid_planning_window",
+                ) from err
         if call.data["include_view"]:
             try:
                 result["view"] = build_forecast_view(
                     coordinator.data,
                     str(entry.data[CONF_TIME_ZONE]),
                     entry.title,
-                    dt_util.utcnow(),
+                    now,
                     coordinator.last_update_success_time,
                     coordinator.last_update_success,
                     day=call.data["day"],

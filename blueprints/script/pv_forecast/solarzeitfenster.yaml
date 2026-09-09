@@ -1,0 +1,63 @@
+blueprint:
+  name: PV Forecast – Solarzeitfenster anzeigen
+  description: >-
+    Ermittelt auf bewussten Aufruf ein zusammenhängendes Solarzeitfenster und
+    erstellt einen Hinweis in Home Assistant. Die Prognose beschreibt Erzeugung,
+    keinen verfügbaren Überschuss. Es werden keine Verbraucher geschaltet.
+  domain: script
+  input:
+    plant:
+      name: PV-Anlage
+      selector:
+        config_entry:
+          integration: pv_forecast
+    duration:
+      name: Laufdauer in Minuten
+      default: 120
+      selector:
+        number:
+          min: 1
+          max: 2880
+          step: 1
+          mode: box
+    earliest:
+      name: Frühester Start mit UTC-Offset
+      description: "Beispiel: 2026-09-09T10:00:00+02:00"
+      selector:
+        text:
+    latest:
+      name: Spätestes Ende mit UTC-Offset
+      description: Muss innerhalb der heutigen und morgigen Anlagenprognose liegen.
+      selector:
+        text:
+mode: single
+variables:
+  duration_value: !input duration
+sequence:
+  - action: pv_forecast.get_forecast
+    data:
+      config_entry_id: !input plant
+      planning:
+        duration_minutes: "{{ duration_value | int }}"
+        earliest_start: !input earliest
+        latest_end: !input latest
+    response_variable: solar
+  - choose:
+      - conditions: "{{ solar.planning.status == 'available' }}"
+        sequence:
+          - action: persistent_notification.create
+            data:
+              title: Solarzeitfenster
+              message: >-
+                Von {{ solar.planning.start }} bis {{ solar.planning.end }}
+                werden {{ solar.planning.energy_kwh | round(2) }} kWh PV-Erzeugung
+                erwartet. Zeitangaben enthalten ihren UTC-Offset.
+                Wetterabruf: {{ solar.planning.fetched_at }}.
+                Dies ist kein Nachweis verfügbaren Überschusses.
+    default:
+      - action: persistent_notification.create
+        data:
+          title: Kein belastbares Solarzeitfenster
+          message: >-
+            Die aktuellen Daten oder Zeitgrenzen erlauben keine Empfehlung.
+            Prüfe die PV-Forecast-Karte und den gewählten Zeitraum.

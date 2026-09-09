@@ -36,6 +36,8 @@ from .configuration import location_fingerprint
 from .const import CONF_INSTALLED_POWER_KWP, CONF_ROOFS, CONF_TIME_ZONE, DOMAIN
 from .measurement_windows import MeasurementWindow, async_interval_windows
 from .measurements import SourceConfig, SourceHistory, aggregate_energy
+from .models import ForecastResult
+from .outlook import build_day_outlook
 
 _LOGGER = logging.getLogger(__name__)
 STORAGE_VERSION = 2
@@ -297,6 +299,27 @@ class MeasurementManager:
             "unit": "kW" if history and history.source.kind == "power" else "kWh",
             "timestamp": reading.timestamp.isoformat() if reading else None,
         }
+
+    @callback
+    def day_outlook(
+        self,
+        forecast: ForecastResult,
+        now: datetime,
+        fetched_at: datetime | None,
+        last_update_success: bool,
+    ) -> dict[str, Any]:
+        """Die lokale Tagesaussicht mit denselben geprüften Messquellen bilden."""
+        return build_day_outlook(
+            forecast,
+            tuple(
+                history.current_location_view() for history in self._histories.values()
+            ),
+            self.timezone,
+            now,
+            fetched_at,
+            last_update_success,
+            identity_unresolved=bool(self.identity_unresolved),
+        )
 
     @callback
     def snapshot(self, start: datetime, end: datetime, now: datetime) -> dict[str, Any]:
