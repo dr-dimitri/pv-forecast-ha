@@ -552,7 +552,7 @@ class SourceHistory:
         }
 
     def snapshot(self, start: datetime, end: datetime, now: datetime) -> dict[str, Any]:
-        """Nur vollständig enthaltene Differenzen liefern, nie Randanteile erfinden."""
+        """Belegte Differenzen und exakte Nullanteile ohne Energieschätzung liefern."""
         start, end, now = _utc(start), _utc(end), _utc(now)
         if end <= start:
             raise ValueError("Das Messfenster muss eine positive Dauer haben")
@@ -574,16 +574,28 @@ class SourceHistory:
         }
         if invalid_days:
             flags.add("daily_correction")
-        selected = [
-            d
-            for d in overlapping
-            if start <= d.start
-            and d.end <= end
-            and (d.segment_id, self._local_day(d.start, d.segment_id))
-            not in invalid_days
-        ]
-        if any(d.start < start or d.end > end for d in overlapping):
-            flags.add("boundary_gap")
+        if any(
+            {"derived_energy", "gap"} <= delta.quality_flags for delta in overlapping
+        ):
+            # Ein Leistungsintegral belegt die über eine Lücke angenäherte
+            # Energie nicht; ein echter fortlaufender Zähler kann dies hingegen.
+            flags.add("derived_measurement_gap")
+        selected = []
+        for delta in overlapping:
+            left, right = max(start, delta.start), min(end, delta.end)
+            if {"derived_energy", "gap"} <= delta.quality_flags or (
+                delta.segment_id,
+                self._local_day(left, delta.segment_id),
+            ) in invalid_days:
+                continue
+            if left != delta.start or right != delta.end:
+                # Ein gesundes unverändertes Zählerintervall belegt auch in
+                # jedem Teilfenster exakt null. Positive Energie bleibt ungeteilt.
+                if delta.energy_kwh != 0 or delta.quality_flags - {"derived_energy"}:
+                    flags.add("boundary_gap")
+                    continue
+                delta = replace(delta, start=left, end=right)
+            selected.append(delta)
         for reading in self.readings:
             if (
                 start <= reading.timestamp <= end

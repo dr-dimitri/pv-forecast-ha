@@ -238,6 +238,21 @@ der Vortag unvollständig. Über eine Lücke kann ein fortlaufender Zähler eine
 Gesamtmenge belegen, aber keine beliebige stündliche Verteilung. Abdeckung und
 Qualitätsmarkierungen bleiben deshalb getrennt von der beobachteten Menge.
 
+Regelmäßig gemeldete, unveränderte Zählerstände belegen auch über eine Tagesgrenze
+hinweg exakt null Ertrag. Damit sind vollständige Tage möglich, wenn dein Sensor
+beispielsweise immer einige Sekunden nach der vollen Minute meldet. Positive
+Energiedifferenzen und Intervalle mit Ausfällen oder Resets werden nicht auf
+Stunden oder Tage aufgeteilt. Vom Integral-Helfer über eine Lücke hochgerechnete
+Energie wird aus den beobachteten Mengen ausgeschlossen; bereits irrtümlich
+bestätigte Archivbewertungen werden beim Laden nachvollziehbar korrigiert.
+
+Ein täglich zurückgesetzter Sensor kann den letzten Messabschnitt vor seinem
+Reset allein nicht abschließen. Er bleibt für belegte Messabschnitte nutzbar.
+Für vollständige Tagesberichte und Selbstkalibrierung verwende einen
+**fortlaufenden AC-Ertragszähler oder den KSEM-Assistenten**. Auch diese Quellen
+benötigen ausreichend regelmäßige Berichte; ausgefallene Meldungen werden nicht
+als nächtlicher Nullertrag ersetzt.
+
 Eine Entity-Umbenennung bleibt über ihre Registry-ID verbunden. Der Austausch
 einer Quelle oder ihrer Messgrenze beginnt ein neues Datensegment. Bei Entities
 ohne Registry-Identität ist ein Gerätewechsel unter identischem Entitynamen

@@ -293,7 +293,12 @@ class CalibrationState:
             date.fromisoformat(value) if isinstance(value, str) else value
             for value in excluded_dates
         }
-        ordered = sorted(days, key=lambda day: (day.target_date, day.record_id))
+        # Alte Standort-/Zeitzonenkontexte bleiben im Archiv erhalten. Gleiche
+        # lokale Zieltage daraus sind keine doppelten Tage der aktiven Anlage.
+        ordered = sorted(
+            (day for day in days if day.configuration_id == self.configuration_id),
+            key=lambda day: (day.target_date, day.record_id),
+        )
         by_id = {day.record_id: day for day in ordered}
         if len(by_id) != len(ordered) or len(
             {day.target_date for day in ordered}

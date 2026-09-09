@@ -8,6 +8,7 @@ from uuid import uuid4
 import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry, ConfigFlowResult
 from homeassistant.core import HomeAssistant
+from homeassistant.data_entry_flow import AbortFlow
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.selector import (
@@ -168,12 +169,20 @@ class MeasurementFlowMixin:
     _pending_device: str | None = None
     _measurement_save_error = "measurement_helper_failed"
 
+    def _check_options_unchanged(self) -> None:
+        """Im Erstsetup existiert noch keine parallel veränderbare Konfiguration."""
+
     async def _async_save_measurement_helpers(self) -> bool:
         """Erst beim Abschluss aus bestätigten Geräteentwürfen native Helfer machen."""
+        self._check_options_unchanged()
         try:
             sources = await async_resolve_measurement_helpers(
-                self.hass, self._measurement_sources()
+                self.hass,
+                self._measurement_sources(),
+                check_current=self._check_options_unchanged,
             )
+        except AbortFlow:
+            raise
         except (ValueError, TimeoutError, HomeAssistantError) as err:
             self._measurement_save_error = (
                 str(err)

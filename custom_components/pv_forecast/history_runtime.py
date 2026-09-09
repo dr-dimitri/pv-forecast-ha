@@ -317,11 +317,17 @@ class ArchiveManager:
             _LOGGER.exception("Das lokale Prognosearchiv ist nicht lesbar")
             return
         self._loaded = True
+        # Auch ohne verbliebene Rohpunkte widerlegt eine gespeicherte
+        # Integral-Lücke den früheren Messbeleg. Vor jedem Lernstart korrigieren.
+        if self._archive.invalidate_derived_gaps(dt_util.utcnow()):
+            self._dirty = True
         self._observe(dt_util.utcnow())
         if self.enabled:
             self._running = True
             self._cancel_listener = self.coordinator.async_add_listener(self._updated)
             self._updated()
+            if self._dirty:
+                self._schedule_save()
         elif self._archive.records and self._archive.note_configuration(
             _configuration_id(self.entry), dt_util.utcnow()
         ):

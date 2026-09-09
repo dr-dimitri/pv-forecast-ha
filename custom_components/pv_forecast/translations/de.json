@@ -96,14 +96,14 @@
         },
         "data_description": {
           "scope": "Zum Beispiel „Gesamtanlage, AC-Ausgang ohne Batterie“ oder „Wechselrichter Garage“. Der Name und die Einheit eines Sensors beweisen seine Messgrenze nicht.",
-          "kind": "Fortlaufende und tägliche Energiezähler benötigen Wh/kWh und total oder total_increasing. Leistung benötigt W/kW und measurement.",
+          "kind": "Fortlaufende und tägliche Energiezähler benötigen Wh/kWh und total oder total_increasing. Leistung benötigt W/kW und measurement. Für vollständige Tagesberichte und Lernen verwende einen fortlaufenden AC-Ertragszähler oder den KSEM-Assistenten. Ein täglicher Reset allein belegt den endgültigen Vortagsertrag nicht.",
           "max_interval_minutes": "Danach gilt die Zeitabdeckung als lückenhaft. Ein Summenertrag über eine Lücke wird nicht auf Stunden verteilt.",
           "derived_energy": "Ein Integral-Helfer wird, soweit erkennbar, automatisch markiert. Seine Ausgangsmessung und Lücken begrenzen die Aussagekraft."
         }
       },
       "confirm_measurement": {
         "title": "Quelle und Messgrenze prüfen",
-        "description": "**Quelle:** {entity} (`{entity_id}`)\n\n**Einheit:** {unit}\n\n**Messart:** {kind}\n\n**Messgrenze:** {scope}\n\n**Letzter gültiger Wert:** {reading}\n\n**Abgeleitete Energie:** {derived}\n\nEine Änderung der Quelle, Messart oder Messgrenze beginnt ein neues Datensegment. Fehlende Werte bleiben unbekannt.",
+        "description": "**Quelle:** {entity} (`{entity_id}`)\n\n**Einheit:** {unit}\n\n**Messart:** {kind}\n\n**Messgrenze:** {scope}\n\n**Letzter gültiger Wert:** {reading}\n\n**Abgeleitete Energie:** {derived}\n\nEine Änderung der Quelle, Messart oder Messgrenze beginnt ein neues Datensegment. Fehlende Werte bleiben unbekannt.\n\nBei täglich zurückgesetzten Zählern bleibt ein Vortag ohne belegten Abschluss unvollständig. Für Tagesberichte und Lernen empfehlen wir einen fortlaufenden AC-Ertragszähler oder den KSEM-Assistenten.",
         "data": {
           "confirmed_pv": "Ich bestätige reine AC-PV-Erzeugung ohne Netzexport, Verbrauch oder Batterieentladung.",
           "confirmed_disjoint": "Die Energiequellen überschneiden sich nicht: kein Gesamtzähler zusammen mit seinen Teilzählern."
@@ -432,14 +432,14 @@
         },
         "data_description": {
           "scope": "Zum Beispiel „Gesamtanlage, AC-Ausgang ohne Batterie“ oder „Wechselrichter Garage“. Der Name und die Einheit eines Sensors beweisen seine Messgrenze nicht.",
-          "kind": "Fortlaufende und tägliche Energiezähler benötigen Wh/kWh und total oder total_increasing. Leistung benötigt W/kW und measurement.",
+          "kind": "Fortlaufende und tägliche Energiezähler benötigen Wh/kWh und total oder total_increasing. Leistung benötigt W/kW und measurement. Für vollständige Tagesberichte und Lernen verwende einen fortlaufenden AC-Ertragszähler oder den KSEM-Assistenten. Ein täglicher Reset allein belegt den endgültigen Vortagsertrag nicht.",
           "max_interval_minutes": "Danach gilt die Zeitabdeckung als lückenhaft. Ein Summenertrag über eine Lücke wird nicht auf Stunden verteilt.",
           "derived_energy": "Ein Integral-Helfer wird, soweit erkennbar, automatisch markiert. Seine Ausgangsmessung und Lücken begrenzen die Aussagekraft."
         }
       },
       "confirm_measurement": {
         "title": "Quelle und Messgrenze prüfen",
-        "description": "**Quelle:** {entity} (`{entity_id}`)\n\n**Einheit:** {unit}\n\n**Messart:** {kind}\n\n**Messgrenze:** {scope}\n\n**Letzter gültiger Wert:** {reading}\n\n**Abgeleitete Energie:** {derived}\n\nEine Änderung der Quelle, Messart oder Messgrenze beginnt ein neues Datensegment. Fehlende Werte bleiben unbekannt.",
+        "description": "**Quelle:** {entity} (`{entity_id}`)\n\n**Einheit:** {unit}\n\n**Messart:** {kind}\n\n**Messgrenze:** {scope}\n\n**Letzter gültiger Wert:** {reading}\n\n**Abgeleitete Energie:** {derived}\n\nEine Änderung der Quelle, Messart oder Messgrenze beginnt ein neues Datensegment. Fehlende Werte bleiben unbekannt.\n\nBei täglich zurückgesetzten Zählern bleibt ein Vortag ohne belegten Abschluss unvollständig. Für Tagesberichte und Lernen empfehlen wir einen fortlaufenden AC-Ertragszähler oder den KSEM-Assistenten.",
         "data": {
           "confirmed_pv": "Ich bestätige reine AC-PV-Erzeugung ohne Netzexport, Verbrauch oder Batterieentladung.",
           "confirmed_disjoint": "Die Energiequellen überschneiden sich nicht: kein Gesamtzähler zusammen mit seinen Teilzählern."
@@ -549,7 +549,7 @@
       },
       "calibration_settings": {
         "title": "Modus der Selbstkalibrierung",
-        "description": "„Aus“ verwendet das unveränderte Grundmodell. „Beobachten“ sammelt und prüft einen Faktor, ohne ihn anzuwenden. „Automatisch anwenden“ verwendet ihn erst nach erfolgreicher Prüfung.\n\nBeobachtung und Automatik benötigen ein ausdrücklich aktiviertes Prognosearchiv und mindestens eine bestätigte Energiequelle für AC-PV-Erzeugung. Richte diese bei Bedarf zuvor in den Anlagenoptionen ein. Leistungssensoren allein genügen nicht.\n\nGeprüft wird die Tagesprognose vom Vortag, 18 Uhr: zunächst 30 gültige Lerntage, danach mindestens 14 spätere Prüftage. Freigabe erfordert mindestens 5 % geringeren mittleren absoluten Fehler (MAE), ohne mehr als 5 % Verschlechterung des 90%-Quantils großer Tagesfehler. Der Faktor bleibt zwischen 0,5 und 1,5. Nennleistung, Wirkungsgrad und AC-Limit bleiben erhalten.",
+        "description": "„Aus“ verwendet das unveränderte Grundmodell. „Beobachten“ sammelt und prüft einen Faktor, ohne ihn anzuwenden. „Automatisch anwenden“ verwendet ihn erst nach erfolgreicher Prüfung.\n\nBeobachtung und Automatik benötigen ein ausdrücklich aktiviertes Prognosearchiv und mindestens eine bestätigte Energiequelle für AC-PV-Erzeugung. Richte diese bei Bedarf zuvor in den Anlagenoptionen ein. Leistungssensoren allein genügen nicht.\n\nGeprüft wird die Tagesprognose vom Vortag, 18 Uhr: zunächst 30 gültige Lerntage, danach mindestens 14 spätere Prüftage. Freigabe erfordert mindestens 5 % geringeren mittleren absoluten Fehler (MAE), ohne mehr als 5 % Verschlechterung des 90%-Quantils großer Tagesfehler. Der Faktor bleibt zwischen 0,5 und 1,5. Nennleistung, Wirkungsgrad und AC-Limit bleiben erhalten.\n\nTäglich zurückgesetzte Zähler allein belegen keinen vollständigen Vortag. Verwende für Lerntage einen fortlaufenden AC-Ertragszähler oder den KSEM-Assistenten. Regelmäßig gemeldete unveränderte Nachtwerte können Tagesgrenzen abdecken; Meldeausfälle bleiben Lücken.",
         "data": {
           "calibration_mode": "Modus"
         }
@@ -737,7 +737,8 @@
       "invalid_horizon_roof": "Bitte eine vorhandene Dachfläche auswählen.",
       "invalid_dashboard": "Bei aktivem Dashboard bitte einen Titel mit 1 bis 80 Zeichen angeben.",
       "measurement_device_unavailable": "Das Gerät ist nicht mehr verfügbar. Prüfe seine Integration und wähle es erneut aus.",
-      "measurement_helper_failed": "Der Energiezähler konnte nicht eingerichtet werden. Bitte prüfe die Messquelle und versuche es erneut."
+      "measurement_helper_failed": "Der Energiezähler konnte nicht eingerichtet werden. Bitte prüfe die Messquelle und versuche es erneut.",
+      "last_roof_required": "Mindestens eine Dachfläche muss erhalten bleiben. Füge zuerst ein neues Dach hinzu. Wenn du die PV-Anlage nicht mehr verwenden möchtest, entferne ihren Integrationseintrag."
     },
     "abort": {
       "reconfigure_entry_changed": "Die Anlage wurde während der Bearbeitung anderweitig geändert. Bitte starte die Bearbeitung erneut."

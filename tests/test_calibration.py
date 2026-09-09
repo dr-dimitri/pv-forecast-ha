@@ -256,6 +256,43 @@ def test_old_or_reset_days_do_not_count_toward_training() -> None:
     assert state.candidate is None
 
 
+def test_other_configuration_cannot_complete_or_duplicate_training_days() -> None:
+    """Erhaltene Altkontexte vervollständigen keine aktive Lernstichprobe."""
+    days = training_days()[:29]
+    previous = replace(
+        days[-1], record_id="previous-location", configuration_id="old-location"
+    )
+    state = CalibrationState("plant", SEGMENT)
+    state.update([*days, previous], LEARNED, "plant", SEGMENT)
+    assert state.training_days == 29
+    assert state.candidate is None
+
+
+def test_duplicate_day_in_active_configuration_remains_invalid() -> None:
+    """Die Kontexttrennung darf tatsächlich doppelte aktive Tage nicht verstecken."""
+    days = training_days()
+    duplicate = replace(days[-1], record_id="duplicate-active-day")
+    state = CalibrationState("plant", SEGMENT)
+    with pytest.raises(ValueError, match="genau einen Vortagesstand"):
+        state.update([*days, duplicate], LEARNED, "plant", SEGMENT)
+
+
+def test_old_context_keeps_approval_but_cannot_replace_its_evidence() -> None:
+    """Alte Tagesduplikate sind harmlos; fehlende aktive Belege entziehen Freigaben."""
+    state, days, now = approved()
+    previous = replace(
+        days[0], record_id="previous-location", configuration_id="old-location"
+    )
+    state.update([*days, previous], now, "plant", SEGMENT)
+    assert state.status == "approved"
+    assert state.approved_factor == 0.8
+    days[0] = replace(days[0], configuration_id="old-location")
+    state.update([*days, previous], now + timedelta(minutes=1), "plant", SEGMENT)
+    assert state.status == "invalidated"
+    assert state.reasons == ["evidence_changed"]
+    assert state.approved_factor == 1
+
+
 def test_only_prospectively_frozen_candidate_days_can_validate() -> None:
     """Nachträglich berechnete Kandidatenwerte liefern keine Prüftage."""
     state, days = trained()

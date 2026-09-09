@@ -16,6 +16,7 @@ from custom_components.pv_forecast.calibration_runtime import (
     async_delete_calibration_data,
 )
 from custom_components.pv_forecast.coordinator import PvForecastCoordinator
+from custom_components.pv_forecast.history import HistoryArchive
 from custom_components.pv_forecast.history_runtime import (
     ArchiveManager,
     _configuration_id,
@@ -24,6 +25,7 @@ from custom_components.pv_forecast.history_runtime import (
 )
 
 from .helpers import roof, weather
+from .test_history import forecast
 from .test_history_runtime import NOW, _Coordinator, _entry, _source
 
 
@@ -83,6 +85,73 @@ async def test_restart_preserves_learning_segment(hass, freezer):
     stored = await manager._store.async_load()
     assert stored["state"]["segment_start"] == began.isoformat()
     assert coordinator.listeners == []
+
+
+@pytest.mark.parametrize("mode", ["observe", "auto", "off"])
+async def test_restart_with_same_local_target_in_old_and_new_timezones(
+    hass, freezer, mode
+):
+    """Ein erhaltenes Archiv darf nach Zeitzonenwechsel den Start nicht sperren."""
+    entry, coordinator, history, manager = _managers(hass, mode=mode)
+    source = _source()
+    old_time = NOW.replace(hour=16)
+    new_time = NOW.replace(hour=18)
+    old = HistoryArchive("Europe/Berlin")
+    old.capture(
+        forecast(NOW.date(), timezone="Europe/Berlin"),
+        old_time,
+        old_time,
+        "previous-configuration",
+        [source],
+    )
+    archive = HistoryArchive.from_dict(old.to_dict(), "UTC")
+    archive.note_configuration(_configuration_id(entry), NOW)
+    coordinator.data = coordinator.raw_data = forecast(NOW.date(), timezone="UTC")
+    coordinator.last_update_success_time = new_time
+    archive.capture(
+        coordinator.data,
+        new_time,
+        new_time,
+        _configuration_id(entry),
+        [source],
+    )
+    daily = [
+        record
+        for record in archive.records.values()
+        if record.horizon == "daily_previous_18"
+    ]
+    assert len(daily) == 2
+    assert daily[0].target_date == daily[1].target_date
+    assert daily[0].start != daily[1].start
+    frozen_records = {
+        record.record_id: record.to_dict() for record in archive.records.values()
+    }
+    await history._store.async_save(
+        {"archive": archive.to_dict(), "last_fetched_at": new_time.isoformat()}
+    )
+    for minute in (5, 10):
+        freezer.move_to(new_time + timedelta(minutes=minute))
+        try:
+            await history.async_start()
+            await manager.async_start()
+            assert manager.snapshot()["status"] == (
+                "off" if mode == "off" else "learning"
+            )
+            assert manager.snapshot()["training_days"] == 0
+            assert coordinator.calibration_factor == 1
+            assert {
+                record.record_id: record.to_dict()
+                for record in history._archive.records.values()
+            } == frozen_records
+        finally:
+            await manager.async_stop()
+            await history.async_stop()
+        assert coordinator.listeners == []
+        history = ArchiveManager(hass, entry, coordinator, None)
+        manager = CalibrationManager(hass, entry, coordinator, history)
+        entry.runtime_data = SimpleNamespace(
+            coordinator=coordinator, history=history, calibration=manager
+        )
 
 
 @pytest.mark.parametrize("change", ["location", "horizon"])
