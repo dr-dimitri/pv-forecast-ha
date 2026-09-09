@@ -117,7 +117,7 @@ function inspectCard(card) {
 }
 
 async function runCase(browser, origin, test) {
-  const page = await browser.newPage({ viewport: { width: test.viewport, height: 1000 } });
+  const page = await browser.newPage({ viewport: { width: test.viewport, height: 1000 }, hasTouch: Boolean(test.touch), isMobile: Boolean(test.touch) });
   const errors = [];
   page.on("pageerror", (error) => errors.push(error.message));
   // Nur synthetische Fixture-Werte werden für den Belastungsfall verändert.
@@ -142,12 +142,13 @@ async function runCase(browser, origin, test) {
     const closed = await card.evaluate(inspectCard);
     const screenshot = `${prefix}-${test.name}.png`;
     await page.screenshot({ path: path.join(output, screenshot), fullPage: true });
-    if (test.representative) fs.copyFileSync(path.join(output, screenshot), path.join(root, "docs/images", screenshot));
+    if (test.representative && Number(prefix.split("-").at(-1)) < 113) fs.copyFileSync(path.join(output, screenshot), path.join(root, "docs/images", screenshot));
     await card.locator("details").evaluateAll((items) => { for (const item of items) item.open = true; });
     await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
     const expanded = await card.evaluate(inspectCard);
     const navigation = Number(prefix.split("-").at(-1)) >= 112 ? await checkNavigation(page, card, test) : null;
-    return { navigation, name: test.name, fixtureOnly: true, errors, closed, expanded, screenshot: path.join(output, screenshot) };
+    const chart = Number(prefix.split("-").at(-1)) >= 113 ? await checkChart(page, card, test) : null;
+    return { chart, navigation, name: test.name, fixtureOnly: true, errors, closed, expanded, screenshot: path.join(output, screenshot) };
   } finally { await page.close(); }
 }
 
@@ -169,7 +170,7 @@ async function checkNavigation(page, card, test) {
   assert.equal(structure.day, expectedDay);
   assert.ok(structure.chart.endsWith(expectedDay === "tomorrow" ? "Morgen" : "Heute"));
   assert.deepEqual(structure.todayLabels, ["Rest heute", "Ist heute"]);
-  assert.match(structure.today, /Heutiger Stand.*10\. Sept/);
+  assert.match(structure.today, test.scenario === "fold" ? /Heutiger Stand.*25\. Okt/ : /Heutiger Stand.*10\. Sept/);
   assert.deepEqual(structure.headings, test.scenario === "roof" ? ["Tagesübersicht", "Vergleichen"] : ["Tagesübersicht", "Planen", "Vergleichen"]);
   if (test.scenario === "roof") assert.equal(structure.roof, "south");
   for (const button of await card.locator("[data-section]").all()) {
@@ -216,6 +217,136 @@ async function checkNavigation(page, card, test) {
   return { structure, preserved: after, scrollOwner: before.scrollOwner };
 }
 
+// Echte Browserereignisse prüfen die Auswahl unabhängig von Backendberechnungen.
+async function checkChart(page, card, test) {
+  const chart = card.locator("#interval-chart");
+  const detail = card.locator("#interval-detail");
+  const readDetail = () => detail.evaluate((element) => ({
+    text: element.textContent.replace(/\s+/g, " ").trim(),
+    stamps: element.dataset.start ? [element.dataset.start, element.dataset.end] : [...element.querySelectorAll("time[datetime]")].map((item) => item.getAttribute("datetime")),
+  }));
+  const calls = await page.evaluate(() => window.demo.calls.length);
+  await card.locator("#chart-explore").click();
+  assert.equal(await card.evaluate((element) => element.shadowRoot.activeElement?.id), "interval-chart");
+  await chart.press("Home");
+  await chart.press("Enter");
+  const first = await readDetail();
+  assert.match(first.text, /0\s*kWh/, "Eine belegte Null bleibt als null kWh erkennbar");
+  await card.locator("#interval-next").click();
+  assert.notDeepEqual(await readDetail(), first);
+  await card.locator("#interval-prev").click();
+  assert.deepEqual(await readDetail(), first);
+  await chart.press("End");
+  const last = await readDetail();
+  assert.notDeepEqual(last, first);
+  await chart.press("ArrowRight");
+  assert.deepEqual(await readDetail(), last, "Der letzte Randpunkt bleibt beim letzten Intervall");
+  await chart.press("ArrowLeft");
+  assert.notDeepEqual(await readDetail(), last);
+  const plot = await chart.evaluate((element) => {
+    const line = element.querySelector(".grid");
+    const box = element.getBoundingClientRect();
+    return { x: Number(line.getAttribute("x2")) / element.viewBox.baseVal.width * box.width, y: box.height / 2 };
+  });
+  await chart.click({ position: plot });
+  assert.deepEqual(await readDetail(), last, "Klick auf das rechte Plotende wählt das letzte Intervall");
+  await chart.press("Home");
+  let special = null;
+  if (test.scenario === "fold") {
+    await chart.press("ArrowRight"); await chart.press("ArrowRight");
+    const firstFold = await readDetail();
+    await chart.press("ArrowRight");
+    const secondFold = await readDetail();
+    assert.match(firstFold.text, /02:00\s+UTC\+02:00/);
+    assert.match(secondFold.text, /02:00\s+UTC\+01:00/);
+    assert.notDeepEqual(firstFold, secondFold);
+    special = { firstFold, secondFold };
+  } else if (test.scenario === "kolkata") {
+    const halfHour = await readDetail();
+    assert.match(halfHour.text, /UTC\+05:30/);
+    assert.equal(Date.parse(halfHour.stamps[1]) - Date.parse(halfHour.stamps[0]), 1_800_000);
+    special = { halfHour };
+  } else if (test.scenario === "gaps") {
+    for (let index = 0; index < 9; index++) await chart.press("ArrowRight");
+    const gap = await readDetail();
+    assert.match(gap.text, /fehlend|unvollständig|nicht verfügbar/i);
+    assert.notEqual(gap.text, first.text);
+    special = { gap };
+  }
+  const selected = await readDetail();
+  await card.evaluate((element) => element._render());
+  assert.deepEqual(await readDetail(), selected, "Lokale Aktualisierung bewahrt die Intervallauswahl");
+  let refreshed = null;
+  if (test.scenario !== "gaps") {
+    refreshed = await card.evaluate((element) => {
+      const original = element._state;
+      const selected = element.shadowRoot.getElementById("interval-detail").dataset.start;
+      element._state = { ...original, forecast: { ...original.forecast, data: { ...original.forecast.data,
+        intervals: original.forecast.data.intervals.map((interval) => interval.start === selected ? { ...interval, energy_kwh: 2.22 } : interval) } } };
+      element._render();
+      const updated = { start: element.shadowRoot.getElementById("interval-detail").dataset.start, text: element.shadowRoot.getElementById("interval-detail").textContent };
+      element._state = original;
+      element._render();
+      return { selected, updated };
+    });
+    assert.equal(refreshed.updated.start, refreshed.selected);
+    assert.match(refreshed.updated.text, /2,22\s*kWh/, "Ein neuer Prognosewert erscheint im weiter ausgewählten Intervall");
+  }
+  const inspection = await card.evaluate(inspectCard);
+  await card.locator("#interval-next").focus();
+  await page.keyboard.press("Escape");
+  assert.equal(await card.evaluate((element) => element.shadowRoot.activeElement?.id), "interval-chart");
+  assert.equal(await detail.count(), 0);
+  await chart.press("Enter");
+  await detail.waitFor();
+  await card.locator("#interval-close").click();
+  assert.equal(await detail.count(), 0);
+  let touchScroll = null;
+  if (test.touch) {
+    await chart.scrollIntoViewIfNeeded();
+    const box = await chart.boundingBox();
+    await page.touchscreen.tap(box.x + box.width * 0.55, box.y + box.height * 0.5);
+    await detail.waitFor();
+    await card.locator("#interval-close").click();
+    await chart.evaluate((element) => element.scrollIntoView({ block: "center" }));
+    const bounds = await chart.boundingBox();
+    const before = await page.evaluate(() => document.scrollingElement.scrollTop);
+    const session = await page.context().newCDPSession(page);
+    const point = { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 };
+    await session.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [point] });
+    for (let step = 1; step <= 5; step++) {
+      await session.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ ...point, y: point.y - step * 30 }] });
+      await page.evaluate(() => new Promise(requestAnimationFrame));
+    }
+    await session.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    const after = await page.evaluate(() => document.scrollingElement.scrollTop);
+    await chart.evaluate((element) => element.scrollIntoView({ block: "center" }));
+    const zoomBounds = await chart.boundingBox();
+    const scaleBefore = await page.evaluate(() => visualViewport.scale);
+    await session.send("Input.synthesizePinchGesture", { x: zoomBounds.x + zoomBounds.width / 2, y: zoomBounds.y + zoomBounds.height / 2, scaleFactor: 1.5, gestureSourceType: "touch", relativeSpeed: 400 });
+    const scaleAfter = await page.evaluate(() => visualViewport.scale);
+    await session.detach();
+    assert.ok(scaleAfter > scaleBefore + 0.1, "Pinch-Zoom über dem Diagramm bleibt verfügbar");
+    assert.ok(after > before + 20, "Vertikale Touchbewegung über dem Diagramm scrollt die Seite");
+    touchScroll = { before, after, scaleBefore, scaleAfter };
+  }
+  assert.equal(await page.evaluate(() => window.demo.calls.length), calls, "Diagrammbedienung verursacht keine zusätzlichen Leseaufrufe");
+  if (test.representative) {
+    await card.locator("details").evaluateAll((items) => { for (const item of items) item.open = false; });
+    await chart.press("Home");
+    for (let index = 0; index < 12; index++) await chart.press("ArrowRight");
+    await page.evaluate(() => window.scrollTo(0, 0));
+    const screenshot = `${prefix}-${test.name}-detail.png`;
+    await page.screenshot({ path: path.join(output, screenshot), fullPage: true });
+    fs.copyFileSync(path.join(output, screenshot), path.join(root, "docs/images", screenshot));
+  }
+  const nextDay = test.day === "tomorrow" ? "today" : "tomorrow";
+  await card.locator(`[data-day="${nextDay}"]`).click();
+  assert.equal(await detail.count(), 0, "Eine Tagesänderung verwirft die alte Intervallauswahl");
+  return { first, last, special, refreshed, inspection, touchScroll, readCalls: calls };
+}
+
 async function main() {
   fs.mkdirSync(output, { recursive: true });
   fs.mkdirSync(path.join(root, "docs/images"), { recursive: true });
@@ -240,17 +371,25 @@ async function main() {
       { name: "360-tomorrow", viewport: 360, cardWidth: 360, theme: "light", day: "tomorrow" },
       { name: "360-roof", viewport: 360, cardWidth: 360, theme: "dark", scenario: "roof" },
     );
+    if (Number(prefix.split("-").at(-1)) >= 113) matrix.push(
+      { name: "360-fold", viewport: 360, cardWidth: 360, theme: "light", scenario: "fold" },
+      { name: "360-kolkata", viewport: 360, cardWidth: 360, theme: "light", scenario: "kolkata" },
+      { name: "360-gaps", viewport: 360, cardWidth: 360, theme: "light", scenario: "gaps" },
+      { name: "360-touch", viewport: 360, cardWidth: 360, theme: "light", touch: true },
+    );
+    const selectedCases = matrix.filter((test) => !option("case") || test.name === option("case"));
+    assert.ok(selectedCases.length, "Unbekannter Browserfall");
     const results = [];
-    for (const test of matrix) {
+    for (const test of selectedCases) {
       const result = await runCase(browser, origin, test);
       results.push(result);
-      const failures = result.errors.length + result.closed.findings.length + result.expanded.findings.length;
+      const failures = result.errors.length + result.closed.findings.length + result.expanded.findings.length + (result.chart?.inspection.findings.length || 0);
       console.log(`${test.name}: ${failures ? `${failures} Befunde` : "bestanden"}`);
     }
     fs.writeFileSync(path.join(output, "results.json"), JSON.stringify({ limitation: "Synthetische Offline-Demo; keine Prüfung des nativen HA-Frontends oder realer Messdaten.", results }, null, 2));
-    const failures = results.flatMap((result) => [...result.errors, ...result.closed.findings, ...result.expanded.findings].map((finding) => ({ case: result.name, finding })));
+    const failures = results.flatMap((result) => [...result.errors, ...result.closed.findings, ...result.expanded.findings, ...(result.chart?.inspection.findings || [])].map((finding) => ({ case: result.name, finding })));
     assert.equal(failures.length, 0, JSON.stringify(failures.slice(0, 25), null, 2));
-    console.log(`${matrix.length} Browserfälle bestanden. Messwerte und alle Bilder: ${output}`);
+    console.log(`${selectedCases.length} Browserfälle bestanden. Messwerte und alle Bilder: ${output}`);
   } finally {
     if (browser) await browser.close();
     await new Promise((resolve) => server.close(resolve));
