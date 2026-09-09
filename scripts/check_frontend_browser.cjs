@@ -84,6 +84,7 @@ function inspectCard(card) {
     const bounds = element.getBoundingClientRect();
     if ((!isSvg || element.matches("text, tspan")) && bounds.width > 0 && (bounds.left < cardBounds.left - 1 || bounds.right > cardBounds.right + 1)) findings.push({ kind: "overflow", element: label(element), left: bounds.left, right: bounds.right, cardRight: cardBounds.right });
     const directText = [...element.childNodes].some((node) => node.nodeType === Node.TEXT_NODE && node.textContent.trim());
+    if (element.matches(".kpi dd") && element.scrollWidth > element.clientWidth + 1) findings.push({ kind: "kpi-overflow", element: label(element), width: element.clientWidth, textWidth: element.scrollWidth });
     if (!directText && !element.matches("input, select")) continue;
     if (!bounds.width || !bounds.height) continue;
     const fontSize = parseFloat(style.fontSize) * (isSvg ? Math.abs(element.getScreenCTM()?.a || 1) : 1);
@@ -124,7 +125,7 @@ async function runCase(browser, origin, test) {
     const source = fs.readFileSync(path.join(root, "tests/frontend/fixtures.mjs"), "utf8")
       .replaceAll('"Sonnenhaus"', '"Photovoltaikanlage am Mehrgenerationenhaus mit Werkstatt und außergewöhnlich langem Anlagennamen"')
       .replaceAll('"Süddach"', '"Südostdachfläche des Mehrgenerationenhauses mit Werkstattanbau"')
-      .replaceAll("23.14", "12345.67").replaceAll("26.9", "23456.78").replaceAll("10.76", "9876.54")
+      .replaceAll("23.14", String(test.largeToday ?? 12345.67)).replaceAll("26.9", String(test.largeTomorrow ?? 23456.78)).replaceAll("10.76", "9876.54")
       .replace(/const HOURS = (\[[^\n]+\]);/, "const HOURS = $1.map((value) => value * 1000);");
     return route.fulfill({ contentType: "text/javascript", body: source });
   });
@@ -167,6 +168,7 @@ async function main() {
       { name: "360-long-large", viewport: 360, cardWidth: 360, theme: "light", stress: true },
       { name: "1440-long-large", viewport: 1440, cardWidth: 1440, theme: "dark", stress: true },
       { name: "360-panel", viewport: 360, cardWidth: 360, theme: "light", panel: true },
+      { name: "360-panel-kpi-boundaries", viewport: 360, cardWidth: 360, theme: "light", panel: true, stress: true, largeToday: 123.45, largeTomorrow: 123456 },
     );
     const results = [];
     for (const test of matrix) {

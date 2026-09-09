@@ -27,3 +27,13 @@ Im Review gefundene Kontrast- und Umbruchprobleme wurden behoben: sekundäre
 Texte erhalten etwas mehr Textfarbenanteil, die Dachauswahl bleibt innerhalb
 ihrer Grid-Spalte und lange Zahlen erhalten ein zweispaltenbreites Kennzahlenfeld.
 So wird keine einzelne Nachkommastelle in eine neue Zeile verschoben.
+
+Abgeschlossen: 14 Browserfälle jeweils mit geschlossenen und geöffneten Details,
+ohne Überlauf-/Schrift-/Kontrastbefund. Zusätzlicher Grenzfall im mobilen Panel:
+`123,45 kWh` lässt nur die Einheit umbrechen. 1.173 Python- und 52 Frontend-Tests
+sowie Ruff, Black und Übersetzungsabgleich bestehen. Das unabhängige Review
+wurde nach Behebung der Browserbefunde wiederholt.
+
+![Mobile Karte](../images/ui-111-360-light.png)
+![Abweichendes Theme](../images/ui-111-768-custom.png)
+![Breite Ansicht in Dunkel](../images/ui-111-1440-dark.png)
