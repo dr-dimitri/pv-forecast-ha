@@ -3,8 +3,8 @@
 ## Aktuell ausgeliefertes Schema
 
 Config Entries verwenden Version **1.1**. Ein Entry beschreibt eine PV-Anlage;
-Standortdaten liegen in `data`, Dachflächen und das optionale gemeinsame
-Wechselrichterlimit in `options`. Die UI-Eingabe `system_efficiency` wird als
+Standortdaten liegen in `data`, Dachflächen, das optionale gemeinsame
+Wechselrichterlimit und optionale `measurement_sources` in `options`. Die UI-Eingabe `system_efficiency` wird als
 Verlust-Prozent in `loss_factor` gespeichert. Dies ist der vereinbarte
 Speichervertrag und keine zu beseitigende Altlast.
 
@@ -46,3 +46,17 @@ Eine Änderung von Anlage, Messgrenze oder Modell muss in der Historie erkennbar
 bleiben und gegebenenfalls ein neues Lernsegment beginnen. Bestehende Daten
 werden nicht rückwirkend so umgedeutet, als wären sie mit der neuen Konfiguration
 entstanden.
+
+## Messdatenspeicher ab #26
+
+Die optionale Quellenliste ergänzt Schema 1.1 kompatibel. Ohne sie wird kein
+Messpfad aktiviert; vorhandene Konfigurationen benötigen keine Migration.
+Jede Quelle hat eine stabile `source_id`, eine bestätigte Entity-Registry-ID
+(soweit vorhanden), Messart, Messgrenze und explizite Herkunftsbestätigungen.
+
+Die lokal erfassten Messdaten verwenden einen eigenen HA-Store Version 1
+mit dem Schlüssel `pv_forecast.measurements.<entry_id>`. Sie werden höchstens
+sieben Tage und bis zu 20.000 Messpunkte sowie 20.000 zugehörige
+Zählerdifferenzen pro Quelle vorgehalten. Quellenwechsel
+werden als neue Segmente geführt und nicht mit alten Messreihen verrechnet.
+Der Datenvertrag ist in [Messdaten](messdaten.md) beschrieben.
