@@ -574,11 +574,18 @@ class SourceHistory:
         }
         if invalid_days:
             flags.add("daily_correction")
+        if any(
+            {"derived_energy", "gap"} <= delta.quality_flags for delta in overlapping
+        ):
+            # Ein Leistungsintegral belegt die über eine Lücke angenäherte
+            # Energie nicht; ein echter fortlaufender Zähler kann dies hingegen.
+            flags.add("derived_measurement_gap")
         selected = [
             d
             for d in overlapping
             if start <= d.start
             and d.end <= end
+            and not {"derived_energy", "gap"} <= d.quality_flags
             and (d.segment_id, self._local_day(d.start, d.segment_id))
             not in invalid_days
         ]
