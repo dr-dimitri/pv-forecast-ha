@@ -74,6 +74,11 @@ from .geocoding import (
     NominatimClient,
 )
 from .history_configuration import HistoryFlowMixin
+from .horizon import (
+    CONF_FORECAST_DAYS,
+    forecast_days_from_options,
+    validate_forecast_days,
+)
 from .inverter_configuration import InverterGroupFlowMixin, groups_for_remaining_roofs
 from .measurement_configuration import MeasurementFlowMixin
 from .reconfiguration import ReconfigurationChangedError, async_prepare_location_change
@@ -894,6 +899,7 @@ class PvForecastOptionsFlow(
         if roofs:
             menu_options.extend(["edit_roof", "remove_roof"])
         menu_options.append("system")
+        menu_options.append("forecast_horizon")
         menu_options.append("inverter_groups")
         menu_options.append("measurements")
         menu_options.append("history")
@@ -909,6 +915,38 @@ class PvForecastOptionsFlow(
                     translations,
                 ),
             },
+        )
+
+    async def async_step_forecast_horizon(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Den optionalen Horizont ohne Änderung unabhängiger Optionen speichern."""
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            try:
+                days = validate_forecast_days(user_input.get(CONF_FORECAST_DAYS))
+            except ValueError:
+                errors["base"] = "invalid_forecast_days"
+            else:
+                return self.async_create_entry(
+                    title="",
+                    data=dict(self.config_entry.options) | {CONF_FORECAST_DAYS: days},
+                )
+        return self.async_show_form(
+            step_id="forecast_horizon",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(
+                        CONF_FORECAST_DAYS,
+                        default=forecast_days_from_options(self.config_entry.options),
+                    ): NumberSelector(
+                        NumberSelectorConfig(
+                            min=2, max=7, step=1, mode=NumberSelectorMode.BOX
+                        )
+                    )
+                }
+            ),
+            errors=errors,
         )
 
     async def async_step_add_roof(

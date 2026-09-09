@@ -480,3 +480,7 @@ Der reproduzierbare Befund zu den Modulimporten steht unter
 Beim Mergen eines Pull Requests erstellt die Release-Automation standardmäßig
 ein Patch-Release. Mit genau einem der Labels `release:major`, `release:minor`
 oder `release:patch` wird der gewünschte Teil der Versionsnummer erhöht.
+
+## Optionaler Mehrtageshorizont
+
+Unter **Konfigurieren → Prognosehorizont** lassen sich zwei bis sieben lokale Tage wählen. Standard sind zwei. Die Karte ergänzt eine datierte Mehrtagesaussicht und die Solarzeitfensterplanung berücksichtigt den geladenen Zeitraum. Spätere Tage heißen Tendenz; eine gemessene Güte wird dafür noch nicht behauptet. Energy und die bisherigen Sensoren bleiben auf ihren bekannten Tagen. Details und ein geprüftes Planungsbeispiel: [Mehrtagesprognose](docs/mehrtagesprognose.md).

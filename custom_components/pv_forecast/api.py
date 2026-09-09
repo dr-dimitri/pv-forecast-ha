@@ -23,6 +23,7 @@ from aiohttp import (
 
 from .calculations import to_open_meteo_azimuth
 from .const import OPEN_METEO_FORECAST_URL, REQUEST_TIMEOUT_SECONDS
+from .horizon import validate_forecast_days
 from .models import OpenMeteoForecast, PvRoof, WeatherInterval
 
 _HTTP_DATE_PATTERN = re.compile(
@@ -162,6 +163,7 @@ class OpenMeteoClient:
         roofs: tuple[PvRoof, ...],
         *,
         local_date: date | None = None,
+        forecast_days: int = 2,
     ) -> dict[str, tuple[WeatherInterval, ...]]:
         """Forecasts je unterschiedlicher Dachgeometrie parallel abrufen.
 
@@ -189,6 +191,7 @@ class OpenMeteoClient:
                         tilt_deg=geometry[0],
                         open_meteo_azimuth_deg=geometry[1],
                         local_date=local_date,
+                        forecast_days=forecast_days,
                     )
                 )
                 for geometry in roofs_by_geometry
@@ -229,6 +232,7 @@ class OpenMeteoClient:
         tilt_deg: float,
         open_meteo_azimuth_deg: float,
         local_date: date | None = None,
+        forecast_days: int = 2,
     ) -> OpenMeteoForecast:
         """Eine Forecast-Antwort für eine Dachgeometrie laden und validieren."""
 
@@ -240,6 +244,7 @@ class OpenMeteoClient:
                 tilt_deg=tilt_deg,
                 open_meteo_azimuth_deg=open_meteo_azimuth_deg,
                 local_date=local_date,
+                forecast_days=forecast_days,
             )
 
     async def _async_fetch(
@@ -251,9 +256,11 @@ class OpenMeteoClient:
         tilt_deg: float,
         open_meteo_azimuth_deg: float,
         local_date: date | None = None,
+        forecast_days: int = 2,
     ) -> OpenMeteoForecast:
         """Eine Geometrie innerhalb der bereits laufenden Operation validieren."""
 
+        forecast_days = validate_forecast_days(forecast_days)
         location_timezone = _timezone(timezone)
         if local_date is None:
             local_date = datetime.now(UTC).astimezone(location_timezone).date()
@@ -261,7 +268,7 @@ class OpenMeteoClient:
             local_date, time.min, location_timezone
         ).astimezone(UTC)
         day_end = datetime.combine(
-            local_date + timedelta(days=2), time.min, location_timezone
+            local_date + timedelta(days=forecast_days), time.min, location_timezone
         ).astimezone(UTC)
         # GTI gehört zur vorhergehenden Stunde. Nur überlappende UTC-Intervalle
         # laden; Teilstunden-Zeitzonen benötigen anteilig ausgewertete Ränder.

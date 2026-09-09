@@ -115,6 +115,7 @@ class ForecastResult:
     total: DailyYield
     total_intervals: tuple[TotalForecastInterval, ...] = ()
     inverter_groups: tuple[AcInverterGroup, ...] = ()
+    forecast_days: int = 2
 
 
 @dataclass(frozen=True, slots=True)

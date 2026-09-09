@@ -163,7 +163,7 @@ def test_dst_days_keep_elapsed_duration_and_both_fold_hours(day):
 
 def test_half_hour_zone_and_day_boundary():
     start = datetime(2026, 9, 8, 18, 30, tzinfo=UTC)
-    data = forecast([1] * 48, start)
+    data = replace(forecast([1] * 48, start), local_date=date(2026, 9, 9))
     result = plan(
         data,
         duration_minutes=90,

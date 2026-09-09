@@ -172,6 +172,34 @@ def build_forecast_view(
         "end": end.isoformat(),
         "today_start": today_start.isoformat(),
         "today_end": today_end.isoformat(),
+        "forecast_days": forecast.forecast_days,
+        "daily_forecasts": [
+            {
+                "date": (forecast.local_date + timedelta(days=offset)).isoformat(),
+                "energy_kwh": _window_energy(
+                    source,
+                    *_bounds(forecast.local_date + timedelta(days=offset), timezone),
+                ),
+                "tendency": offset >= 2,
+                "quality_flags": sorted(
+                    {
+                        flag
+                        for interval in _project_intervals(
+                            source,
+                            *_bounds(
+                                forecast.local_date + timedelta(days=offset), timezone
+                            ),
+                        )
+                        for flag in interval.quality_flags
+                    }
+                ),
+                "measured_quality": {
+                    "status": "unavailable",
+                    "reason": "no_horizon_evaluation",
+                },
+            }
+            for offset in range(forecast.forecast_days)
+        ],
         "summary": {
             "today_kwh": today_energy,
             "tomorrow_kwh": tomorrow_energy,

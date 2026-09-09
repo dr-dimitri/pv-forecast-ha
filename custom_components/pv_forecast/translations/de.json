@@ -285,7 +285,8 @@
           "measurements": "Echte PV-Messquellen zuordnen (optional)",
           "history": "Prognosearchiv und Soll-Ist-Vergleich (optional)",
           "calibration": "Selbstkalibrierung (optional)",
-          "inverter_groups": "AC-Wechselrichtergruppen zuordnen"
+          "inverter_groups": "AC-Wechselrichtergruppen zuordnen",
+          "forecast_horizon": "Prognosehorizont"
         },
         "menu_option_descriptions": {
           "add_roof": "Erfasst eine zusätzliche Dachfläche, ohne die vorhandenen zu verändern.",
@@ -609,6 +610,13 @@
           "action": "Bedienung",
           "confirm": "Bewusste Änderung bestätigen"
         }
+      },
+      "forecast_horizon": {
+        "title": "Prognosehorizont",
+        "description": "Standard sind heute und morgen. Bis zu sieben lokale Tage helfen bei verschiebbaren Verbrauchern. Spätere Tage werden als Tendenz ohne belegte eigene Prognosegüte angezeigt. Größere Antworten können mehr Anbieterkontingent verbrauchen. Energy bleibt bei heute und morgen.",
+        "data": {
+          "forecast_days": "Anzahl lokaler Prognosetage"
+        }
       }
     },
     "error": {
@@ -634,7 +642,8 @@
       "invalid_inverter_group": "Bitte wähle einen eindeutigen Namen, eine positive endliche AC-Leistung und mindestens eine noch nicht anderweitig zugeordnete Dachfläche.",
       "temperature_roof_invalid": "Wähle eine vorhandene Dachfläche und eine angebotene Vergleichsannahme.",
       "underperformance_confirmation_required": "Bitte die Änderung ausdrücklich bestätigen.",
-      "underperformance_unavailable": "Das lokale Archiv ist derzeit nicht verfügbar. Bitte Einrichtung und Archivspeicher prüfen."
+      "underperformance_unavailable": "Das lokale Archiv ist derzeit nicht verfügbar. Bitte Einrichtung und Archivspeicher prüfen.",
+      "invalid_forecast_days": "Bitte zwei bis sieben ganze Prognosetage wählen."
     },
     "abort": {
       "reconfigure_entry_changed": "Die Anlage wurde während der Bearbeitung anderweitig geändert. Bitte starte die Bearbeitung erneut."

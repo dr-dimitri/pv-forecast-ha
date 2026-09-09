@@ -672,3 +672,13 @@ test("Experimenteller Hinweis trennt Messung, Rohbasis und Lernstopp ohne Dachdi
   const roofState = (await load("sunny", {roof_id: "east"})).state;
   assert.doesNotMatch(renderContent({...config, roof_id: "east"}, roofState), /Experimentelle Minderertragsprüfung/);
 });
+
+test("Mehrtagesaussicht verwendet Backendwerte und kennzeichnet Tendenz und Lücken", async () => {
+  const {state} = await load("horizon");
+  const html = renderContent(config, state, 360);
+  assert.match(html, /2026-09-12 · Tendenz/);
+  assert.match(html, /18 kWh · Eingabewerte eingeschränkt/);
+  assert.match(html, /2026-09-13 · Tendenz<\/dt><dd>— kWh/);
+  assert.match(html, /Prognosegüte späterer Tage ist noch nicht gemessen/);
+  assert.doesNotMatch(renderContent(config, (await load("sunny")).state), /Mehrtagesaussicht/);
+});

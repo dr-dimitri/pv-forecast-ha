@@ -36,6 +36,7 @@ from .const import (
     DOMAIN,
     UPDATE_INTERVAL,
 )
+from .horizon import forecast_days_from_options
 from .models import ForecastDay, ForecastResult, PlanningValues
 from .temperature_comparison import COEFFICIENTS, mountings_from_options
 
@@ -213,6 +214,7 @@ class PvForecastCoordinator(TimestampDataUpdateCoordinator[ForecastResult]):
             longitude = float(self._entry.data[CONF_LONGITUDE])
             timezone_name = str(self._entry.data[CONF_TIME_ZONE])
             timezone = ZoneInfo(timezone_name)
+            forecast_days = forecast_days_from_options(self._entry.options)
             roofs = roofs_from_options(self._entry.options)
             inverter_groups = inverter_groups_from_options(self._entry.options, roofs)
             raw_inverter_limit = self._entry.options.get(CONF_INVERTER_MAX_POWER_KW)
@@ -229,6 +231,7 @@ class PvForecastCoordinator(TimestampDataUpdateCoordinator[ForecastResult]):
                     timezone_name,
                     roofs,
                     local_date=requested_date,
+                    **({"forecast_days": forecast_days} if forecast_days != 2 else {}),
                 )
                 forecast = calculate_forecast(
                     roofs,
@@ -237,6 +240,7 @@ class PvForecastCoordinator(TimestampDataUpdateCoordinator[ForecastResult]):
                     requested_date,
                     timezone,
                     inverter_groups=inverter_groups,
+                    forecast_days=forecast_days,
                 )
                 if (
                     self._shutdown_requested
@@ -263,6 +267,7 @@ class PvForecastCoordinator(TimestampDataUpdateCoordinator[ForecastResult]):
                             requested_date,
                             timezone,
                             inverter_groups=inverter_groups,
+                            forecast_days=forecast_days,
                             temperature_coefficients={
                                 key: COEFFICIENTS[value]
                                 for key, value in mountings.items()

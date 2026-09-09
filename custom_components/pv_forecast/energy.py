@@ -12,6 +12,7 @@ from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
+from .card_data import _project_intervals
 from .const import CONF_TIME_ZONE, DOMAIN
 
 if TYPE_CHECKING:
@@ -49,7 +50,7 @@ async def async_get_solar_forecast(
     end = datetime.combine(
         local_date + timedelta(days=2), time.min, timezone
     ).astimezone(UTC)
-    intervals = forecast.total_intervals
+    intervals = _project_intervals(forecast.total_intervals, start, end)
     if (
         not intervals
         or intervals[0].start.astimezone(UTC) != start

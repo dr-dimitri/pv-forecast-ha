@@ -1,5 +1,5 @@
 // Ausschließlich synthetische, deterministische Testdaten; keine Modellberechnung.
-export const SCENARIOS = ["underperformance", "sunny", "gaps", "stale", "empty", "acl", "outage", "old", "roof", "deleted-roof", "spring", "fold", "kolkata", "midnight", "experience", "planning-unavailable"];
+export const SCENARIOS = ["horizon","underperformance", "sunny", "gaps", "stale", "empty", "acl", "outage", "old", "roof", "deleted-roof", "spring", "fold", "kolkata", "midnight", "experience", "planning-unavailable"];
 const HOURS = [0, 0, 0, 0, 0, 0, 0.1, 0.38, 0.95, 1.7, 2.45, 3.1, 3.6, 3.4, 2.9, 2.1, 1.4, 0.7, 0.22, 0.04, 0, 0, 0, 0];
 const iso = (instant) => new Date(instant).toISOString();
 
@@ -36,6 +36,7 @@ export function fixture(scenario = "sunny", { day = "today", roof_id } = {}) {
     const complete = Date.parse(item.end) <= asOf && !(scenario === "gaps" && [8, 9, 10, 11].includes(index));
     return { start: item.start, end: item.end, energy_kwh: complete ? [0, 0, 0, 0, 0, 0, 0.08, 0.31, 0.81, 1.4, 2.5, 3.0, 3.7][index] ?? 0 : null, ac_power_kw: null, energy_complete: complete, quality_flags: complete ? [] : ["incomplete"], source_count: 2 };
   });
+  if (scenario === "horizon") view.daily_forecasts = Array.from({ length: 7 }, (_, i) => ({ date: `2026-09-${10 + i}`, energy_kwh: i === 3 ? null : [24, 25, 18, 0, 30, 27, 22][i], tendency: i >= 2, quality_flags: i === 2 ? ["gti_fallback"] : [] }));
   const history = {
     schema_version: 1, enabled: true, running: true, window_days: 7, retention_truncated: false,
     horizons: { hourly_1h: { count_expected: 168, count_forecasts: 153, count_valid: 136, coverage: 136 / 168, mae_kwh: 0.18, bias_kwh: -0.07 } },
@@ -54,7 +55,7 @@ export function fixture(scenario = "sunny", { day = "today", roof_id } = {}) {
     frozen_hours: scenario === "experience" ? [{ rule_version: 2, status: "available", target_date: view.date, horizon: "hourly_3h", start: iso(todayStart + 15 * hour), end: iso(todayStart + 16 * hour), cutoff: iso(todayStart + 12 * hour), forecast_observed_at: iso(todayStart + 11.75 * hour), lower_kwh: 1.4, central_kwh: 2.1, upper_kwh: 2.8, training_count: 60, validation_count: 30, target_coverage: 0.8, evaluation: { coverage_fraction: 0.8, mean_width_kwh: 1.4, winkler_score_kwh: 1.7, reference_winkler_score_kwh: 2.1, coverage_wilson95: { lower: 0.627, upper: 0.905 } } }] : [],
     remaining_today: { status: "unavailable", reasons: ["unsupported_horizon"] }, next_60_minutes: { status: "unavailable", reasons: ["unsupported_horizon"] },
   };
-  const forecastEnd = todayEnd + 24 * hour;
+  const forecastEnd = todayEnd + (scenario === "horizon" ? 6 : 1) * 24 * hour;
   const forecastBoundaries = [todayStart];
   for (let cursor = Math.ceil((todayStart + 1) / hour) * hour; cursor < forecastEnd; cursor += hour) forecastBoundaries.push(cursor);
   forecastBoundaries.push(forecastEnd);
