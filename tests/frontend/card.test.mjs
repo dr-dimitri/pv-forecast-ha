@@ -60,8 +60,8 @@ test("Ein Lesezyklus verwendet nur lesende HA-Aktionen und unveränderte Backend
 
 test("Morgen behält den heutigen Ist-KPI, ohne morgige Messfenster anzufordern", async () => {
   const { calls, state } = await load("sunny", { day: "tomorrow" });
-  assert.equal(calls[0].service_data.day, "tomorrow");
-  assert.equal(calls[1].service_data.interval_windows, undefined);
+  assert.equal(calls[0].service_data.day, "today");
+  assert.ok(calls[1].service_data.interval_windows.every((item) => Date.parse(item.end) <= Date.parse(state.forecast.data.today_end)));
   assert.equal(selectedSeries(state).actual.length, 0);
   assert.match(renderContent({ ...config, day: "tomorrow" }, state), /12,4/);
 });
@@ -693,4 +693,97 @@ test("Horizontprofil bleibt ausdrücklich experimentell und verändert keine Bac
   assert.equal(calls.length, 3);
   const normal = await load();
   assert.doesNotMatch(renderContent(config, normal.state), /Experimentelles Horizontprofil/);
+});
+
+function timedViewCards() {
+  const clock = clockCache(), calls = [], hass = fixtureHass('sunny', { calls });
+  const cache = connectionCache(hass);
+  Object.assign(cache, { now: clock.cache.now, setTimer: clock.cache.setTimer, clearTimer: clock.cache.clearTimer, document: clock.document });
+  let revision = 0;
+  const original = hass.callWS;
+  hass.callWS = async (message) => {
+    const result = await original(message);
+    if (message.service === 'get_forecast') {
+      const view = result.response.view;
+      view.as_of = new Date(Date.parse(view.as_of) + revision * 60_000).toISOString();
+      view.summary.remaining_today_kwh = 10 - revision;
+    }
+    return result;
+  };
+  const cards = [];
+  return {
+    cache, calls,
+    add(day, roof_id, entry = config.config_entry_id) {
+      const card = new PvForecastCard();
+      card.setConfig({ ...config, day, roof_id, config_entry_id: entry }); card.hass = hass; card.connectedCallback(); cards.push(card); return card;
+    },
+    async advance(ms) { revision++; await clock.advance(ms); },
+    stop() { for (const card of cards) card.disconnectedCallback(); },
+  };
+}
+
+test('Heute und Morgen behalten beim Wechsel und nach Minutentakten denselben Restwert', async () => {
+  const f = timedViewCards();
+  try {
+    const card = f.add('today'); await flush();
+    const first = card._state.forecast.data;
+    await f.advance(20_000);
+    card.setConfig({ ...config, day: 'tomorrow' }); await flush();
+    assert.equal(card._state.forecast.data.summary.remaining_today_kwh, first.summary.remaining_today_kwh);
+    assert.equal(card._state.forecast.data.as_of, first.as_of);
+    assert.notEqual(card._state.forecast.data.start, first.start);
+    assert.equal(f.calls.length, 3, 'Tageswechsel braucht keinen zweiten Lesezyklus');
+    await f.advance(40_000);
+    const refreshed = card._state.forecast.data;
+    assert.equal(refreshed.summary.remaining_today_kwh, 8);
+    card.setConfig(config); await flush();
+    assert.equal(card._state.forecast.data.summary.remaining_today_kwh, refreshed.summary.remaining_today_kwh);
+    assert.equal(card._state.forecast.data.as_of, refreshed.as_of);
+    assert.equal(f.calls.filter((call) => call.service === 'get_forecast').length, 2);
+  } finally { f.stop(); }
+  assert.equal(f.cache.timer, null);
+});
+
+test('Gleichzeitig sichtbare Tageskarten teilen Kennzahlen, Messung und Aktualisierung', async () => {
+  const f = timedViewCards();
+  try {
+    const today = f.add('today'); await flush();
+    await f.advance(25_000);
+    const tomorrow = f.add('tomorrow'); await flush();
+    assert.equal(today._state.forecast.data.summary, tomorrow._state.forecast.data.summary);
+    assert.equal(today._state.measurement, tomorrow._state.measurement);
+    await f.advance(35_000);
+    assert.equal(today._state.forecast.data.as_of, tomorrow._state.forecast.data.as_of);
+    assert.equal(today._state.forecast.data.summary, tomorrow._state.forecast.data.summary);
+    assert.equal(today._state.forecast.data.day, 'today');
+    assert.equal(tomorrow._state.forecast.data.day, 'tomorrow');
+    assert.notDeepEqual(today._state.forecast.data.intervals, tomorrow._state.forecast.data.intervals);
+    assert.equal(f.calls.filter((call) => call.service === 'get_forecast').length, 2);
+    const roof = f.add('today', 'south'), other = f.add('today', undefined, 'other-plant'); await flush();
+    assert.notEqual(roof._state.forecast.data.summary, today._state.forecast.data.summary);
+    assert.notEqual(other._state.forecast.data.summary, today._state.forecast.data.summary);
+  } finally { f.stop(); }
+});
+
+test('Ein Tageswechsel während einer verspäteten Antwort übernimmt nur die aktuelle Auswahl', async () => {
+  const hass = fixtureHass(), original = hass.callWS, cache = connectionCache(hass);
+  let release;
+  hass.callWS = async (message) => {
+    const result = await original(message);
+    if (message.service === 'get_forecast') await new Promise((resolve) => { release = resolve; });
+    return result;
+  };
+  const card = new PvForecastCard();
+  try {
+    card.setConfig(config); card.hass = hass; card.connectedCallback(); await flush();
+    card.setConfig({ ...config, day: 'tomorrow' }); await flush();
+    release(); await flush();
+    assert.equal(card._state.forecast.data.day, 'tomorrow');
+    const summary = card._state.forecast.data.summary;
+    card.setConfig(config); await flush();
+    assert.equal(card._state.forecast.data.summary, summary);
+    assert.equal(card._state.forecast.data.day, 'today');
+    assert.equal(card._state.loading, false);
+  } finally { card.disconnectedCallback(); }
+  assert.equal(cache.timer, null);
 });

@@ -140,8 +140,6 @@ def build_forecast_view(
     today = now.astimezone(timezone).date()
     today_start, today_end = _bounds(today, timezone)
     tomorrow_start, tomorrow_end = _bounds(today + timedelta(days=1), timezone)
-    target_date = today + timedelta(days=1 if day == "tomorrow" else 0)
-    start, end = _bounds(target_date, timezone)
     source = (
         forecast.total_intervals
         if roof_id is None
@@ -149,14 +147,44 @@ def build_forecast_view(
     )
     today_energy = _window_energy(source, today_start, today_end)
     tomorrow_energy = _window_energy(source, tomorrow_start, tomorrow_end)
-    complete = (today_energy if day == "today" else tomorrow_energy) is not None
     age = now - _utc(fetched_at) if fetched_at is not None else None
-    stale = (
+    stale_snapshot = (
         not last_update_success
         or age is None
         or not timedelta(0) <= age <= timedelta(minutes=60)
-        or not complete
     )
+    # Beide Kurven gehören zu denselben Kennzahlen und demselben Serverzeitpunkt.
+    day_views = {}
+    for selected_day, target_date, start, end, energy in (
+        ("today", today, today_start, today_end, today_energy),
+        (
+            "tomorrow",
+            today + timedelta(days=1),
+            tomorrow_start,
+            tomorrow_end,
+            tomorrow_energy,
+        ),
+    ):
+        complete = energy is not None
+        day_views[selected_day] = {
+            "day": selected_day,
+            "date": target_date.isoformat(),
+            "start": start.isoformat(),
+            "end": end.isoformat(),
+            "intervals": [
+                {
+                    "start": interval.start.isoformat(),
+                    "end": interval.end.isoformat(),
+                    "energy_kwh": interval.energy_kwh,
+                    "ac_power_kw": interval.ac_power_kw,
+                    "is_complete": interval.is_complete,
+                    "quality_flags": list(interval.quality_flags),
+                }
+                for interval in _project_intervals(source, start, end)
+            ],
+            "complete": complete,
+            "stale": stale_snapshot or not complete,
+        }
     return {
         "view_version": 1,
         "as_of": now.isoformat(),
@@ -167,10 +195,6 @@ def build_forecast_view(
             for roof in forecast.roofs.values()
         ],
         "roof_id": roof_id,
-        "day": day,
-        "date": target_date.isoformat(),
-        "start": start.isoformat(),
-        "end": end.isoformat(),
         "today_start": today_start.isoformat(),
         "today_end": today_end.isoformat(),
         "forecast_days": forecast.forecast_days,
@@ -207,17 +231,6 @@ def build_forecast_view(
             "tomorrow_kwh": tomorrow_energy,
             "remaining_today_kwh": _window_energy(source, now, today_end),
         },
-        "intervals": [
-            {
-                "start": interval.start.isoformat(),
-                "end": interval.end.isoformat(),
-                "energy_kwh": interval.energy_kwh,
-                "ac_power_kw": interval.ac_power_kw,
-                "is_complete": interval.is_complete,
-                "quality_flags": list(interval.quality_flags),
-            }
-            for interval in _project_intervals(source, start, end)
-        ],
-        "complete": complete,
-        "stale": stale,
+        "day_views": day_views,
+        **day_views[day],
     }

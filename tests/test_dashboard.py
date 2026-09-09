@@ -75,7 +75,7 @@ async def test_multiple_entries_register_once_update_and_remove_only_own_panel(h
     assert panels[first.path].config["config_entry_id"] == a.entry_id
     assert (
         panels[first.path].config["_panel_custom"]["module_url"]
-        == "/pv_forecast/pv-forecast-card.js?v=2"
+        == "/pv_forecast/pv-forecast-card.js?v=3"
     )
     assert panels[second.path].config["config_entry_id"] == b.entry_id
     hass.config_entries.async_update_entry(
