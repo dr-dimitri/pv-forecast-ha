@@ -439,6 +439,12 @@ class ArchiveManager:
         return result
 
     @callback
+    def current_targets(self, now: datetime) -> dict[str, Any]:
+        """Aktuelle feste Prognoseintervalle ohne neue Erfassung zurückgeben."""
+
+        return self._archive.current_targets(now)
+
+    @callback
     def export(
         self,
         days: int = 30,

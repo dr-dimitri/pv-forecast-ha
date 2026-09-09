@@ -458,6 +458,18 @@
         "config_entry_id": {
           "name": "PV-Anlage",
           "description": "Anlage, deren gespeicherte Prognose gelesen wird."
+        },
+        "include_view": {
+          "name": "Kartenansicht ergänzen",
+          "description": "Fertig berechnete Tages- und Dachwerte ohne neuen Wetterabruf ausgeben."
+        },
+        "day": {
+          "name": "Tag der Kartenansicht",
+          "description": "Heute oder morgen in der gespeicherten Anlagenzeitzone."
+        },
+        "roof_id": {
+          "name": "Dachfläche",
+          "description": "Stabile Dach-ID für die optionale Kartenansicht; leer bedeutet Gesamtanlage."
         }
       }
     },
@@ -476,6 +488,10 @@
         "end": {
           "name": "Ende",
           "description": "Ende des UTC-Auswertungsfensters als ISO-8601-Zeitpunkt mit verpflichtendem UTC-Offset oder Z; muss nach dem Beginn liegen."
+        },
+        "interval_windows": {
+          "name": "Explizite Messintervalle",
+          "description": "Bis zu 50 nicht überlappende absolute UTC-Fenster mit start und end; unvollständige Energie bleibt unbekannt."
         }
       }
     },
@@ -494,6 +510,10 @@
         "include_records": {
           "name": "Einzelne Archivdatensätze einschließen",
           "description": "Zusätzlich zu den Kennzahlen gespeicherte Prognosen und Bewertungen zurückgeben."
+        },
+        "current_targets": {
+          "name": "Aktuelle Stundenstände ergänzen",
+          "description": "Bereits eingefrorene Prognosen für heute und morgen mit jeweils einer Stunde Vorlauf ausgeben."
         }
       }
     },
@@ -534,6 +554,9 @@
     },
     "history_unavailable": {
       "message": "Für diese Anlage ist das Prognosearchiv noch nicht verfügbar."
+    },
+    "roof_not_found": {
+      "message": "Die ausgewählte Dachfläche wurde nicht gefunden."
     }
   },
   "entity": {

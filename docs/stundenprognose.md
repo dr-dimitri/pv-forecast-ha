@@ -100,3 +100,14 @@ Zahlenwert. Die Sensorverfügbarkeit berücksichtigt zusätzlich den normalen
 Coordinator-Fehlerstatus. Ein gemeinsamer Minutentakt führt diese Werte aus dem
 gespeicherten Stand nach und wird beim Entladen beendet. Abruffrist, Fehlerstatus,
 Erfolgszeitpunkt und Anbieterpause bleiben dabei erhalten.
+
+## Optionale Darstellungsansicht für die Karte
+
+`get_forecast` kann mit `include_view: true`, `day: today|tomorrow` und einer
+optionalen stabilen `roof_id` aufgerufen werden. Die vorhandene Gesamtantwort
+bleibt erhalten; `view` Version 1 ergänzt ausgewählte Tagesintervalle, fertige
+Tages-/Restwerte, Dachnamen, Serverzeit, Anlagenzeitzone und absolute lokale
+Tagesgrenzen. Die Dachwerte stammen aus denselben bereits geclippten Beiträgen.
+Alte Forecast-Tage werden nicht unter dem aktuellen Datum ausgegeben. Diese
+Ansicht löst keinen weiteren Wetterabruf aus und wird nicht in Sensorattributen
+vervielfacht. Details zur Darstellung stehen in der [Kartenanleitung](karte.md).

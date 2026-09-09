@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="de">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PV Forecast · reproduzierbare Kartenprüfung</title>
+<style>
+  :root{color-scheme:light;--primary-color:#087f8c;--accent-color:#b88424;--primary-text-color:#233039;--secondary-text-color:#66737c;--card-background-color:#fff;--secondary-background-color:#f1f4f5;--divider-color:#e3e8eb;--ha-card-border-radius:18px;font-family:system-ui,sans-serif;color:var(--primary-text-color);background:#eaf0f2}
+  :root.dark{color-scheme:dark;--primary-color:#57c6c8;--accent-color:#ddb767;--primary-text-color:#e3e9ed;--secondary-text-color:#a0adb6;--card-background-color:#1c252b;--secondary-background-color:#273139;--divider-color:#344047;background:#111a20}
+  *{box-sizing:border-box}body{margin:0;padding:28px 16px 60px}.toolbar{max-width:1060px;margin:0 auto 26px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}.toolbar h1{font-size:14px;letter-spacing:.02em;font-weight:600;margin:0 auto 0 0}.toolbar label{font-size:12px;display:flex;gap:7px;align-items:center}.toolbar select,.toolbar button{background:var(--card-background-color);color:inherit;border:1px solid var(--divider-color);border-radius:7px;padding:8px;font:inherit}.cards{max-width:1060px;margin:auto;display:flex;align-items:flex-start;gap:24px;flex-wrap:wrap}.cards>pv-forecast-card{width:var(--demo-width,660px);max-width:100%;flex-shrink:0}.demo-note{max-width:1060px;margin:24px auto;font-size:11px;color:var(--secondary-text-color);line-height:1.6} @media(max-width:420px){body{padding:12px 0 30px}.toolbar,.demo-note{padding:0 12px}.toolbar h1{width:100%}.cards>pv-forecast-card{width:100%}}
+</style>
+<div class="toolbar"><h1>PV Forecast <span style="font-weight:400;opacity:.6">/ Kartenprüfung</span></h1><label>Fall <select id="scenario"></select></label><label>Breite <select id="width"><option value="660">660 px</option><option value="360">360 px</option></select></label><button id="theme">Dunkles Design</button><button id="visibility" aria-pressed="false">Erste Karte ausblenden</button></div>
+<main class="cards" id="cards"></main>
+<p class="demo-note">Deterministische Offline-Demo mit synthetischen Werten. Die Karte liest ausschließlich die drei simulierten HA-Aktionen. <span id="requests"></span></p>
+<script type="module">
+  import { fixtureHass, SCENARIOS } from './fixtures.mjs';
+  import '../../custom_components/pv_forecast/frontend/pv-forecast-card.js';
+  const params = new URLSearchParams(location.search);
+  const scenario = SCENARIOS.includes(params.get('scenario')) ? params.get('scenario') : 'sunny';
+  const dark = params.get('theme') === 'dark';
+  document.documentElement.classList.toggle('dark', dark);
+  const picker = document.getElementById('scenario');
+  for (const name of SCENARIOS) picker.add(new Option(name, name, false, name === scenario));
+  picker.onchange = () => { params.set('scenario', picker.value); location.search = params.toString(); };
+  const width = params.get('width') === '360' ? '360' : '660';
+  document.documentElement.style.setProperty('--demo-width', `${width}px`);
+  document.getElementById('width').value = width;
+  document.getElementById('width').onchange = (event) => { params.set('width', event.target.value); location.search = params.toString(); };
+  document.getElementById('theme').textContent = dark ? 'Helles Design' : 'Dunkles Design';
+  document.getElementById('theme').onclick = () => { params.set('theme', dark ? 'light' : 'dark'); location.search = params.toString(); };
+  const calls = [];
+  const hass = fixtureHass(scenario, { calls, delay: 60 });
+  const read = hass.callWS;
+  hass.callWS = async (message) => {
+    const pending = read(message);
+    document.getElementById('requests').textContent = `Leseaufrufe insgesamt: ${calls.length}.`;
+    return pending;
+  };
+  const count = params.get('multiple') === '1' ? 2 : 1;
+  for (let index = 0; index < count; index++) {
+    const card = document.createElement('pv-forecast-card');
+    card.setConfig({ type: 'custom:pv-forecast-card', config_entry_id: 'demo-plant', day: params.get('day') === 'tomorrow' ? 'tomorrow' : 'today', ...(scenario === 'roof' || scenario === 'deleted-roof' ? { roof_id: 'south' } : {}) });
+    card.hass = hass;
+    document.getElementById('cards').append(card);
+  }
+  document.getElementById('visibility').onclick = (event) => {
+    const card = document.querySelector('pv-forecast-card');
+    card.hidden = !card.hidden;
+    card.style.display = card.hidden ? 'none' : '';
+    event.currentTarget.setAttribute('aria-pressed', String(card.hidden));
+    event.currentTarget.textContent = card.hidden ? 'Erste Karte anzeigen' : 'Erste Karte ausblenden';
+  };
+  window.demo = { calls, hass };
+</script>
+</html>

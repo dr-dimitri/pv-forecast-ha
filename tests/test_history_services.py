@@ -208,3 +208,25 @@ async def test_history_actions_remain_registered_after_unload(hass, archived_ent
     with pytest.raises(ServiceValidationError) as error:
         await _history(hass, entry.entry_id)
     assert error.value.translation_key == "entry_not_loaded"
+
+
+async def test_current_targets_are_explicit_and_use_existing_permissions(
+    hass, archived_entry
+):
+    """Die neue Kartenansicht ergänzt die Antwort nur bei bewusster Anforderung."""
+
+    entry, source, fetch = archived_entry
+    previous = await _history(hass, entry.entry_id, days=7)
+    assert "current_targets" not in previous
+    fetch_count = fetch.await_count
+    result = await _history(hass, entry.entry_id, days=7, current_targets=True)
+    targets = result.pop("current_targets")
+    assert result == previous
+    assert targets["view_version"] == 1
+    assert targets["timezone"] == "Europe/Berlin"
+    assert targets["horizon"] == "hourly_1h"
+    assert fetch.await_count == fetch_count
+    user = MockUser().add_to_hass(hass)
+    user.mock_policy({"entities": {"entity_ids": {source.entity_id: {"read": True}}}})
+    with pytest.raises(Unauthorized):
+        await _history(hass, entry.entry_id, current_targets=True, user_id=user.id)

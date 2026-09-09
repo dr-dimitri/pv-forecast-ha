@@ -22,6 +22,7 @@ Home-Assistant-Oberfläche. YAML wird nicht unterstützt.
 - native Solarprognose im Home-Assistant-Energie-Dashboard
 - optionale lokale Erfassung bestehender PV-Ertragszähler mit Messdatenprüfung
 - optionales Prognosearchiv mit Soll-Ist-Berichten und bewusstem JSON-/CSV-Export
+- freiwillige Lovelace-Karte mit visuellem Editor, Tageskurven und Dachauswahl
 - mehrere Dachflächen mit eigener Leistung, Ausrichtung, Neigung und eigenem
   Systemwirkungsgrad
 - Übernahme des in Home Assistant hinterlegten Standorts oder einmalige
@@ -204,6 +205,24 @@ Datei automatisch zu veröffentlichen. Der
 [Archivvertrag](docs/prognosearchiv.md) erklärt Stichtage, Formeln, Grenzen und
 Leserechte. Die reale Nutzer- und Güteerprobung aus der Roadmap bleibt offen.
 
+## Eigene Dashboard-Karte (optional)
+
+Das Integrationspaket enthält **PV Forecast** als eigene Lovelace-Karte. Füge
+unter **Einstellungen → Dashboards → Ressourcen** die URL
+`/pv_forecast/pv-forecast-card.js?v=1` als **JavaScript-Modul** hinzu. Danach
+kannst du die Karte über **Dashboard bearbeiten → Karte hinzufügen** und ihren
+visuellen Editor ohne YAML einrichten.
+
+Sie zeigt vier Tageskennzahlen, Heute/Morgen und Gesamt-/Dachauswahl, eine
+Energiekurve sowie freiwillig erfasste Messungen und feste Archivprognosen.
+Messlücken werden nicht aufgefüllt; ohne zugeordnete Dachmessung bleibt diese
+in der Dachansicht fehlend. Die historische Linie **„Jeweils 1 Stunde vorher“**
+verwendet pro Intervall einen eigenen festen Stichtag. Die Karte verwendet die
+Anlagenzeitzone und unterscheidet wiederholte Stunden bei Zeitumstellungen.
+
+[Installation, Bedienung und Grenzen der Karte](docs/karte.md) beschreiben auch
+Versionen, Datenzugriff und die noch ausstehende Nutzererprobung.
+
 ## Sensoren
 
 Die Integration erstellt folgende Sensoren:
@@ -365,6 +384,7 @@ python3 -m venv .venv
 .venv/bin/ruff check custom_components tests
 .venv/bin/black --check custom_components tests
 .venv/bin/pytest -v
+node --test tests/frontend/*.test.mjs
 ```
 
 Beim Mergen eines Pull Requests erstellt die Release-Automation standardmäßig

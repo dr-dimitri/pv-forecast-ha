@@ -551,3 +551,112 @@ def test_corrupt_archive_is_rejected(corruption) -> None:
         stored["records"][0]["assessment_revisions"] = [{"valid": True}]
     with pytest.raises(ValueError):
         HistoryArchive.from_dict(stored, "UTC")
+
+
+@pytest.mark.parametrize(
+    ("timezone", "day", "hours"),
+    [
+        ("Europe/Berlin", date(2026, 3, 29), 23),
+        ("Europe/Berlin", date(2026, 10, 25), 25),
+        ("Asia/Kolkata", DAY, 24),
+    ],
+)
+def test_current_targets_keep_utc_hours_and_do_not_change_past_reports(
+    timezone, day, hours
+):
+    """Die Kartenansicht liest feste Stunden statt Statistiken oder Messkopien."""
+
+    archive = HistoryArchive(timezone)
+    zone = ZoneInfo(timezone)
+    start = datetime.combine(day, time.min, zone).astimezone(UTC)
+    end = datetime.combine(day + timedelta(days=1), time.min, zone).astimezone(UTC)
+    assert (end - start).total_seconds() / 3600 == hours
+    result = forecast(day, 2, timezone)
+    for interval in result.total_intervals:
+        if interval.end - interval.start == HOUR and interval.start < end:
+            observed = interval.start - HOUR
+            archive.capture(result, observed, observed, "a", [SOURCE])
+    now = end - timedelta(minutes=1)
+    before = archive.to_dict()
+    past = archive.snapshot(now, 7, True)
+    view = archive.current_targets(now)
+    assert view["view_version"] == 1
+    assert view["horizon"] == "hourly_1h"
+    assert view["timezone"] == timezone
+    assert view["label"] == "Jeweils 1 Stunde vorher"
+    assert view["intervals"]
+    assert len({item["start"] for item in view["intervals"]}) == len(view["intervals"])
+    assert all(
+        item["raw_energy_kwh"] == item["ac_power_kw"] == 2
+        and item["energy_kwh"]
+        == 2
+        * (
+            datetime.fromisoformat(item["end"]) - datetime.fromisoformat(item["start"])
+        ).total_seconds()
+        / 3600
+        for item in view["intervals"]
+    )
+    assert all(
+        "sources" not in item and "assessment" not in item for item in view["intervals"]
+    )
+    assert archive.snapshot(now, 7, True) == past
+    assert archive.to_dict() == before
+    if timezone == "Europe/Berlin" and hours == 25:
+        folded = [
+            datetime.fromisoformat(item["start"]).astimezone(zone)
+            for item in view["intervals"]
+            if datetime.fromisoformat(item["start"]).astimezone(zone).hour == 2
+        ]
+        assert len(folded) == 2
+        assert {item.utcoffset() for item in folded} == {HOUR, 2 * HOUR}
+
+
+def test_current_targets_hide_candidates_before_cutoff_and_keep_missing_hours():
+    """Ein noch ersetzbarer Kandidat erscheint erst nach seinem Stichtag."""
+
+    archive = HistoryArchive("UTC")
+    observed = datetime(2026, 9, 9, 8, 30, tzinfo=UTC)
+    archive.capture(forecast(), observed, observed, "a", [SOURCE])
+    assert archive.current_targets(observed)["intervals"] == []
+    frozen = archive.current_targets(observed + timedelta(minutes=30))["intervals"]
+    assert len(frozen) == 1
+    assert frozen[0]["start"] == "2026-09-09T10:00:00+00:00"
+    assert frozen[0]["cutoff"] == "2026-09-09T09:00:00+00:00"
+    assert archive.current_targets(report_after())["intervals"] == []
+
+
+def test_current_targets_project_energy_at_fractional_midnight_without_rewriting():
+    """Archiv und aktuelle Karte zeigen denselben Anteil einer unveränderten Stunde."""
+
+    archive = HistoryArchive("Asia/Kolkata")
+    observed = datetime(2026, 9, 8, 17, tzinfo=UTC)
+    archive.capture(
+        forecast(date(2026, 9, 8), 2, "Asia/Kolkata"), observed, observed, "a", [SOURCE]
+    )
+    before = archive.to_dict()
+    # Noch am Vortag liegt die Grenze zwischen den beiden angezeigten Tagen.
+    parts = [
+        item
+        for item in archive.current_targets(datetime(2026, 9, 8, 18, tzinfo=UTC))[
+            "intervals"
+        ]
+        if item["source_start"] == "2026-09-08T18:00:00+00:00"
+    ]
+    assert [(item["start"], item["end"], item["energy_kwh"]) for item in parts] == [
+        ("2026-09-08T18:00:00+00:00", "2026-09-08T18:30:00+00:00", 1),
+        ("2026-09-08T18:30:00+00:00", "2026-09-08T19:00:00+00:00", 1),
+    ]
+    assert all(item["source_start"] == "2026-09-08T18:00:00+00:00" for item in parts)
+    assert all(item["source_end"] == "2026-09-08T19:00:00+00:00" for item in parts)
+    assert all(item["raw_energy_kwh"] == item["ac_power_kw"] == 2 for item in parts)
+    # Nach Mitternacht bleibt nur der zum heutigen Tag gehörige halbe Anteil.
+    next_day = [
+        item
+        for item in archive.current_targets(datetime(2026, 9, 8, 19, tzinfo=UTC))[
+            "intervals"
+        ]
+        if item["source_start"] == "2026-09-08T18:00:00+00:00"
+    ]
+    assert len(next_day) == 1
+    assert next_day[0] == parts[1]
+    assert archive.to_dict() == before

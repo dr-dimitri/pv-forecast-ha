@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, patch
@@ -262,3 +263,158 @@ async def test_cancelled_setup_stops_measurement_listeners(hass, measured_entry)
         assert not manager.running
     finally:
         await manager.async_stop()
+
+
+async def test_interval_windows_are_additive_and_do_not_fetch(hass, measured_entry):
+    """Der alte Vertrag bleibt identisch; eine optionale Kurve nutzt dieselben Daten."""
+
+    entry, _, fetch = measured_entry
+    old = await _read(hass, entry.entry_id)
+    result = await _read(
+        hass,
+        entry.entry_id,
+        interval_windows=[
+            {"start": "2026-09-09T12:00:00Z", "end": "2026-09-09T12:10:00Z"},
+            {"start": "2026-09-09T12:10:00Z", "end": "2026-09-09T12:20:00Z"},
+        ],
+    )
+    intervals = result.pop("total_intervals")
+    assert result == old
+    assert intervals[0]["energy_kwh"] == 1
+    assert intervals[0]["ac_power_kw"] == 6
+    assert intervals[0]["energy_complete"]
+    assert intervals[1]["energy_kwh"] is None
+    assert "future_window" in intervals[1]["quality_flags"]
+    assert fetch.await_count == 1
+
+
+@pytest.mark.parametrize(
+    "windows",
+    [
+        [{"start": "2026-09-09T12:00:00", "end": "2026-09-09T13:00:00Z"}],
+        [{"start": "2026-09-09T12:00:00Z", "end": "2026-09-09T12:00:00Z"}],
+        [{"start": "2026-09-09T12:00:00Z", "end": "2026-09-09T11:00:00Z"}],
+        [{"start": "2026-09-09T12:00:00Z", "end": "2026-09-11T12:00:01Z"}],
+        [
+            {"start": "2026-09-09T12:00:00Z", "end": "2026-09-09T13:00:00Z"},
+            {"start": "2026-09-09T12:59:00Z", "end": "2026-09-09T14:00:00Z"},
+        ],
+        [{"start": "2026-09-09T12:00:00Z", "end": "2026-09-09T13:00:00Z"}] * 51,
+    ],
+)
+async def test_interval_windows_validate_bounds_before_reading(hass, windows):
+    """Anzahl, UTC-Offsets, Dauer, Überschneidungen und Spanne werden begrenzt."""
+
+    async_setup_measurement_services(hass)
+    with pytest.raises(vol.Invalid):
+        await _read(hass, "missing", interval_windows=windows)
+
+
+async def test_interval_windows_preserve_dst_offsets_and_input_order(
+    hass, measured_entry
+):
+    """Zwei gleich bezeichnete Ortsstunden bleiben eigenständige absolute Fenster."""
+
+    entry, _, _ = measured_entry
+    result = await _read(
+        hass,
+        entry.entry_id,
+        interval_windows=[
+            {"start": "2026-10-25T02:00:00+01:00", "end": "2026-10-25T03:00:00+01:00"},
+            {"start": "2026-10-25T02:00:00+02:00", "end": "2026-10-25T02:00:00+01:00"},
+        ],
+    )
+    assert [item["start"] for item in result["total_intervals"]] == [
+        "2026-10-25T01:00:00+00:00",
+        "2026-10-25T00:00:00+00:00",
+    ]
+    assert all(item["energy_kwh"] is None for item in result["total_intervals"])
+
+
+async def test_interval_windows_keep_external_permissions(hass, measured_entry):
+    """Die zusätzliche Kurve kann die Lesesperre einer Messquelle nicht umgehen."""
+
+    entry, _, _ = measured_entry
+    user = MockUser().add_to_hass(hass)
+    user.mock_policy(
+        {
+            "entities": {
+                "entity_ids": {
+                    entity.entity_id: {"read": True}
+                    for entity in er.async_entries_for_config_entry(
+                        er.async_get(hass), entry.entry_id
+                    )
+                }
+            }
+        }
+    )
+    with pytest.raises(Unauthorized):
+        await _read(hass, entry.entry_id, user_id=user.id, interval_windows=[])
+
+
+async def test_source_deleted_while_building_curve_does_not_return_old_copy(
+    hass, measured_entry
+):
+    """Eine Löschung während kooperativer Arbeit entfernt Kurven- und KPI-Messkopien."""
+
+    from custom_components.pv_forecast.measurement_windows import async_interval_windows
+
+    entry, _, _ = measured_entry
+    paused, resume = asyncio.Event(), asyncio.Event()
+    calls = 0
+
+    async def delayed(histories, windows, now):
+        nonlocal calls
+        calls += 1
+        result = await async_interval_windows(histories, windows, now)
+        if calls == 1:
+            paused.set()
+            await resume.wait()
+        return result
+
+    with patch(
+        "custom_components.pv_forecast.measurement_runtime.async_interval_windows",
+        new=delayed,
+    ):
+        task = asyncio.create_task(
+            _read(
+                hass,
+                entry.entry_id,
+                interval_windows=[
+                    {"start": "2026-09-09T12:00:00Z", "end": "2026-09-09T12:10:00Z"}
+                ],
+            )
+        )
+        await paused.wait()
+        await entry.runtime_data.measurements.async_delete_source_data("source-a")
+        resume.set()
+        result = await task
+    assert calls == 2
+    assert result["total_energy"]["energy_kwh"] is None
+    assert result["total_intervals"][0]["energy_kwh"] is None
+
+
+async def test_unload_while_building_curve_rejects_completed_response(
+    hass, measured_entry
+):
+    """Entladen beim Lesen verhindert eine Antwort aus der alten Laufzeit."""
+
+    entry, _, _ = measured_entry
+    paused, resume = asyncio.Event(), asyncio.Event()
+    manager = entry.runtime_data.measurements
+    original = manager.async_interval_windows
+
+    async def delayed(windows, now):
+        result = await original(windows, now)
+        paused.set()
+        await resume.wait()
+        return result
+
+    with patch.object(manager, "async_interval_windows", new=delayed):
+        task = asyncio.create_task(_read(hass, entry.entry_id, interval_windows=[]))
+        await paused.wait()
+        assert await hass.config_entries.async_unload(entry.entry_id)
+        resume.set()
+        with pytest.raises(ServiceValidationError) as error:
+            await task
+    assert error.value.translation_key == "entry_not_loaded"

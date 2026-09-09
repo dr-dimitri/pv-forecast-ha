@@ -5,6 +5,22 @@ get_forecast:
       selector:
         config_entry:
           integration: pv_forecast
+    include_view:
+      default: false
+      selector:
+        boolean:
+    day:
+      default: today
+      selector:
+        select:
+          options:
+            - label: "Heute"
+              value: today
+            - label: "Morgen"
+              value: tomorrow
+    roof_id:
+      selector:
+        text:
 get_measurements:
   fields:
     config_entry_id:
@@ -22,6 +38,9 @@ get_measurements:
       example: "2026-09-10T00:00:00+00:00"
       selector:
         text:
+    interval_windows:
+      selector:
+        object:
 get_history:
   fields:
     config_entry_id:
@@ -41,6 +60,10 @@ get_history:
             - label: "90 Tage"
               value: "90"
     include_records:
+      default: false
+      selector:
+        boolean:
+    current_targets:
       default: false
       selector:
         boolean:

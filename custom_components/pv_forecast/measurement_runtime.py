@@ -33,6 +33,7 @@ from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
 from .const import CONF_INSTALLED_POWER_KWP, CONF_ROOFS, CONF_TIME_ZONE, DOMAIN
+from .measurement_windows import MeasurementWindow, async_interval_windows
 from .measurements import SourceConfig, SourceHistory, aggregate_energy
 
 _LOGGER = logging.getLogger(__name__)
@@ -292,6 +293,25 @@ class MeasurementManager:
                     )
 
     @callback
+    async def async_interval_windows(
+        self, windows: list[MeasurementWindow], now: datetime
+    ) -> list[dict[str, Any]]:
+        """Kurvenfenster ohne wiederholte Vollscans und ohne gelöschte Kopien lesen."""
+
+        while True:
+            histories = tuple(
+                (source_id, history, history.source, history.segment_id)
+                for source_id, history in self._histories.items()
+            )
+            result = await async_interval_windows(
+                tuple(history for _, history, _, _ in histories), windows, now
+            )
+            if histories == tuple(
+                (source_id, history, history.source, history.segment_id)
+                for source_id, history in self._histories.items()
+            ):
+                return result
+
     def _snapshot_result(
         self,
         start: datetime,

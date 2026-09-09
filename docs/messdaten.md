@@ -114,3 +114,15 @@ diese Erprobung nicht.
 Grundlagen: [HA-Sensorvertrag](https://developers.home-assistant.io/docs/core/entity/sensor/),
 [HA-Ereignis-Listener](https://developers.home-assistant.io/docs/integration_listen_events/)
 und [PV-Messung im Energy-Dashboard](https://www.home-assistant.io/docs/energy/solar-panels/).
+
+## Explizite Intervalle für die Karte
+
+Die Leseaktion akzeptiert zusätzlich `interval_windows` mit höchstens 50
+nicht überlappenden absoluten `start`-/`end`-Fenstern über insgesamt höchstens
+48 Stunden. `total_intervals` liefert dafür die genau belegte Gesamtenergie,
+mittlere AC-Leistung und Qualitätsmarkierungen. Ein künftiges oder nicht
+vollständig belegtes Intervall hat `energy_kwh: null`. Ganze Zählerdifferenzen
+werden weder an Fenstergrenzen geteilt noch proportional auf Stunden verteilt.
+Die je Quelle gültigen Deltas und die gemeinsame Aggregation bleiben die
+Berechnungsgrundlage; ein großer Rohdatensatz wird dafür nicht je Intervall
+vollständig erneut durchsucht.

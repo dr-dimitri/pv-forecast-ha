@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
+from itertools import pairwise
 from typing import TYPE_CHECKING, Protocol, cast
 
 import voluptuous as vol
@@ -49,11 +50,40 @@ def _aware_datetime(value: object) -> datetime:
     return parsed.astimezone(UTC)
 
 
+def _interval_windows(value: list[dict[str, datetime]]) -> list[dict[str, datetime]]:
+    """Positive, getrennte Fenster auf höchstens zwei absolute Tage begrenzen."""
+
+    ordered = sorted(value, key=lambda window: window["start"])
+    if any(window["end"] <= window["start"] for window in ordered):
+        raise vol.Invalid("Jedes Messintervall benötigt eine positive Dauer.")
+    if any(
+        previous["end"] > following["start"]
+        for previous, following in pairwise(ordered)
+    ):
+        raise vol.Invalid("Messintervalle dürfen sich nicht überschneiden.")
+    if ordered and ordered[-1]["end"] - ordered[0]["start"] > timedelta(hours=48):
+        raise vol.Invalid(
+            "Messintervalle dürfen zusammen höchstens 48 Stunden umfassen."
+        )
+    return value
+
+
 _MEASUREMENTS_SCHEMA = vol.Schema(
     {
         vol.Required(CONF_CONFIG_ENTRY_ID): vol.All(cv.string, vol.Length(min=1)),
         vol.Required("start"): _aware_datetime,
         vol.Required("end"): _aware_datetime,
+        vol.Optional("interval_windows"): vol.All(
+            list,
+            vol.Length(max=50),
+            [
+                {
+                    vol.Required("start"): _aware_datetime,
+                    vol.Required("end"): _aware_datetime,
+                }
+            ],
+            _interval_windows,
+        ),
     }
 )
 
@@ -88,7 +118,30 @@ def async_setup_measurement_services(hass: HomeAssistant) -> None:
             raise ServiceValidationError(
                 translation_domain=DOMAIN, translation_key="invalid_measurement_window"
             )
-        return manager.snapshot(start, end, dt_util.utcnow())
+        now = dt_util.utcnow()
+        if "interval_windows" not in call.data:
+            return manager.snapshot(start, end, now)
+        intervals = await manager.async_interval_windows(
+            [
+                (window["start"], window["end"])
+                for window in call.data["interval_windows"]
+            ],
+            now,
+        )
+        # Zwischen Quellen darf HA andere Aufgaben ausführen; vor der Antwort
+        # gelten deshalb erneut die dann aktuellen externen Leserechte.
+        await _async_check_source_permissions(hass, call, manager)
+        if (
+            entry.state is not ConfigEntryState.LOADED
+            or getattr(getattr(entry, "runtime_data", None), "measurements", None)
+            is not manager
+        ):
+            raise ServiceValidationError(
+                translation_domain=DOMAIN, translation_key="entry_not_loaded"
+            )
+        result = manager.snapshot(start, end, now)
+        result["total_intervals"] = intervals
+        return result
 
     hass.services.async_register(
         DOMAIN,

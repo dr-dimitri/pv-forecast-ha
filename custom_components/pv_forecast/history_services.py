@@ -36,7 +36,11 @@ _BASE_SCHEMA = {
     ),
 }
 _HISTORY_SCHEMA = vol.Schema(
-    {**_BASE_SCHEMA, vol.Optional("include_records", default=False): cv.boolean}
+    {
+        **_BASE_SCHEMA,
+        vol.Optional("include_records", default=False): cv.boolean,
+        vol.Optional("current_targets", default=False): cv.boolean,
+    }
 )
 _EXPORT_SCHEMA = vol.Schema(
     {**_BASE_SCHEMA, vol.Required("format"): vol.In(("json", "csv"))}
@@ -49,11 +53,15 @@ def async_setup_history_services(hass: HomeAssistant) -> None:
 
     async def async_get_history(call: ServiceCall) -> ServiceResponse:
         manager = await _async_get_archive(hass, call)
-        return manager.snapshot(
+        now = dt_util.utcnow()
+        result = manager.snapshot(
             call.data["days"],
-            dt_util.utcnow(),
+            now,
             include_records=call.data["include_records"],
         )
+        if call.data["current_targets"]:
+            result["current_targets"] = manager.current_targets(now)
+        return result
 
     async def async_export_history(call: ServiceCall) -> ServiceResponse:
         manager = await _async_get_archive(hass, call)
