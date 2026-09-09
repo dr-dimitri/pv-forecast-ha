@@ -14,6 +14,7 @@ from math import isfinite
 from typing import TYPE_CHECKING, Any, Literal
 from zoneinfo import ZoneInfo
 
+from homeassistant.components import persistent_notification
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import CALLBACK_TYPE, HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
@@ -42,12 +43,13 @@ from .measurements import SourceConfig
 from .short_term import trial_report
 from .temperature_comparison import comparison_report, mountings_from_options
 from .uncertainty_data import current_experience_bands
+from .underperformance import empty_state, notification_due, observe
 
 if TYPE_CHECKING:
     from .calibration_runtime import CalibrationManager
 
 _LOGGER = logging.getLogger(__name__)
-STORAGE_VERSION = 5
+STORAGE_VERSION = 6
 SAVE_DELAY = 300
 MAX_STORAGE_BYTES = 32 * 1024 * 1024
 MAX_RECORDS = 6000
@@ -60,13 +62,14 @@ class _HistoryStore(Store[dict[str, Any]]):
     async def _async_migrate_func(
         self, old_major_version: int, old_minor_version: int, old_data: dict[str, Any]
     ) -> dict[str, Any]:
-        if old_major_version not in (1, 2, 3, 4):
+        if old_major_version not in (1, 2, 3, 4, 5):
             raise NotImplementedError
         # Version 1 erhält weiterhin keine erfundene Kalibrierungsbasis.
         # Version 3 erlaubt verschiedene, je Record unverändert validierte
         # Tageszeitzonen. Version 4 ergänzt ausschließlich neue Versuchsdaten;
         # keine Vorgängerversion erhält nachträgliche Kandidaten. Version 5
         # ergänzt nur neue Temperaturvergleiche, keine historischen Modellwerte.
+        # Version 6 beginnt ohne rückwirkend erfundene Minderertragshinweise.
         HistoryArchive.from_dict(old_data["archive"], old_data["archive"]["timezone"])
         return old_data
 
@@ -85,6 +88,7 @@ async def async_remove_history_store(hass: HomeAssistant, entry_id: str) -> None
     """Das gesamte Archiv beim Entfernen der Anlage löschen."""
 
     await _history_store(hass, entry_id).async_remove()
+    persistent_notification.async_dismiss(hass, f"{DOMAIN}.observation.{entry_id}")
 
 
 async def async_delete_history_data(hass: HomeAssistant, entry: ConfigEntry) -> None:
@@ -122,6 +126,9 @@ async def async_delete_history_source_data(
     if archive.delete_measurement_source(source_id):
         stored["archive"] = archive.to_dict()
         await store.async_save(stored)
+        persistent_notification.async_dismiss(
+            hass, f"{DOMAIN}.observation.{entry.entry_id}"
+        )
 
 
 def _configured_measurements(entry: ConfigEntry) -> tuple[SourceConfig, ...]:
@@ -211,6 +218,11 @@ class ArchiveManager:
         self._mutation_in_progress = False
         self.calibration: CalibrationManager | None = None
         self._last_calibration_capture: tuple[Any, ...] | None = None
+        self._observation_report: dict[str, Any] = {
+            "schema_version": 1,
+            "status": "off",
+            "experimental": True,
+        }
 
     @property
     def running(self) -> bool:
@@ -289,6 +301,7 @@ class ArchiveManager:
             _LOGGER.exception("Das lokale Prognosearchiv ist nicht lesbar")
             return
         self._loaded = True
+        self._observe(dt_util.utcnow())
         if self.enabled:
             self._running = True
             self._cancel_listener = self.coordinator.async_add_listener(self._updated)
@@ -322,6 +335,13 @@ class ArchiveManager:
         finally:
             self._mutation_in_progress = False
         self._archive = HistoryArchive(self.timezone)
+        self._observation_report = {
+            "schema_version": 1,
+            "status": "insufficient_days",
+            "experimental": True,
+            "learning_paused": False,
+        }
+        self._dismiss_observation()
         self._last_fetched_at = self.coordinator.last_update_success_time
         self._storage_error = None
         self._loaded = True
@@ -340,6 +360,8 @@ class ArchiveManager:
         try:
             await self._async_cancel_assessment()
             if self._archive.delete_measurement_source(source_id):
+                self._dismiss_observation()
+                self._observe(dt_util.utcnow())
                 self._dirty = True
                 await self._store.async_save(self._serialize())
         finally:
@@ -453,10 +475,102 @@ class ArchiveManager:
                 ):
                     self._dirty = True
                     self._schedule_save()
+                self._observe(now)
                 if self.calibration is not None:
                     self.calibration.async_reconcile()
         finally:
             self._assessment_task = None
+
+    @property
+    def learning_paused(self) -> bool:
+        event = self._archive.underperformance["event"]
+        return bool(
+            event and event["configuration_id"] == _configuration_id(self.entry)
+        )
+
+    @callback
+    def _dismiss_observation(self) -> None:
+        persistent_notification.async_dismiss(
+            self.hass, f"{DOMAIN}.observation.{self.entry.entry_id}"
+        )
+
+    @callback
+    def _observe(self, now: datetime) -> None:
+        enabled = (
+            self.enabled and self.entry.options.get("underperformance_enabled") is True
+        )
+        state = self._archive.underperformance
+        if state["event"] and state["event"]["configuration_id"] != _configuration_id(
+            self.entry
+        ):
+            state = self._archive.underperformance = empty_state(now)
+            self._dirty = True
+            self._schedule_save()
+        if not enabled or self.identity_unresolved or self._storage_error is not None:
+            self._observation_report = {
+                "schema_version": 1,
+                "experimental": True,
+                "status": "off" if not enabled else "basis_unavailable",
+                "learning_paused": self.learning_paused,
+            }
+            self._dismiss_observation()
+            return
+        updated, report = observe(
+            tuple(self._archive.records.values()),
+            state,
+            now,
+            _configuration_id(self.entry),
+            self.timezone,
+            {
+                date.fromisoformat(item["date"])
+                for item in self.entry.options.get("calibration_exclusions", [])
+            },
+            accepted_factor=getattr(self.coordinator, "calibration_factor", 1.0),
+        )
+        self._archive.underperformance = updated
+        self._observation_report = report
+        if updated != state:
+            self._dirty = True
+            self._schedule_save()
+        notifications = self.entry.options.get("underperformance_notifications") is True
+        if (
+            not notifications
+            or report["status"] != "active"
+            or updated["event"]["acknowledged"]
+        ):
+            self._dismiss_observation()
+        elif notification_due(updated, now, self.timezone, enabled=notifications):
+            # Bewusst keine Haushaltswerte in der HA-weit sichtbaren Mitteilung.
+            persistent_notification.async_create(
+                self.hass,
+                "Ein experimenteller Prüfhinweis liegt vor. Bitte die "
+                "berechtigungsgeprüfte PV-Forecast-Karte und die Messquelle "
+                "ansehen. Das ist keine Defektdiagnose. Quittierung und "
+                "Löschen stehen in den Integrationsoptionen bereit.",
+                "PV-Prognose: Vergleich prüfen",
+                f"{DOMAIN}.observation.{self.entry.entry_id}",
+            )
+            updated["event"]["notified"] = True
+            self._dirty = True
+            self._schedule_save()
+
+    async def async_observation_control(self, action: str) -> None:
+        """Einen Hinweis bewusst quittieren oder nach Prüfung neu beginnen."""
+        if not self._loaded or self._storage_error is not None:
+            raise HomeAssistantError("Das Prognosearchiv ist nicht lesbar")
+        if action == "acknowledge":
+            if self._archive.underperformance["event"] is not None:
+                self._archive.underperformance["event"]["acknowledged"] = True
+        elif action == "clear":
+            self._archive.underperformance = empty_state(dt_util.utcnow())
+        else:
+            raise ValueError("Unbekannte Hinweisbedienung")
+        self._dismiss_observation()
+        self._observe(dt_util.utcnow())
+        self._dirty = True
+        await self._store.async_save(self._serialize())
+        if self.calibration is not None:
+            self.calibration.async_reconcile()
 
     @callback
     def _comparison(self, now: datetime) -> dict[str, dict[str, Any]]:
@@ -547,6 +661,37 @@ class ArchiveManager:
             self.enabled
             and self.entry.options.get("temperature_comparison_enabled") is True
         )
+        observation = dict(self._observation_report)
+        if self._archive.underperformance["event"] is not None and observation[
+            "status"
+        ] in ("active", "reference_changed"):
+            # Ein zwischenzeitlicher Speicherbeschnitt oder eine Messkorrektur
+            # darf keinen alten Messbericht außerhalb seiner Belege ausliefern.
+            _, observation = observe(
+                tuple(self._archive.records.values()),
+                self._archive.underperformance,
+                now or dt_util.utcnow(),
+                _configuration_id(self.entry),
+                self.timezone,
+                {
+                    date.fromisoformat(item["date"])
+                    for item in self.entry.options.get("calibration_exclusions", [])
+                },
+            )
+        elif self._archive.underperformance["event"] is None:
+            observation = {
+                key: value
+                for key, value in observation.items()
+                if key
+                in (
+                    "schema_version",
+                    "experimental",
+                    "status",
+                    "reasons",
+                    "learning_paused",
+                )
+            }
+        result["underperformance"] = observation
         if self.calibration is not None:
             result["calibration"] = self.calibration.snapshot()
         return result

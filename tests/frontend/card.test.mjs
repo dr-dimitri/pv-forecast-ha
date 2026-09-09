@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   ARCHIVE_LABEL, REFRESH_MS, PvForecastCard, SharedReadCache, connectionCache, energyText,
-  formatPlantTime, loadView, planningChoices, plotGeometry, renderContent, renderOutlook, renderPlanning, renderReport, renderUncertainty,
+  formatPlantTime, loadView, planningChoices, plotGeometry, renderContent, renderOutlook, renderPlanning, renderReport, renderUncertainty, renderUnderperformance,
   selectedSeries, seriesPaths, tableRows, validateView,
 } from "../../custom_components/pv_forecast/frontend/pv-forecast-card.js";
 import { fixture, fixtureHass } from "./fixtures.mjs";
@@ -652,4 +652,23 @@ test("Temperaturvergleich zeigt Rohmodelle derselben Messpaare ohne Modellfreiga
   assert.match(html, /Produktive Prognose unverändert/);
   data.temperature_comparison.model = "unknown";
   assert.match(renderReport({data}, 7), /unbekannte Datenversion/);
+});
+
+
+test("Experimenteller Hinweis trennt Messung, Rohbasis und Lernstopp ohne Dachdiagnose", async () => {
+  const report = {schema_version: 1, status: "active", experimental: true, first_day: "2026-09-01", last_day: "2026-09-07", raw_kwh: 140, actual_kwh: 84, difference_kwh: 56, shortfall_fraction: 0.4, coverage_fraction: 1, below_days: 7, accepted_factor: 0.9, learning_paused: true, comparison: {training_count: 60, validation_count: 30, evaluation: {coverage_fraction: 0.8}}};
+  const html = renderUnderperformance(report);
+  assert.match(html, /Rohprognose 140 kWh · Messung 84 kWh/);
+  assert.match(html, /keine Defektdiagnose/);
+  assert.match(html, /Faktor 1/);
+  assert.match(html, /keine Dachdiagnose/);
+  assert.equal(renderUnderperformance({...report, schema_version: 99}), "");
+  const changed = renderUnderperformance({...report, status: "reference_changed"});
+  assert.doesNotMatch(changed, /Messung 84/);
+  assert.match(changed, /Erholung ist damit nicht belegt/);
+  const {state} = await load();
+  state.history.data.underperformance = report;
+  assert.match(renderContent(config, state), /Experimentelle Minderertragsprüfung/);
+  const roofState = (await load("sunny", {roof_id: "east"})).state;
+  assert.doesNotMatch(renderContent({...config, roof_id: "east"}, roofState), /Experimentelle Minderertragsprüfung/);
 });

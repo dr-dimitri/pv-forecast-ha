@@ -143,7 +143,9 @@
           "history_report": "Soll-Ist-Bericht ansehen (7/30/90 Tage)",
           "delete_history": "Lokales Prognosearchiv löschen",
           "history_done": "Fertig",
-          "temperature_roof": "Temperaturvergleich je Dach vorbereiten"
+          "temperature_roof": "Temperaturvergleich je Dach vorbereiten",
+          "underperformance_settings": "Experimentelle Minderertragshinweise",
+          "underperformance_control": "Prüfhinweis quittieren oder löschen"
         }
       },
       "history_settings": {
@@ -214,6 +216,26 @@
         "data": {
           "mounting": "Montageannahme für den Vergleich"
         }
+      },
+      "underperformance_settings": {
+        "title": "Experimentelle Minderertragshinweise",
+        "description": "Benötigt ein aktiviertes Archiv, bestätigte AC-Messquellen und eine zuvor geprüfte Vergleichsbasis mit 60 Trainings- und 30 Prüftagen. Sieben vollständige Tage werden gemeinsam geprüft. Ein Hinweis ist keine Defektdiagnose. Solange er besteht, pausiert die Kalibrierung und verwendet Faktor 1. Reale Trefferquote und Fehlalarmrate sind noch nicht belegt. Allgemeine HA-Mitteilungen enthalten keine Erträge; Ruhezeit ist 22–08 Uhr in der Anlagenzeitzone.",
+        "data": {
+          "underperformance_enabled": "Experimentelle Beobachtung aktivieren",
+          "underperformance_notifications": "Allgemeine lokale HA-Mitteilung zusätzlich aktivieren"
+        },
+        "data_description": {
+          "underperformance_enabled": "Standard: aus. Die Auswertung gilt ausschließlich für die Gesamtanlage. Abschalten entfernt einen bestehenden Hinweis und dessen Lernstopp nicht; dafür den Hinweis bewusst löschen.",
+          "underperformance_notifications": "Höchstens eine gebündelte Mitteilung pro Hinweis. Details stehen ausschließlich in der berechtigungsgeprüften Karte."
+        }
+      },
+      "underperformance_control": {
+        "title": "Prüfhinweis bearbeiten",
+        "description": "Quittieren beendet die Mitteilung, bewahrt aber die Vergleichsbasis und den Lernstopp. Nach bewusstem Löschen setzt das normale Lernen wieder ein; eine neue Erkennung benötigt sieben neue vollständige Tage. Bekannte Abregelung oder Wartung bitte zuerst unter Kalibrierung markieren. Es wird keine Erholung behauptet.",
+        "data": {
+          "action": "Bedienung",
+          "confirm": "Bewusste Änderung bestätigen"
+        }
       }
     },
     "error": {
@@ -240,7 +262,9 @@
       "history_unavailable": "Für diese Anlage ist das Prognosearchiv noch nicht verfügbar. Lade die Anlage, um gespeicherte Daten zu lesen.",
       "history_delete_failed": "Das Archiv konnte nicht gelöscht werden. Prüfe die lokale Speicherung und versuche es erneut.",
       "reconfigure_storage_unavailable": "Die bisherigen Mess-, Archiv- oder Lerndaten können nicht sicher übernommen werden oder die Anlage lässt sich nicht entladen. Der gespeicherte Standort bleibt unverändert.",
-      "temperature_roof_invalid": "Wähle eine vorhandene Dachfläche und eine angebotene Vergleichsannahme."
+      "temperature_roof_invalid": "Wähle eine vorhandene Dachfläche und eine angebotene Vergleichsannahme.",
+      "underperformance_confirmation_required": "Bitte die Änderung ausdrücklich bestätigen.",
+      "underperformance_unavailable": "Das lokale Archiv ist derzeit nicht verfügbar. Bitte Einrichtung und Archivspeicher prüfen."
     },
     "abort": {
       "already_configured": "Eine PV-Ertragsprognose ist bereits eingerichtet.",
@@ -410,7 +434,9 @@
           "history_report": "Soll-Ist-Bericht ansehen (7/30/90 Tage)",
           "delete_history": "Lokales Prognosearchiv löschen",
           "history_done": "Fertig",
-          "temperature_roof": "Temperaturvergleich je Dach vorbereiten"
+          "temperature_roof": "Temperaturvergleich je Dach vorbereiten",
+          "underperformance_settings": "Experimentelle Minderertragshinweise",
+          "underperformance_control": "Prüfhinweis quittieren oder löschen"
         }
       },
       "history_settings": {
@@ -563,6 +589,26 @@
         "data": {
           "mounting": "Montageannahme für den Vergleich"
         }
+      },
+      "underperformance_settings": {
+        "title": "Experimentelle Minderertragshinweise",
+        "description": "Benötigt ein aktiviertes Archiv, bestätigte AC-Messquellen und eine zuvor geprüfte Vergleichsbasis mit 60 Trainings- und 30 Prüftagen. Sieben vollständige Tage werden gemeinsam geprüft. Ein Hinweis ist keine Defektdiagnose. Solange er besteht, pausiert die Kalibrierung und verwendet Faktor 1. Reale Trefferquote und Fehlalarmrate sind noch nicht belegt. Allgemeine HA-Mitteilungen enthalten keine Erträge; Ruhezeit ist 22–08 Uhr in der Anlagenzeitzone.",
+        "data": {
+          "underperformance_enabled": "Experimentelle Beobachtung aktivieren",
+          "underperformance_notifications": "Allgemeine lokale HA-Mitteilung zusätzlich aktivieren"
+        },
+        "data_description": {
+          "underperformance_enabled": "Standard: aus. Die Auswertung gilt ausschließlich für die Gesamtanlage. Abschalten entfernt einen bestehenden Hinweis und dessen Lernstopp nicht; dafür den Hinweis bewusst löschen.",
+          "underperformance_notifications": "Höchstens eine gebündelte Mitteilung pro Hinweis. Details stehen ausschließlich in der berechtigungsgeprüften Karte."
+        }
+      },
+      "underperformance_control": {
+        "title": "Prüfhinweis bearbeiten",
+        "description": "Quittieren beendet die Mitteilung, bewahrt aber die Vergleichsbasis und den Lernstopp. Nach bewusstem Löschen setzt das normale Lernen wieder ein; eine neue Erkennung benötigt sieben neue vollständige Tage. Bekannte Abregelung oder Wartung bitte zuerst unter Kalibrierung markieren. Es wird keine Erholung behauptet.",
+        "data": {
+          "action": "Bedienung",
+          "confirm": "Bewusste Änderung bestätigen"
+        }
       }
     },
     "error": {
@@ -586,7 +632,9 @@
       "calibration_exclusion_limit": "Es sind bereits 90 Tage markiert. Nimm zuerst eine bestehende Tagesmarkierung zurück.",
       "calibration_reset_failed": "Der Lernzustand konnte nicht zurückgesetzt werden. Prüfe die lokale Speicherung und versuche es erneut.",
       "invalid_inverter_group": "Bitte wähle einen eindeutigen Namen, eine positive endliche AC-Leistung und mindestens eine noch nicht anderweitig zugeordnete Dachfläche.",
-      "temperature_roof_invalid": "Wähle eine vorhandene Dachfläche und eine angebotene Vergleichsannahme."
+      "temperature_roof_invalid": "Wähle eine vorhandene Dachfläche und eine angebotene Vergleichsannahme.",
+      "underperformance_confirmation_required": "Bitte die Änderung ausdrücklich bestätigen.",
+      "underperformance_unavailable": "Das lokale Archiv ist derzeit nicht verfügbar. Bitte Einrichtung und Archivspeicher prüfen."
     },
     "abort": {
       "reconfigure_entry_changed": "Die Anlage wurde während der Bearbeitung anderweitig geändert. Bitte starte die Bearbeitung erneut."
@@ -619,6 +667,12 @@
         "free_standing": "Freistehend (k = 0,0208)",
         "flat_ventilated": "Flachdach, gut belüftet (k = 0,026)",
         "pitched_poorly_ventilated": "Schrägdach, schwach belüftet (k = 0,0342)"
+      }
+    },
+    "underperformance_control": {
+      "options": {
+        "acknowledge": "Hinweis quittieren; Lernen bleibt pausiert",
+        "clear": "Hinweis und Referenzen löschen; neu beginnen"
       }
     }
   },

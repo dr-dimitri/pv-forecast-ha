@@ -456,3 +456,32 @@ async def test_temperature_mounting_is_explicit_per_roof_and_preserves_roof_opti
     assert result["data"]["temperature_comparison_enabled"] is True
     assert result["data"]["roofs"] == before["roofs"]
     assert result["data"]["inverter_max_power_kw"] == before["inverter_max_power_kw"]
+
+
+async def test_underperformance_options_and_explicit_control_roundtrip(hass):
+    entry = _entry(hass, enabled=True)
+    manager = SimpleNamespace(loaded=True, async_observation_control=AsyncMock())
+    entry.runtime_data = SimpleNamespace(history=manager)
+    result = await _choose(hass, await _menu(hass, entry), "underperformance_settings")
+    assert result["data_schema"]({}) == {
+        "underperformance_enabled": False,
+        "underperformance_notifications": False,
+    }
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {"underperformance_enabled": True, "underperformance_notifications": True},
+    )
+    result = await _choose(hass, result, "underperformance_control")
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"action": "clear", "confirm": False}
+    )
+    assert result["errors"]["base"] == "underperformance_confirmation_required"
+    manager.async_observation_control.assert_not_awaited()
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"action": "acknowledge", "confirm": True}
+    )
+    manager.async_observation_control.assert_awaited_once_with("acknowledge")
+    result = await _choose(hass, result, "history_done")
+    assert result["data"]["underperformance_enabled"] is True
+    assert result["data"]["underperformance_notifications"] is True
+    assert result["data"]["roofs"] == entry.options["roofs"]

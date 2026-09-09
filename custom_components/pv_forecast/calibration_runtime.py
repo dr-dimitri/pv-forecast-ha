@@ -248,6 +248,9 @@ class CalibrationManager:
             if self._state.configuration_id != configuration_id:
                 self._state = self._new_state()
                 self._schedule_save()
+            if self.history.learning_paused:
+                self.coordinator.async_set_calibration(1.0, None)
+                return
             excluded = tuple(
                 date.fromisoformat(item["date"])
                 for item in self.entry.options.get("calibration_exclusions", [])
@@ -285,6 +288,7 @@ class CalibrationManager:
             or self._storage_error is not None
             or self.mode not in ("observe", "auto")
             or not self.prerequisites_met
+            or self.history.learning_paused
         ):
             return {}
         candidate = self._state.candidate_for_capture
@@ -304,6 +308,7 @@ class CalibrationManager:
             mode=self.mode,
             effective_factor=self.coordinator.calibration_factor,
             storage_error=self._storage_error,
+            learning_paused=self.history.learning_paused,
         )
         if self.mode == "off":
             result["status"] = "off"
@@ -311,6 +316,8 @@ class CalibrationManager:
             result["status"] = "storage_unavailable"
         elif not self.prerequisites_met:
             result["status"] = "prerequisites_missing"
+        elif self.history.learning_paused:
+            result["status"] = "underperformance_paused"
         return result
 
     @callback
