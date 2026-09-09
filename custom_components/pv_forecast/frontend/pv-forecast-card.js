@@ -246,7 +246,40 @@ export function tableRows(state) {
   return [...rows.values()].sort((a, b) => millis(a.start) - millis(b.start) || millis(a.end) - millis(b.end));
 }
 
-function renderChart(state, width) {
+export const intervalKey = (row) => `${row.start}|${row.end}`;
+
+/** Reine Auswahl vorhandener UTC-Intervalle, keine Interpolation von Energie. */
+export function intervalAtPosition(state, fraction) {
+  const view = state?.forecast?.data;
+  if (!view || !finite(fraction) || fraction < 0 || fraction > 1) return null;
+  const rows = tableRows(state);
+  const instant = millis(view.start) + fraction * (millis(view.end) - millis(view.start));
+  return (fraction === 1 ? rows.at(-1) : rows.find((row) => millis(row.start) <= instant && millis(row.end) > instant)) ?? null;
+}
+
+export function intervalDetails(state, key) {
+  const row = tableRows(state).find((item) => intervalKey(item) === key);
+  if (!row) return null;
+  const series = selectedSeries(state);
+  return { ...row, sources: Object.fromEntries(Object.entries(series).map(([name, items]) => {
+    const item = items.find((value) => millis(value.start) === millis(row.start) && millis(value.end) === millis(row.end));
+    const complete = item && (name === "forecast" ? item.is_complete !== false : name === "actual" ? item.energy_complete === true : true);
+    return [name, { status: !item ? "missing" : complete && finite(item.energy_kwh) ? "complete" : "incomplete", energy_kwh: complete && finite(item.energy_kwh) ? item.energy_kwh : null, quality_flags: item?.quality_flags ?? [] }];
+  })) };
+}
+
+export function renderIntervalDetails(state, key) {
+  if (!tableRows(state).length) return '<p id="chart-help" class="hint">Noch keine Intervalle zum Erkunden vorhanden.</p>';
+  const detail = intervalDetails(state, key);
+  if (!detail) return '<button id="chart-explore" class="reset-button" data-interval-action="first">Intervalle erkunden</button><p id="chart-help" class="hint">Tippe auf den Verlauf oder wähle ein Intervall mit den Pfeiltasten. Die Tabelle enthält dieselben Werte.</p>';
+  const view = state.forecast.data;
+  return `<section id="interval-detail" data-start="${escapeHtml(detail.start)}" data-end="${escapeHtml(detail.end)}" class="interval-detail" aria-label="Ausgewähltes Intervall"><h3>${escapeHtml(plantStamp(detail.start, view.timezone))}<br>bis ${escapeHtml(plantStamp(detail.end, view.timezone))}</h3><p class="hint">${escapeHtml(view.timezone)} · kWh je tatsächlichem Intervall</p><dl class="interval-values">${Object.entries({ forecast: "Aktuelle Prognose", history: ARCHIVE_LABEL, actual: "Messung" }).map(([name, label]) => {
+    const source = detail.sources[name];
+    return `<div><dt>${label}</dt><dd>${source.status === "complete" ? `${energyText(source.energy_kwh)} kWh · vollständig` : source.status === "incomplete" ? "— · unvollständig" : "— · nicht vorhanden"}${source.quality_flags.length ? '<span class="hint">Qualitätsmarkierungen vorhanden</span>' : ""}</dd></div>`;
+  }).join("")}</dl><div class="interval-controls"><button id="interval-prev" data-interval-action="previous" aria-label="Vorheriges Intervall">Zurück</button><button id="interval-next" data-interval-action="next" aria-label="Nächstes Intervall">Weiter</button><button id="interval-close" data-interval-action="close">Schließen</button></div><p id="chart-help" class="hint">Pfeiltasten: Intervall wechseln. Escape: Detailansicht schließen.</p></section>`;
+}
+
+function renderChart(state, width, selectedKey) {
   const view = state.forecast.data;
   const series = selectedSeries(state);
   const { left, top, bottom, x } = plotGeometry(view, width);
@@ -269,10 +302,12 @@ function renderChart(state, width) {
   }).join("");
   const now = millis(view.as_of) >= millis(view.start) && millis(view.as_of) < millis(view.end) ? `<line class="now" x1="${x(view.as_of)}" x2="${x(view.as_of)}" y1="8" y2="${bottom}"/><text class="now-label" x="${Math.min(width - 32, Math.max(left + 15, x(view.as_of)))}" y="10" text-anchor="middle">Jetzt</text>` : "";
   const gaps = series.forecast.filter((item) => item.is_complete === false || !finite(item.energy_kwh)).map((item) => `<rect class="gap" x="${x(item.start)}" y="${top}" width="${x(item.end) - x(item.start)}" height="${bottom - top}"/>`).join("");
-  return `<svg class="chart" viewBox="0 0 ${width} 242" role="img" aria-labelledby="chart-title chart-description">
+  const selected = tableRows(state).find((row) => intervalKey(row) === selectedKey);
+  const highlight = selected ? `<rect class="selected-interval" x="${x(selected.start)}" y="${top}" width="${x(selected.end) - x(selected.start)}" height="${bottom - top}"/>` : "";
+  return `<svg id="interval-chart" class="chart" viewBox="0 0 ${width} 242" tabindex="0" role="group" aria-roledescription="Interaktives Diagramm" aria-labelledby="chart-title" aria-describedby="chart-description chart-help">
     <title id="chart-title">Energie je Intervall in kWh</title><desc id="chart-description">Aktuelle Prognose durchgezogen, ${ARCHIVE_LABEL} gestrichelt, Messwerte als Rechtecke. Fehlende Werte bleiben leer. Alle Werte stehen auch in der Tabelle.</desc>
     <defs><clipPath id="plot-clip"><rect x="${left}" y="0" width="${width - left - 12}" height="${bottom + 2}"/></clipPath></defs>
-    ${grid}<g clip-path="url(#plot-clip)">${gaps}${actual}${paths(series.history, "history-line")}${paths(series.forecast, "forecast-line", "is_complete")}${now}</g>${ticks}
+    ${grid}<g clip-path="url(#plot-clip)">${gaps}${highlight}${actual}${paths(series.history, "history-line")}${paths(series.forecast, "forecast-line", "is_complete")}${now}</g>${ticks}
     ${values.length ? "" : `<text class="empty-plot" x="${width / 2}" y="100" text-anchor="middle">Noch keine Intervallwerte</text>`}
   </svg>`;
 }
@@ -416,7 +451,7 @@ export function renderDailyTendencies(view) {
   return `<section aria-label="Mehrtagesaussicht"><h3>Mehrtagesaussicht</h3><dl class="daily-tendencies">${view.daily_forecasts.map((day) => `<div><dt>${escapeHtml(day.date)}${day.tendency ? " · Tendenz" : ""}</dt><dd>${energyText(day.energy_kwh)} kWh${day.quality_flags?.length ? " · Eingabewerte eingeschränkt" : ""}</dd></div>`).join("")}</dl><p class="hint">Datierte Werte des angezeigten Prognosestands. Die Prognosegüte späterer Tage ist noch nicht gemessen; ein belastbares Erfahrungsband fehlt. Zeitfenster können über den gesamten geladenen Zeitraum geplant werden.</p></section>`;
 }
 
-export function renderContent(config, state, width = 600, report = null, reportDays = 7, planningUI = {}) {
+export function renderContent(config, state, width = 600, report = null, reportDays = 7, planningUI = {}, selectedKey = null) {
   const forecast = state?.forecast;
   const view = forecast?.data;
   const title = config.title || view?.plant_name || "PV-Prognose";
@@ -449,7 +484,7 @@ export function renderContent(config, state, width = 600, report = null, reportD
     <nav class="section-nav" aria-label="Bereiche der PV-Karte"><button id="nav-overview" data-section="overview-heading">Übersicht</button>${view.roof_id ? "" : '<button id="nav-planning" data-section="planning-heading">Planen</button>'}<button id="nav-comparison" data-section="comparison-heading">Vergleichen</button></nav>
     <section aria-labelledby="overview-heading"><h3 class="section-heading" id="overview-heading" tabindex="-1">Tagesübersicht</h3>
     <div class="overview-metrics"><section aria-label="Tagesprognosen"><h3 class="metric-heading">Tagesprognosen</h3><dl class="kpis">${kpi("Heute", view.summary.today_kwh, "Tagesprognose")}${kpi("Morgen", view.summary.tomorrow_kwh, "Tagesprognose")}</dl></section><section aria-label="Heutiger Stand"><h3 class="metric-heading">Heutiger Stand · ${escapeHtml(formatPlantDate(view.today_start, view.timezone))}</h3><dl class="kpis">${kpi("Rest heute", view.summary.remaining_today_kwh, "Ab jetzt erwartet")}${kpi("Ist heute", view.roof_id ? null : actual, actualHint, actualComplete ? "measured" : "incomplete")}</dl></section></div>
-    <section class="chart-section" aria-label="Tagesverlauf"><div class="chart-heading"><h3>Energie im Tagesverlauf · ${view.day === "tomorrow" ? "Morgen" : "Heute"}</h3><span>kWh / Intervall</span></div><div class="legend"><span><i class="forecast-key"></i>Aktuelle Prognose</span><span><i class="history-key"></i>${ARCHIVE_LABEL}</span><span><i class="actual-key"></i>Ist</span></div>${renderChart(state, width)}<p class="chart-note">${escapeHtml(view.timezone)} · Ansicht ${escapeHtml(formatPlantTime(view.as_of, view.timezone))}<br>Wetterabruf ${escapeHtml(weatherStamp)}</p></section>
+    <section class="chart-section" aria-label="Tagesverlauf"><div class="chart-heading"><h3>Energie im Tagesverlauf · ${view.day === "tomorrow" ? "Morgen" : "Heute"}</h3><span>kWh / Intervall</span></div><div class="legend"><span><i class="forecast-key"></i>Aktuelle Prognose</span><span><i class="history-key"></i>${ARCHIVE_LABEL}</span><span><i class="actual-key"></i>Ist</span></div>${renderChart(state, width, selectedKey)}${renderIntervalDetails(state, selectedKey)}<p class="chart-note">${escapeHtml(view.timezone)} · Ansicht ${escapeHtml(formatPlantTime(view.as_of, view.timezone))}<br>Wetterabruf ${escapeHtml(weatherStamp)}</p></section>
     ${notices.length ? `<div class="notices" role="status">${notices.map((text) => `<p>${escapeHtml(text)}</p>`).join("")}</div>` : ""}
     ${renderDailyTendencies(view)}
     ${view.roof_id ? "" : renderUnderperformance(state.history?.data?.underperformance)}</section>
@@ -476,6 +511,7 @@ const styles = `
   .section-nav{display:flex;flex-wrap:wrap;gap:var(--pv-space);margin:0 0 24px}.section-nav button{font:inherit;font-size:var(--pv-text);min-height:44px;padding:8px 12px;border:1px solid var(--pv-muted);border-radius:var(--pv-radius);background:transparent;color:var(--primary-text-color,#202b32);cursor:pointer}.section-nav button:hover{background:var(--pv-surface)}
   .section-heading{font-size:18px;margin:0 0 16px;scroll-margin-top:76px}.section-heading:focus-visible{outline:3px solid var(--primary-color,#007c91);outline-offset:4px}.metric-heading{font-weight:500;color:var(--pv-muted);margin:0 0 8px;line-height:1.5}.overview-metrics{display:grid;gap:var(--pv-space)}.overview-metrics>section{min-width:0}.overview-metrics .kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.task-section{border-top:1px solid var(--pv-border);padding-top:24px;margin-top:24px}.task-section>details:last-child{margin-bottom:8px}
   @container (min-width:720px){.overview-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
+  .selected-interval{fill:var(--primary-color,#007c91);fill-opacity:.1;stroke:var(--primary-text-color,#202b32);stroke-width:1;stroke-dasharray:3 3}.chart:focus-visible{outline:3px solid var(--primary-color,#007c91);outline-offset:4px}.interval-detail{padding:16px;margin:12px 0;background:var(--pv-surface);border-radius:var(--pv-radius)}.interval-detail h3{line-height:1.6}.interval-values{display:grid;gap:12px;margin:12px 0}.interval-values dt{font-size:var(--pv-text);color:var(--pv-muted)}.interval-values dd{margin:4px 0 0;font-size:var(--pv-text);font-variant-numeric:tabular-nums}.interval-values dd span{display:block}.interval-controls{display:flex;flex-wrap:wrap;gap:8px}.interval-controls button{min-width:44px;min-height:44px;padding:8px 12px;border:1px solid var(--pv-muted);border-radius:var(--pv-radius);font:inherit;font-size:var(--pv-text);color:var(--primary-text-color,#202b32);background:var(--card-background-color,#fff);cursor:pointer}
   :host{container-type:inline-size}
   .header>div,.chart-section{min-width:0}.header{flex-wrap:wrap}.chart-heading{flex-wrap:wrap}.badge{color:var(--pv-muted)}.badge.warning{color:var(--primary-text-color,#202b32);border-color:currentColor}
   .kpi-wide{grid-column:span 2}.kpi dd small{display:inline-block;white-space:nowrap}.report-metrics dd{overflow-wrap:anywhere}.legend{row-gap:10px}.chart-note{line-height:1.6;text-align:left}.notices{padding:12px 16px}.hint{margin-top:8px}.day-switch{flex-shrink:0}
@@ -504,6 +540,7 @@ export class PvForecastCard extends ElementBase {
   constructor() {
     super();
     this._width = 550;
+    this._selectedInterval = null;
     this._reportDays = 7;
     this._reportOpen = false;
     this._valuesOpen = false;
@@ -513,11 +550,28 @@ export class PvForecastCard extends ElementBase {
     if (!this.attachShadow) return;
     this.attachShadow({ mode: "open" });
     this.shadowRoot.addEventListener("click", (event) => {
+      const action = event.target.closest?.("[data-interval-action]")?.dataset.intervalAction;
+      if (action) { this._chooseInterval(action); return; }
+      const chart = event.target.closest?.("#interval-chart");
+      if (chart && this._state?.forecast?.data) {
+        const rect = chart.getBoundingClientRect();
+        const { left } = plotGeometry(this._state.forecast.data, this._width);
+        const fraction = ((event.clientX - rect.left) * this._width / rect.width - left) / (this._width - left - 12);
+        const row = intervalAtPosition(this._state, fraction);
+        if (row) { this._selectedInterval = intervalKey(row); this._render(); this.shadowRoot.getElementById("interval-chart")?.focus({ preventScroll: true }); }
+        return;
+      }
       const section = event.target.closest?.("[data-section]")?.dataset.section;
       if (section) { const heading = this.shadowRoot.getElementById(section); heading?.focus({ preventScroll: true }); heading?.scrollIntoView({ block: "start" }); return; }
       if (event.target.closest?.("[data-reset-roof]")) { this._config = { ...this._config, roof_id: undefined }; this._bind(); return; }
       const day = event.target.closest?.("[data-day]")?.dataset.day;
       if (day && day !== this._config.day) { this._config = { ...this._config, day }; this._bind(); }
+    });
+    this.shadowRoot.addEventListener("keydown", (event) => {
+      const inChart = event.target.id === "interval-chart";
+      const inDetails = event.target.closest?.("#interval-detail");
+      const action = event.key === "Escape" ? "close" : inChart ? ({ ArrowLeft: "previous", ArrowRight: "next", Home: "first", End: "last", Enter: "first", " ": "first" })[event.key] : null;
+      if (action && (inChart || inDetails)) { event.preventDefault(); this._chooseInterval(action); }
     });
     this.shadowRoot.addEventListener("change", (event) => {
       if (event.target.id === "roof") { this._config = { ...this._config, roof_id: event.target.value || undefined }; this._bind(); }
@@ -543,6 +597,17 @@ export class PvForecastCard extends ElementBase {
         this._bindReport();
       }
     }, true);
+  }
+
+  _chooseInterval(action) {
+    if (!this._state?.forecast?.data) return;
+    const rows = tableRows(this._state);
+    if (!rows.length) return;
+    const current = rows.findIndex((row) => intervalKey(row) === this._selectedInterval);
+    const index = action === "last" ? rows.length - 1 : action === "first" ? 0 : current < 0 ? 0 : Math.max(0, Math.min(rows.length - 1, current + (action === "previous" ? -1 : 1)));
+    this._selectedInterval = action === "close" ? null : intervalKey(rows[index]);
+    this._render();
+    if (action === "close" || action === "first") this.shadowRoot.getElementById("interval-chart")?.focus({ preventScroll: true });
   }
 
   setConfig(config) {
@@ -606,6 +671,7 @@ export class PvForecastCard extends ElementBase {
     this._unsubscribe?.(); this._unsubscribe = null;
     this._unsubscribeReport?.(); this._unsubscribeReport = null;
     this._unsubscribePlanning?.(); this._unsubscribePlanning = null;
+    this._selectedInterval = null;
     this._selectionPending = Boolean(this._state?.forecast?.data && (this._state.forecast.data.day !== this._config?.day || (this._state.forecast.data.roof_id ?? null) !== (this._config?.roof_id ?? null)));
     this._report = null;
     if (!this._connected || this._visible === false || !this._hass || !this._config) return;
@@ -687,6 +753,7 @@ export class PvForecastCard extends ElementBase {
 
   _render() {
     if (!this.shadowRoot || !this._config) return;
+    if (this._selectedInterval && !tableRows(this._state).some((row) => intervalKey(row) === this._selectedInterval)) this._selectedInterval = null;
     // Dokument und eingebettetes Panel können jeweils den Scrollbereich besitzen.
     const scrollPositions = [];
     for (let node = this; node; node = node.parentNode || node.host) {
@@ -700,7 +767,7 @@ export class PvForecastCard extends ElementBase {
       const now = millis(this._state.forecast.data.as_of);
       this._planningInputs = { duration_minutes: "120", earliest_start: choices.find((value) => millis(value) >= now) ?? choices[0], latest_end: choices.at(-1) };
     }
-    this.shadowRoot.innerHTML = `<style>${styles}</style><ha-card><div class="body" aria-busy="${Boolean(this._selectionPending)}">${renderContent(this._config, this._state ? { ...this._state, selectionPending: this._selectionPending } : null, this._width, this._report, this._reportDays, { inputs: this._planningInputs, result: this._planning, dirty: this._planningDirty })}</div></ha-card>`;
+    this.shadowRoot.innerHTML = `<style>${styles}</style><ha-card><div class="body" aria-busy="${Boolean(this._selectionPending)}">${renderContent(this._config, this._state ? { ...this._state, selectionPending: this._selectionPending } : null, this._width, this._report, this._reportDays, { inputs: this._planningInputs, result: this._planning, dirty: this._planningDirty }, this._selectedInterval)}</div></ha-card>`;
     const values = this.shadowRoot.getElementById("values");
     const report = this.shadowRoot.getElementById("report");
     if (values) values.open = this._valuesOpen;

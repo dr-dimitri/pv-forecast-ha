@@ -254,7 +254,7 @@ test("Dynamische Texte sind HTML-escaped; Semantik und Tabellenfallback sind vor
   assert.match(html, /aria-pressed="true"/);
   assert.match(html, /<table>/);
   assert.match(html, /scope="row"/);
-  assert.match(html, /role="img"/);
+  assert.match(html, /role="group" aria-roledescription="Interaktives Diagramm"/);
   assert.match(html, /class="history-line"/);
   assert.match(html, /class="actual-bar"/);
 });
