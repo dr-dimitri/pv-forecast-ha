@@ -65,7 +65,19 @@ Der Datenvertrag ist in [Messdaten](messdaten.md) beschrieben.
 
 `history_enabled` und die optionale bestätigte Zuordnung `comparison_forecast`
 sind kompatible Options-Ergänzungen des Schemas 1.1. Deaktivierte Erfassung
-löscht keine bestehenden Daten. Archivdaten verwenden separat Store-Version 1
+löscht keine bestehenden Daten. Archivdaten verwenden seit #18 separat Store-Version 2
 unter `pv_forecast.history.<entry_id>`. Der
 [Archivvertrag](prognosearchiv.md) nennt Zeitfenster, Rohprognose, Bewertungs-
 revisionen, Konfigurationsbezug, Aufbewahrungsgrenzen und Löschung.
+
+## Selbstkalibrierung ab #18
+
+`calibration_mode` und `calibration_exclusions` sind optionale Ergänzungen des
+Config-Entry-Schemas 1.1. Der Lernzustand hat einen eigenen Store Version 1 unter
+`pv_forecast.calibration.<entry_id>`. Die tatsächliche Archivschema-Erweiterung
+auf Version 2 übernimmt alte Rohstände verlustfrei und ergänzt keine rückwirkend
+geschätzte Lernbasis. Unbekannte Versionen werden nicht überschrieben.
+
+Die [Kalibrierungsregeln](kalibrierung.md) bestimmen Freigabe, Segmentwechsel,
+Messrevisionen und bewusstes Rücksetzen. IDs, Nennwerte und Anlagenzeitzone
+werden dadurch nicht umgedeutet.

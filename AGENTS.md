@@ -114,7 +114,7 @@ menschliche Abnahme und wird durch Offline-Tests nicht ersetzt.
 ## Optionales Prognosearchiv aus #27 und Statistikentscheidung #4
 
 Das Archiv ist per UI opt-in und speichert tatsächlich rechtzeitig beobachtete
-Prognosestände in einem getrennten HA-Store Version 1. Festgelegte Stichtage:
+Prognosestände in einem getrennten HA-Store (seit #18 Version 2). Festgelegte Stichtage:
 18 Uhr am Vortag und 06 Uhr am Zieltag für lokale Tageswerte (maximal zwei
 Stunden alte Prognose), Vorlauf eine beziehungsweise drei Stunden für
 UTC-Intervalle (maximal eine Stunde alte Prognose). Nach dem Stichtag werden
@@ -169,6 +169,51 @@ unterscheidbar. Mehrere sichtbare Karten teilen Leseaufrufe; entfernte oder
 ausgeblendete Karten halten keine Abrufschleifen aktiv. Tests und Screenshots
 prüfen 360 px, Hell/Dunkel, Tastatur, Datenlücken und Fehlerzustände. Die reale
 Nutzererprobung wird davon getrennt ausgewiesen.
+
+## Optionale Selbstkalibrierung aus #18
+
+Ein begrenzter Anlagenfaktor wird ausschließlich in den Optionen aktiviert:
+aus (Standard), beobachten oder nach erfolgreicher Prüfung automatisch anwenden.
+Beobachtung und Automatik benötigen ein aktiviertes Archiv und bestätigte
+AC-Energiequellen. Der Faktor von 0,5 bis 1,5 gilt vor dem bestehenden
+proportionalen AC-Clipping. Anwenderwerte bleiben unverändert. Rohmodell und
+wirksame gemeinsame Zeitreihe bleiben getrennt; lokale Faktorwechsel lösen
+weder HTTP aus noch verändern sie Abrufzeit oder Fehlerstatus.
+
+Regelversion 1 verwendet ausschließlich `daily_previous_18`: die jüngsten
+30 gültigen Lerntage innerhalb von 60 lokalen Tagen, Faktor in Schritten von
+0,01 mit minimalem Tages-MAE, bei Gleichstand näher an 1. Training benötigt
+vollständige Messung, brauchbare Eingaben, mindestens 0,1 kWh ungekürzte Energie
+und höchstens 10 Prozent regulären Clippingverlust. Fehlende Daten und bekannte
+Abregelung/Wartung sind ungeeignet; große Fehler allein bleiben erhalten.
+
+Ein fester Kandidat benötigt anschließend mindestens 14 erst danach rechtzeitig
+eingefrorene Prüftage innerhalb von 28 lokalen Kalendertagen. Freigabe verlangt
+mindestens 5 Prozent geringeren MAE bei positivem Roh-MAE und höchstens 5 Prozent
+höheres 90%-Quantil absoluter Fehler, auf denselben Prüftagen. Die Prüfung lässt
+reguläres Clipping und große Fehler zu. Nach Freigabe wird sie mit den jüngsten
+14 Tagen innerhalb von 28 Tagen fortgeführt; fehlender Nachweis bedeutet Faktor 1.
+Nach Ablehnung oder Abbruch beginnt frühestens nach 14 Tagen ein neuer Versuch.
+
+Neue Archivstände erhalten eine unveränderliche UTC-Basis vor Clipping und
+gegebenenfalls angewendete sowie geprüfte Kandidatenwerte. Die verlustfreie
+Archivmigration 1 auf 2 ergänzt für alte Daten keine erfundene Lernbasis. Ein
+getrennter Lern-Store Version 1 hält Segment, Kandidat, 30 Trainingsreferenzen
+und höchstens 28 Prüfbelege mit Inhaltsfingerprints, auf 1 MiB begrenzt.
+Reguläre Schreibungen folgen festen Fünfminutenterminen. Config Entries bleiben
+bei Schema 1.1; unbekannte Speicherversionen werden nicht überschrieben.
+
+Messkorrektur, Quellenlöschung oder physische Anlagenänderung entzieht betroffenen
+Faktoren ihre Freigabe. Reine Registry-Umbenennung bewahrt den Bezug. Rücksetzen
+beginnt ab jetzt ein neues Lernsegment. Ausschalten verwendet Faktor 1;
+Quellen-/Archivlöschung entfernt abhängige Lernbelege. Entladen beendet Listener,
+Entfernen der Integration löscht den Lern-Store.
+
+Die Optionen zeigen Lernstatus und Vergleich und erlauben maximal 90 bewusste
+Markierungen bekannter Abregelung/Wartung für lokale Tage des letzten Jahres.
+Die bestehende Archiv-Leseaktion ergänzt den Status unter denselben Quellenrechten.
+Es entstehen keine neuen Sensoren oder Aktionen. Die reale Güteerprobung bleibt
+offen; Kalibrierung ist weder Defektmeldung noch garantierte Verbesserung.
 
 ## Konfiguration
 

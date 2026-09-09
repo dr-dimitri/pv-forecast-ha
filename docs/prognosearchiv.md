@@ -115,14 +115,15 @@ Ausgabezeitpunkt des fremden Wettermodells.
 
 Der Vergleich verwendet ausschließlich identische gültige Zielintervalle für
 beide Prognosen und weist diese gemeinsame Paaranzahl aus. Er ist kein Beleg
-für generell bessere Leistung auf anderen Anlagen. Die korrigierte Variante
-bleibt bis zu einer tatsächlichen Lernfunktion `null`; es werden keine
-Kalibrierung oder Verbesserung vorgetäuscht. Spätere Trainings- und
-Bewertungsdaten müssen getrennt bleiben.
+für generell bessere Leistung auf anderen Anlagen. `calibrated_comparison`
+vergleicht nur tatsächlich am Stichtag angewendete Korrekturen aus der optionalen
+[Selbstkalibrierung](kalibrierung.md) mit dem Rohmodell auf identischen gültigen
+Zielen. Reine Testkandidaten zählen dort nicht als angewendete Korrektur.
+Ohne solche Werte bleibt die korrigierte Variante `null`.
 
 ## Lokaler Speicher, Löschen und Lebenszyklus
 
-Der private HA-Store `pv_forecast.history.<entry_id>` hat Version 1, unabhängig
+Der private HA-Store `pv_forecast.history.<entry_id>` hat seit #18 Version 2, unabhängig
 von Config-Entry-Schema 1.1 und Messstore-Version. Stundenstände werden maximal
 90 Tage und Tagesbewertungen maximal 365 Tage aufbewahrt. Zusätzlich gelten
 höchstens 6.000 Zieldatensätze, drei frühere Bewertungsrevisionen pro Datensatz
@@ -136,6 +137,15 @@ bestätigte Löschungen können zusätzlich schreiben. Bei hartem Prozessabbruch
 kann das letzte noch ungeschriebene Stück fehlen. Unbekannte Speicherversionen
 werden nicht überschrieben; ein Archivfehler wird getrennt angezeigt.
 
+Die Migration aus Version 1 erhält vorhandene Daten unverändert. Neue Stände
+speichern zusätzlich `basis` (UTC-Intervalle mit Gesamtleistung vor Clipping
+und damaligem AC-Limit), gegebenenfalls `applied_factor`, `applied_candidate_id`
+und `calibrated_energy_kwh` sowie den rechtzeitig bekannten Testkandidaten
+(`candidate_factor`, `candidate_id`, `candidate_energy_kwh`). Alte Stände erhalten
+keine rückwirkend erfundene Basis. Die ursprüngliche `raw_energy_kwh` bleibt
+auch bei aktiver Kalibrierung unkorrigiert. Die eigene historische Kartenlinie
+verwendet die tatsächlich wirksame eingefrorene Energie.
+
 Die Bewertung gibt den HA-Eventloop zwischen Arbeitsschritten frei und erzeugt
 keine unbegrenzten parallelen Auswertungen. Beim Entladen enden Listener und
 laufende Bewertungen. Eine Löschung im entladenen Zustand startet sie nicht
@@ -147,6 +157,9 @@ Bewertungsrevisionen. Geschlossene gelöschte Ziele werden nicht beim nächsten
 Minutentakt wieder aufgebaut. Ihre ursprünglichen Prognosestände können als
 Prognosen erhalten bleiben. Originalsensoren und Recorder-Historie werden
 nicht verändert. Beim Entfernen der Anlage wird ihr Archiv mit gelöscht.
+Quellen- und Archivlöschung verwerfen außerdem die davon abhängigen Lernbelege
+und kehren zum Grundmodell zurück. Die vorhandene berechtigungsgeprüfte
+Archivantwort enthält unter `calibration` den aktuellen Lernstatus.
 
 ## Leseaktionen und Export
 

@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 import math
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
+from dataclasses import replace
 from datetime import UTC, date, datetime, time, timedelta, tzinfo
 from itertools import pairwise
 
 from .const import DEFAULT_TEMPERATURE_COEFFICIENT, REFERENCE_TEMPERATURE_C
 from .models import (
     DailyYield,
+    ForecastBasisInterval,
+    ForecastCalibrationBasis,
     ForecastResult,
     PlanningValues,
     PvRoof,
@@ -139,6 +142,8 @@ def calculate_forecast(
     inverter_max_power_kw: float | None,
     local_date: date,
     timezone: tzinfo,
+    *,
+    calibration_factor: float = 1.0,
 ) -> ForecastResult:
     """Zeitreihen aller Dächer berechnen, clippen und für zwei Tage summieren."""
 
@@ -248,7 +253,7 @@ def calculate_forecast(
         )
 
     combined_intervals = tuple(total_intervals)
-    return ForecastResult(
+    result = ForecastResult(
         local_date=local_date,
         roofs=roof_results,
         total=DailyYield(
@@ -257,6 +262,210 @@ def calculate_forecast(
         ),
         total_intervals=combined_intervals,
     )
+    return apply_calibration(
+        result, calibration_factor, inverter_max_power_kw, timezone
+    )
+
+
+def _validate_calibration_factor(factor: float) -> None:
+    if (
+        isinstance(factor, bool)
+        or not math.isfinite(factor)
+        or not 0.5 <= factor <= 1.5
+    ):
+        raise InvalidConfigurationError(
+            "Der Anlagenfaktor muss zwischen 0,5 und 1,5 liegen"
+        )
+
+
+def apply_calibration(
+    raw_forecast: ForecastResult,
+    factor: float,
+    inverter_max_power_kw: float | None,
+    timezone: tzinfo,
+) -> ForecastResult:
+    """Einen Anlagenfaktor lokal vor Clipping anwenden und die Roh-DC-Werte bewahren."""
+
+    _validate_calibration_factor(factor)
+    if factor == 1.0:
+        return raw_forecast
+    by_end = {
+        roof_id: {item.end.astimezone(UTC): item for item in roof.intervals}
+        for roof_id, roof in raw_forecast.roofs.items()
+    }
+    powers = {
+        end: proportional_clipping(
+            {
+                roof_id: _finite_result(
+                    items[end].dc_power_kw * factor, "kalibrierte Dachleistung"
+                )
+                for roof_id, items in by_end.items()
+                if end in items
+            },
+            inverter_max_power_kw,
+        )
+        for end in {end for items in by_end.values() for end in items}
+    }
+    roofs = {}
+    for roof_id, roof in raw_forecast.roofs.items():
+        intervals = tuple(
+            replace(
+                item,
+                ac_power_kw=powers[item.end.astimezone(UTC)][roof_id],
+                energy_kwh=_finite_result(
+                    powers[item.end.astimezone(UTC)][roof_id]
+                    * max(
+                        0.0,
+                        (
+                            item.end.astimezone(UTC) - item.start.astimezone(UTC)
+                        ).total_seconds()
+                        / 3600,
+                    ),
+                    "kalibrierte Intervallenergie",
+                ),
+            )
+            for item in roof.intervals
+        )
+        roofs[roof_id] = replace(
+            roof,
+            intervals=intervals,
+            daily=DailyYield(
+                aggregate_energy_for_day(intervals, raw_forecast.local_date, timezone),
+                aggregate_energy_for_day(
+                    intervals, raw_forecast.local_date + timedelta(days=1), timezone
+                ),
+            ),
+        )
+    total_intervals = []
+    for item in raw_forecast.total_intervals:
+        start, end = item.start.astimezone(UTC), item.end.astimezone(UTC)
+        power = _finite_result(
+            sum(
+                interval.ac_power_kw
+                for roof in roofs.values()
+                for interval in roof.intervals
+                if interval.start.astimezone(UTC) <= start
+                and interval.end.astimezone(UTC) >= end
+            ),
+            "kalibrierte Gesamtleistung",
+        )
+        total_intervals.append(
+            replace(
+                item,
+                ac_power_kw=power,
+                energy_kwh=_finite_result(
+                    power * (end - start).total_seconds() / 3600,
+                    "kalibrierte Gesamtenergie",
+                ),
+            )
+        )
+    intervals = tuple(total_intervals)
+    return replace(
+        raw_forecast,
+        roofs=roofs,
+        total_intervals=intervals,
+        total=DailyYield(
+            aggregate_energy_for_day(intervals, raw_forecast.local_date, timezone),
+            aggregate_energy_for_day(
+                intervals, raw_forecast.local_date + timedelta(days=1), timezone
+            ),
+        ),
+    )
+
+
+def forecast_basis(
+    forecast: ForecastResult,
+    start: datetime,
+    end: datetime,
+    inverter_max_power_kw: float | None,
+) -> ForecastCalibrationBasis | None:
+    """Die vollständige Rohleistung eines UTC-Fensters ohne Rückrechnung einfrieren."""
+
+    if start.utcoffset() is None or end.utcoffset() is None:
+        raise InvalidConfigurationError(
+            "Die Kalibrierungsbasis benötigt absolute Zeitpunkte"
+        )
+    start, end = start.astimezone(UTC), end.astimezone(UTC)
+    if not forecast.roofs or end <= start:
+        return None
+    cursor = start
+    result = []
+    for item in forecast.total_intervals:
+        left, right = max(start, item.start.astimezone(UTC)), min(
+            end, item.end.astimezone(UTC)
+        )
+        if right <= left:
+            continue
+        if left != cursor or not item.is_complete:
+            return None
+        powers = []
+        for roof in forecast.roofs.values():
+            matches = [
+                interval.dc_power_kw
+                for interval in roof.intervals
+                if interval.start.astimezone(UTC) <= left
+                and interval.end.astimezone(UTC) >= right
+            ]
+            if len(matches) != 1:
+                return None
+            powers.extend(matches)
+        result.append(
+            ForecastBasisInterval(
+                left, right, _finite_result(sum(powers), "ungekürzte Gesamtleistung")
+            )
+        )
+        cursor = right
+    if cursor != end:
+        return None
+    return ForecastCalibrationBasis(tuple(result), inverter_max_power_kw)
+
+
+def calibrated_energy(basis: ForecastCalibrationBasis, factor: float) -> float:
+    """Den Faktor vor dem damaligen AC-Limit auf eingefrorene Rohleistung anwenden."""
+
+    _validate_calibration_factor(factor)
+    values = []
+    for interval in basis.intervals:
+        power = proportional_clipping(
+            {
+                "plant": _finite_result(
+                    interval.dc_power_kw * factor, "kalibrierte Leistung"
+                )
+            },
+            basis.inverter_max_power_kw,
+        )["plant"]
+        values.append(
+            power
+            * (
+                interval.end.astimezone(UTC) - interval.start.astimezone(UTC)
+            ).total_seconds()
+            / 3600
+        )
+    return _finite_result(math.fsum(values), "kalibrierte Tagesenergie")
+
+
+def fit_calibration_factor(
+    samples: Sequence[tuple[ForecastCalibrationBasis, float]],
+) -> float:
+    """Fest nach Tages-MAE suchen; Gleichstände bevorzugen das Grundmodell."""
+
+    if not samples or any(
+        not math.isfinite(actual) or actual < 0 for _, actual in samples
+    ):
+        raise InvalidConfigurationError("Der Lernlauf benötigt gültige Tagesmessungen")
+    best_factor, best_error = 1.0, math.inf
+    for step in range(50, 151):
+        factor = step / 100
+        error = math.fsum(
+            abs(calibrated_energy(basis, factor) - actual) / len(samples)
+            for basis, actual in samples
+        )
+        tied = math.isclose(error, best_error, rel_tol=1e-12, abs_tol=1e-12)
+        if (error < best_error and not tied) or (
+            tied and abs(factor - 1) < abs(best_factor - 1)
+        ):
+            best_factor, best_error = factor, error
+    return best_factor
 
 
 def aggregate_energy_for_day(

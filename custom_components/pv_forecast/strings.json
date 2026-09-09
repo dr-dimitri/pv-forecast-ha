@@ -226,7 +226,8 @@
           "remove_roof": "Dachfläche entfernen",
           "system": "Wechselrichterleistung ändern",
           "measurements": "Echte PV-Messquellen zuordnen (optional)",
-          "history": "Prognosearchiv und Soll-Ist-Vergleich (optional)"
+          "history": "Prognosearchiv und Soll-Ist-Vergleich (optional)",
+          "calibration": "Selbstkalibrierung (optional)"
         },
         "menu_option_descriptions": {
           "add_roof": "Erfasst eine zusätzliche Dachfläche, ohne die vorhandenen zu verändern.",
@@ -234,7 +235,8 @@
           "remove_roof": "Entfernt eine Dachfläche nach ausdrücklicher Bestätigung.",
           "system": "Ändert die maximale AC-Wechselrichterleistung der Gesamtanlage.",
           "measurements": "Vorhandene PV-Zähler zuordnen und lokale Messkopien verwalten.",
-          "history": "Rechtzeitige Prognosen lokal archivieren, vergleichen und bewusst exportieren."
+          "history": "Rechtzeitige Prognosen lokal archivieren, vergleichen und bewusst exportieren.",
+          "calibration": "Einen begrenzten Anlagenfaktor beobachten, prüfen und bewusst anwenden."
         }
       },
       "add_roof": {
@@ -412,6 +414,51 @@
         "data": {
           "confirm_delete": "Das Prognosearchiv dieser Anlage jetzt endgültig löschen"
         }
+      },
+      "calibration": {
+        "title": "Selbstkalibrierung (optional)",
+        "description": "**Gewählter Modus:** {mode}\n\n**Anlagenzeitzone:** {timezone}\n\n**Bekannte Tagesmarkierungen:** {exclusions}\n\nEin gemeinsamer Anlagenfaktor wird aus bestätigter AC-PV-Erzeugung gelernt und an späteren Tagen geprüft. Modus und Tagesmarkierungen gelten nach „Fertig“. Der Status zeigt die laufende Konfiguration.",
+        "menu_options": {
+          "calibration_settings": "Modus auswählen",
+          "calibration_status": "Lern- und Prüfstatus ansehen",
+          "calibration_exclusion": "Bekannte Abregelung oder Wartung markieren",
+          "calibration_remove_exclusion": "Tagesmarkierung zurücknehmen",
+          "reset_calibration": "Lernzustand zurücksetzen",
+          "calibration_done": "Fertig"
+        }
+      },
+      "calibration_settings": {
+        "title": "Modus der Selbstkalibrierung",
+        "description": "„Aus“ verwendet das unveränderte Grundmodell. „Beobachten“ sammelt und prüft einen Faktor, ohne ihn anzuwenden. „Automatisch anwenden“ verwendet ihn erst nach erfolgreicher Prüfung.\n\nBeobachtung und Automatik benötigen ein ausdrücklich aktiviertes Prognosearchiv und mindestens eine bestätigte Energiequelle für AC-PV-Erzeugung. Richte diese bei Bedarf zuvor in den Anlagenoptionen ein. Leistungssensoren allein genügen nicht.\n\nGeprüft wird die Tagesprognose vom Vortag, 18 Uhr: zunächst 30 gültige Lerntage, danach mindestens 14 spätere Prüftage. Freigabe erfordert mindestens 5 % geringeren mittleren absoluten Fehler (MAE), ohne mehr als 5 % Verschlechterung des 90%-Quantils großer Tagesfehler. Der Faktor bleibt zwischen 0,5 und 1,5. Nennleistung, Wirkungsgrad und AC-Limit bleiben erhalten.",
+        "data": {
+          "calibration_mode": "Modus"
+        }
+      },
+      "calibration_status": {
+        "title": "Lern- und Prüfstatus",
+        "description": "**Anlagenzeitzone:** {timezone}\n\n{report}\n\nDie MAE-Verbesserung beschreibt diese gemeinsame Prüfstichprobe; sie ist keine garantierte Prognosegenauigkeit. Noch fehlende Lern- oder Prüftage werden nicht ersetzt. Kalibrierung erkennt keine Defekte und belegt keine eingesparte Energie."
+      },
+      "calibration_exclusion": {
+        "title": "Bekannte Ursache für einen lokalen Tag markieren",
+        "description": "**Anlagenzeitzone:** {timezone}\n\nMarkiere nur eine tatsächlich bekannte Abregelung oder Wartung. Der gesamte lokale Tag wird aus Lernen und Nutzenprüfung ausgeschlossen. Große Prognosefehler allein belegen keine solche Ursache.\n\nEs sind höchstens 90 Tage innerhalb der letzten 365 lokalen Kalendertage einschließlich heute markierbar. Eine erneute Auswahl desselben Tages ersetzt seine Ursache. Änderungen können eine bisherige Freigabe aufheben und gelten nach „Fertig“.",
+        "data": {
+          "date": "Lokaler Tag",
+          "reason": "Bekannte Ursache"
+        }
+      },
+      "calibration_remove_exclusion": {
+        "title": "Tagesmarkierung zurücknehmen",
+        "description": "**Anlagenzeitzone:** {timezone}\n\nDer gewählte Tag ist nach „Fertig“ nicht mehr ausdrücklich ausgeschlossen. Er muss weiterhin alle Voraussetzungen für gültige Mess- und Prognosedaten erfüllen. Die Änderung kann eine bisherige Freigabe aufheben.",
+        "data": {
+          "date": "Markierter Tag"
+        }
+      },
+      "reset_calibration": {
+        "title": "Lernzustand bewusst zurücksetzen",
+        "description": "Nach Bestätigung werden Kandidat, Lernbelege und Freigabe dieser Anlage **sofort** zurückgesetzt. Der wirksame Faktor fällt auf 1 zurück; ein neues Lernsegment beginnt ab jetzt. Auch wenn du den Optionsdialog danach schließt, bleibt das Rücksetzen wirksam.\n\nDie gewählte Betriebsart, Tagesmarkierungen, Dach- und Messquellenkonfiguration sowie das Prognosearchiv bleiben erhalten. Das Rücksetzen lässt sich nicht rückgängig machen.",
+        "data": {
+          "confirm_reset": "Lernzustand dieser Anlage jetzt zurücksetzen"
+        }
       }
     },
     "error": {
@@ -427,7 +474,13 @@
       "duplicate_comparison_source": "Heute und morgen benötigen zwei unterschiedliche Prognosesensoren.",
       "comparison_confirmation_required": "Bestätige den Tagesbezug in der Anlagenzeitzone und dieselbe AC-Gesamtmessgrenze.",
       "history_unavailable": "Für diese Anlage ist das Prognosearchiv noch nicht verfügbar. Lade die Anlage, um gespeicherte Daten zu lesen.",
-      "history_delete_failed": "Das Archiv konnte nicht gelöscht werden. Prüfe die lokale Speicherung und versuche es erneut."
+      "history_delete_failed": "Das Archiv konnte nicht gelöscht werden. Prüfe die lokale Speicherung und versuche es erneut.",
+      "calibration_history_required": "Aktiviere zuerst das Prognosearchiv in den Anlagenoptionen. Die Kalibrierung aktiviert es nicht automatisch.",
+      "calibration_energy_required": "Ordne zuerst mindestens eine vollständig bestätigte AC-PV-Energiequelle zu. Ein Leistungssensor allein genügt nicht.",
+      "calibration_unavailable": "Der Lernstatus ist derzeit nicht geladen. Lade die Anlage erneut, um den Status zu lesen.",
+      "calibration_exclusion_date": "Wähle einen Tag innerhalb der letzten 365 lokalen Kalendertage einschließlich heute.",
+      "calibration_exclusion_limit": "Es sind bereits 90 Tage markiert. Nimm zuerst eine bestehende Tagesmarkierung zurück.",
+      "calibration_reset_failed": "Der Lernzustand konnte nicht zurückgesetzt werden. Prüfe die lokale Speicherung und versuche es erneut."
     }
   },
   "selector": {

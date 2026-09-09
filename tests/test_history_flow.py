@@ -373,6 +373,11 @@ def test_report_shows_paired_comparison_bias_age_and_storage_limit():
         "mean_own_age_seconds": 1800,
         "mean_existing_age_seconds": None,
     }
+    metrics["calibrated_comparison"] = {
+        "count": 2,
+        "raw_mae_kwh": 1.5,
+        "calibrated_mae_kwh": 0.75,
+    }
     text = _format_report(report)
     assert "Speichergrenze erreicht" in text
     assert "MAE: 1.500 kWh" in text
@@ -383,6 +388,8 @@ def test_report_shows_paired_comparison_bias_age_and_storage_limit():
     assert "eigene Prognose 30.0 Minuten" in text
     assert "Mittleres Datenalter am Stichtag" in text
     assert "fremde Prognose unbekannt" in text
+    assert "Angewendete Kalibrierung, dieselben 2 Messpaare" in text
+    assert "korrigierte MAE 0.750 kWh" in text
 
 
 @pytest.mark.asyncio

@@ -14,6 +14,9 @@ from custom_components.pv_forecast.measurements import SourceConfig, SourceHisto
 from custom_components.pv_forecast.models import (
     DailyYield,
     ForecastResult,
+    PvRoof,
+    RoofForecast,
+    RoofForecastInterval,
     TotalForecastInterval,
 )
 
@@ -25,7 +28,11 @@ SOURCE = SourceConfig(
 
 
 def forecast(
-    day: date = DAY, power: float = 1, timezone: str = "UTC"
+    day: date = DAY,
+    power: float = 1,
+    timezone: str = "UTC",
+    *,
+    dc_power: float | None = None,
 ) -> ForecastResult:
     """Zwei lokale Tage mit UTC-Stunden und begrenzten Randintervallen."""
     zone = ZoneInfo(timezone)
@@ -41,18 +48,41 @@ def forecast(
             )
         )
         cursor += HOUR
-    return ForecastResult(day, {}, DailyYield(0, 0), tuple(intervals))
+    roofs = {}
+    if dc_power is not None:
+        roof = PvRoof("roof", "Dach", 5, 180, 30, 0.1)
+        roofs[roof.id] = RoofForecast(
+            roof,
+            tuple(
+                RoofForecastInterval(
+                    item.start, item.end, dc_power, item.ac_power_kw, item.energy_kwh
+                )
+                for item in intervals
+            ),
+            DailyYield(0, 0),
+        )
+    return ForecastResult(day, roofs, DailyYield(0, 0), tuple(intervals))
 
 
 def capture_day(
-    archive: HistoryArchive, target: date = DAY, power: float = 1, **kwargs
+    archive: HistoryArchive,
+    target: date = DAY,
+    power: float = 1,
+    *,
+    dc_power: float | None = None,
+    **kwargs,
 ):
     """Die Vortagsprognose am festen Stichtag erfassen."""
     observed = datetime.combine(
         target - timedelta(days=1), time(18), archive.timezone
     ).astimezone(UTC)
     archive.capture(
-        forecast(target - timedelta(days=1), power, archive.timezone.key),
+        forecast(
+            target - timedelta(days=1),
+            power,
+            archive.timezone.key,
+            dc_power=dc_power,
+        ),
         observed,
         observed,
         "configuration-a",
@@ -660,3 +690,182 @@ def test_current_targets_project_energy_at_fractional_midnight_without_rewriting
     assert len(next_day) == 1
     assert next_day[0] == parts[1]
     assert archive.to_dict() == before
+
+
+def test_capture_preserves_raw_basis_and_applies_factors_before_saved_clipping():
+    """Der Faktor wirkt vor dem damals bekannten Wechselrichterlimit."""
+    archive = HistoryArchive("UTC")
+    record = capture_day(
+        archive,
+        power=3,
+        dc_power=4,
+        inverter_max_power_kw=3,
+        applied_factor=0.5,
+        applied_candidate_id="angewendet",
+        trial_factor=1.5,
+        trial_candidate_id="pruefung",
+    )
+    assert record.raw_energy_kwh == 72
+    assert record.basis.inverter_max_power_kw == 3
+    assert len(record.basis.intervals) == 24
+    assert all(item.dc_power_kw == 4 for item in record.basis.intervals)
+    assert record.calibrated_energy_kwh == record.effective_energy_kwh == 48
+    assert record.applied_factor == 0.5
+    assert record.applied_candidate_id == "angewendet"
+    assert record.candidate_energy_kwh == 72
+    assert record.candidate_factor == 1.5
+    assert record.candidate_id == "pruefung"
+    restored = HistoryArchive.from_dict(archive.to_dict(), "UTC")
+    assert restored.to_dict() == archive.to_dict()
+
+
+def test_legacy_records_remain_without_reconstructed_learning_basis():
+    """Version-1-Daten bleiben lesbar und gewinnen keine nachträglichen Lerndaten."""
+    archive = HistoryArchive("UTC")
+    original = capture_day(archive)
+    stored = archive.to_dict()
+    for item in stored["records"]:
+        for field in (
+            "basis",
+            "applied_factor",
+            "applied_candidate_id",
+            "candidate_factor",
+            "candidate_id",
+            "candidate_energy_kwh",
+        ):
+            item.pop(field)
+    record = HistoryArchive.from_dict(stored, "UTC").records[original.record_id]
+    assert record.basis is None
+    assert record.raw_energy_kwh == 24
+    assert record.calibrated_energy_kwh is None
+    assert record.candidate_energy_kwh is None
+
+
+def test_local_candidate_changes_are_captured_before_cutoff_without_new_weather():
+    """Ein rechtzeitiger Prüfstand benötigt keinen neuen Wetterabruf."""
+    archive = HistoryArchive("UTC")
+    raw = forecast(DAY - timedelta(days=1), dc_power=1)
+    fetched = datetime(2026, 9, 8, 17, 30, tzinfo=UTC)
+    archive.capture(raw, fetched, fetched, "a", [SOURCE])
+    first = next(
+        item for item in archive.records.values() if item.horizon == "daily_previous_18"
+    )
+    observed = fetched + timedelta(minutes=15)
+    archive.capture(
+        raw,
+        fetched,
+        observed,
+        "a",
+        [SOURCE],
+        trial_factor=0.75,
+        trial_candidate_id="rechtzeitig",
+    )
+    frozen = archive.records[first.record_id]
+    assert frozen.candidate_energy_kwh == 18
+    assert frozen.candidate_id == "rechtzeitig"
+    assert frozen.observed_at == observed
+    assert frozen.fetched_at == fetched
+    assert frozen.raw_energy_kwh == first.raw_energy_kwh
+    archive.capture(
+        raw,
+        fetched,
+        datetime(2026, 9, 8, 18, 1, tzinfo=UTC),
+        "a",
+        [SOURCE],
+        trial_factor=0.8,
+        trial_candidate_id="zu-spaet",
+    )
+    assert archive.records[first.record_id] == frozen
+    assert (
+        HistoryArchive.from_dict(archive.to_dict(), "UTC").records[first.record_id]
+        == frozen
+    )
+
+
+def test_calibrated_report_compares_only_matching_valid_applied_forecasts():
+    """Roh- und aktive Korrektur verwenden dieselben Tage ohne reine Prüfstände."""
+    archive = HistoryArchive("UTC")
+    applied = capture_day(
+        archive, dc_power=1, applied_factor=0.75, applied_candidate_id="aktiv"
+    )
+    archive.assess(applied.record_id, evidence(applied, 18), applied.end)
+    trial = capture_day(
+        archive,
+        DAY + timedelta(days=1),
+        dc_power=1,
+        trial_factor=1.25,
+        trial_candidate_id="beobachtet",
+    )
+    archive.assess(trial.record_id, evidence(trial, 30), trial.end)
+    incomplete = capture_day(
+        archive,
+        DAY + timedelta(days=2),
+        dc_power=1,
+        applied_factor=0.75,
+        applied_candidate_id="aktiv",
+    )
+    archive.assess(incomplete.record_id, None, incomplete.end)
+    result = archive.snapshot(report_after(DAY + timedelta(days=2)), 7)["horizons"][
+        "daily_previous_18"
+    ]
+    assert result["count_valid"] == 2
+    assert result["mae_kwh"] == 6
+    assert result["calibrated_comparison"] == {
+        "count": 1,
+        "raw_mae_kwh": 6,
+        "calibrated_mae_kwh": 0,
+        "raw_bias_kwh": 6,
+        "calibrated_bias_kwh": 0,
+    }
+
+
+def test_current_targets_show_effective_energy_and_preserve_raw_hour_provenance():
+    """Auch an einer halben Tagesgrenze zeigt die Archivlinie den wirksamen Faktor."""
+    archive = HistoryArchive("Asia/Kolkata")
+    observed = datetime(2026, 9, 8, 17, tzinfo=UTC)
+    archive.capture(
+        forecast(date(2026, 9, 8), 3, "Asia/Kolkata", dc_power=4),
+        observed,
+        observed,
+        "a",
+        [SOURCE],
+        inverter_max_power_kw=3,
+        applied_factor=0.5,
+        applied_candidate_id="aktiv",
+        trial_factor=1.5,
+        trial_candidate_id="beobachtet",
+    )
+    before = archive.to_dict()
+    parts = [
+        item
+        for item in archive.current_targets(datetime(2026, 9, 8, 18, tzinfo=UTC))[
+            "intervals"
+        ]
+        if item["source_start"] == "2026-09-08T18:00:00+00:00"
+    ]
+    assert [item["energy_kwh"] for item in parts] == [1, 1]
+    assert all(item["ac_power_kw"] == 2 for item in parts)
+    assert all(item["raw_energy_kwh"] == 3 for item in parts)
+    assert all(item["calibrated_energy_kwh"] == 2 for item in parts)
+    assert all(item["applied_candidate_id"] == "aktiv" for item in parts)
+    assert archive.to_dict() == before
+
+
+@pytest.mark.parametrize("field", ["candidate_energy_kwh", "calibrated_energy_kwh"])
+def test_inconsistent_stored_corrections_are_not_used_after_restart(field):
+    """Eine beschädigte Korrektur darf nicht als Lernbasis verwendet werden."""
+    archive = HistoryArchive("UTC")
+    record = capture_day(
+        archive,
+        dc_power=1,
+        applied_factor=0.75,
+        applied_candidate_id="aktiv",
+        trial_factor=0.8,
+        trial_candidate_id="beobachtet",
+    )
+    stored = archive.to_dict()
+    next(item for item in stored["records"] if item["record_id"] == record.record_id)[
+        field
+    ] = 500
+    with pytest.raises(ValueError, match="Archivenergie"):
+        HistoryArchive.from_dict(stored, "UTC")

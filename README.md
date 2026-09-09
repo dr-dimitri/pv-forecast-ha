@@ -23,6 +23,7 @@ Home-Assistant-Oberfläche. YAML wird nicht unterstützt.
 - optionale lokale Erfassung bestehender PV-Ertragszähler mit Messdatenprüfung
 - optionales Prognosearchiv mit Soll-Ist-Berichten und bewusstem JSON-/CSV-Export
 - freiwillige Lovelace-Karte mit visuellem Editor, Tageskurven und Dachauswahl
+- optionale Selbstkalibrierung mit getrennten Lern- und späteren Prüftagen
 - mehrere Dachflächen mit eigener Leistung, Ausrichtung, Neigung und eigenem
   Systemwirkungsgrad
 - Übernahme des in Home Assistant hinterlegten Standorts oder einmalige
@@ -193,7 +194,8 @@ Optional kannst du vorhandene fremde Tagesprognosen für heute/morgen zuordnen,
 wenn Anlagenzeitzone, Tagesbezug und AC-Messgrenze übereinstimmen. Verglichen
 werden ausschließlich dieselben gültigen Messpaare; das Datenalter wird
 getrennt ausgewiesen. Die Integration ruft dafür keinen weiteren Wetteranbieter
-ab. Eine Lernfunktion ist noch nicht enthalten.
+ab. Die optionale Selbstkalibrierung verwendet einen getrennten, späteren
+Prüfzeitraum und bewahrt diese Rohprognosen.
 
 Das Archiv ist lokal begrenzt: Stundenstände 90 Tage, Tagesbewertungen 365 Tage,
 maximal 6.000 Zieldatensätze und 32 MiB, mit je drei früheren Bewertungen.
@@ -204,6 +206,26 @@ liefert auf ausdrücklichen Aufruf JSON-/CSV-Inhalt mit Dateiname, ohne eine
 Datei automatisch zu veröffentlichen. Der
 [Archivvertrag](docs/prognosearchiv.md) erklärt Stichtage, Formeln, Grenzen und
 Leserechte. Die reale Nutzer- und Güteerprobung aus der Roadmap bleibt offen.
+
+## Selbstkalibrierung (optional)
+
+Unter **Konfigurieren → Selbstkalibrierung → Modus auswählen** kannst du
+zunächst **Beobachten** wählen. Voraussetzung sind ein aktiviertes Prognosearchiv
+und bestätigte PV-Energiequellen. Standardmäßig ist die Funktion aus. Sie
+verändert weder die installierte Leistung noch deinen Systemwirkungsgrad.
+
+Nach mindestens 30 vollständigen Lerntagen wird ein begrenzter Anlagenfaktor
+an mindestens 14 späteren Tagen geprüft. **Automatisch anwenden** verwendet ihn
+erst bei bestandenem Nutzenkriterium; andernfalls bleibt die Rohprognose wirksam.
+Alle Dächer und das Energy Dashboard verwenden denselben Faktor vor dem
+Wechselrichterlimit. Es entstehen keine zusätzlichen Wetterabrufe.
+
+Der **Lern- und Prüfstatus ansehen** zeigt die verfügbare Stichprobe und den Vergleich. Bekannte
+Abregelung oder Wartung lässt sich für einen lokalen Tag markieren. Abschalten
+verwendet wieder das Grundmodell; **Lernzustand zurücksetzen** beginnt nach
+Bestätigung von vorn. [Regeln, Bedienung und Grenzen](docs/kalibrierung.md)
+erklären insbesondere, warum ältere Archivtage nicht nachträglich als Lerntage
+verwendet werden und warum eine Verbesserung nicht garantiert ist.
 
 ## Eigene Dashboard-Karte (optional)
 
@@ -349,7 +371,7 @@ Die Prognose ist ein vereinfachtes Modell und keine vollständige
 Anlagensimulation. Nicht berücksichtigt werden insbesondere:
 
 - Verschattung und detaillierte Modul- oder Stringeigenschaften
-- automatische Kalibrierung anhand realer Erträge
+- dach- oder jahreszeitenspezifische Lernprofile
 - Batteriespeicher, Eigenverbrauch, Wallboxen und Ladeplanung
 - Prognosetage nach morgen
 - weitere Wetteranbieter

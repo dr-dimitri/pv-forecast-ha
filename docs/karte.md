@@ -63,8 +63,11 @@ Energy-Grafik aus #53 gilt nicht als Zeitmodell für diese eigene Darstellung.
 Die vertiefende 7-/30-Tage-Ansicht verwendet die eingefrorene Archivstichprobe
 mit MAE und Bias in kWh, Paaranzahl und Abdeckung. Das ist keine Prozentangabe
 zur vermeintlichen Genauigkeit. Details und Formeln stehen im
-[Prognosearchivvertrag](prognosearchiv.md). Kalibrierung und Unsicherheitsband
-werden erst mit den jeweiligen Folgefunktionen eingeführt.
+[Prognosearchivvertrag](prognosearchiv.md). Bei aktiver
+[Selbstkalibrierung](kalibrierung.md) zeigt die Karte dieselbe wirksame Prognose
+wie die Sensoren und das Energy Dashboard; die Archivlinie verwendet den damals
+wirklich angewendeten Stand. Den Lernstatus findest du in den Anlagenoptionen.
+Ein Unsicherheitsband ist bislang nicht enthalten.
 
 ## Datenzugriff und Fehlerzustände
 
