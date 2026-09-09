@@ -248,6 +248,12 @@ Das signierte empirische Residuenband hat als vorab festgelegtes Ziel zentrale 8
 
 Die Prüfung mit echten späteren Messdaten bleibt offen; deterministische Tests belegen die Auswahl- und Ausgaberegeln, keine erreichte reale Güte.
 
+## Stunden-Erfahrungsband: Folgeschritt zu #29
+
+Die vorhandene Archiv-Leseaktion ergänzt die bereits eingefrorenen UTC-Stunden mit Vorlauf einer beziehungsweise drei Stunden um eigene Erfahrungsbänder. Regelversion 2 für diese Stunden verwendet je Horizont und gleicher lokaler Startzeit einschließlich Fold 60 chronologisch frühere Lerntage und 30 strikt spätere Prüftage. Pro lokalem Tag zählt höchstens ein Fall. Konfiguration, Zeitzone, Quellenidentität, damalige Roh-/Kalibrierungsmethode, rechtzeitige Bewertungsrevisionen, zentrale 80-Prozent-Zielabdeckung und die gemeinsame Prüfung von Abdeckung und Winkler-Score bleiben wie beim Tagesband getrennt. Die bestehenden Archivgrenzen werden nicht vergrößert; fehlende Fälle liefern keine Grenzen. Tages-Regelversion 1 bleibt unverändert.
+
+Die Karte zeigt die backendseitigen Grenzen nur für diese expliziten eingefrorenen zukünftigen Stunden, mit UTC-Grenzen, lokalem Offset, Stichtag, Zentralwert und Prüfkennzahlen. Eine Stunde mit drei Stunden Vorlauf ist keine Dreistunden-Energiesumme. Es entstehen keine neuen Stores, Aktionen, Sensoren oder Wetterabrufe. Gleitende Rest-/60-Minuten-Fenster und beliebige Planungsfenster bleiben ohne passende historische Fenster ausdrücklich nicht verfügbar. Die reale Güteprüfung bleibt offen.
+
 ## Tagesaussicht: erste Stufe zu #30
 
 Die bestehende berechtigungsgeprüfte Messdatenaktion liefert optional die aktuelle Tagesaussicht aus einem vollständig belegten Messpräfix seit lokaler Mitternacht, einer sichtbar geschätzten Brücke vom letzten gemeinsam gesicherten Messzeitpunkt bis jetzt und der Prognose ab jetzt bis Tagesende. Alle drei Abschnitte sind disjunkt. Mehrere Quellen benötigen einen gemeinsamen exakten Zählergrenzzeitpunkt; fehlende Abdeckung, unklare Identität, Quellenwechsel oder Korrektur erzeugen keine künstliche vollständige Messung. Es werden keine Zählerdifferenzen anteilig zerlegt. Fehlende beziehungsweise veraltete Prognose verhindert eine vollständige Tagesaussicht, während vorhandene Messwerte und Restprognose weiterhin getrennt lesbar bleiben.

@@ -48,6 +48,7 @@ export function fixture(scenario = "sunny", { day = "today", roof_id } = {}) {
     days: {
       [day]: scenario === "experience" ? { status: "available", target_date: view.date, horizon: day === "today" ? "daily_same_06" : "daily_previous_18", cutoff: iso(todayStart + 6 * hour), forecast_observed_at: iso(todayStart + 5.75 * hour), variant: "raw_model", lower_kwh: 17.2, central_kwh: 22.5, upper_kwh: 28.4, training_count: 60, validation_count: 30, target_coverage: 0.8, evaluation: { coverage_fraction: 0.833, count: 30, mean_width_kwh: 11.2, coverage_wilson95: { lower: 0.664, upper: 0.927, indicative_only: true, assumption: "independent_days" } }, quality_flags: [] } : { status: "unavailable", reasons: ["insufficient_validation"] },
     },
+    frozen_hours: scenario === "experience" ? [{ rule_version: 2, status: "available", target_date: view.date, horizon: "hourly_3h", start: iso(todayStart + 15 * hour), end: iso(todayStart + 16 * hour), cutoff: iso(todayStart + 12 * hour), forecast_observed_at: iso(todayStart + 11.75 * hour), lower_kwh: 1.4, central_kwh: 2.1, upper_kwh: 2.8, training_count: 60, validation_count: 30, target_coverage: 0.8, evaluation: { coverage_fraction: 0.8, mean_width_kwh: 1.4, winkler_score_kwh: 1.7, reference_winkler_score_kwh: 2.1, coverage_wilson95: { lower: 0.627, upper: 0.905 } } }] : [],
     remaining_today: { status: "unavailable", reasons: ["unsupported_horizon"] }, next_60_minutes: { status: "unavailable", reasons: ["unsupported_horizon"] },
   };
   const forecastEnd = todayEnd + 24 * hour;

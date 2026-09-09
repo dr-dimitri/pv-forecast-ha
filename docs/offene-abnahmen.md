@@ -15,7 +15,7 @@ und die konkretisierten Verträge in
 | #22 | Reale AC-Wechselrichtergruppen mit nachgelagerter Gesamtgrenze | Rechenbeispiele, bitgleicher alter Pfad, UI, unveränderliche Kalibrierungsbasis |
 | #23 | Standortkorrektur bei erhaltenen IDs und alten Datenkontexten | Beide Standortquellen, Fehlerversuche, Migrationen, ursprüngliche Tagesgrenzen und neue Segmente |
 | #31 | Zusammenhängendes Solarzeitfenster in Leseaktion und Karte | UTC/DST, Teilstunden, Hysterese, laufende Fenster, nativer HA-Script-Blueprint und EMHASS-Datenadapter |
-| #29 | Tages-Erfahrungsband für eingefrorene Stände | 60 frühere Trainings- und 30 spätere Prüffälle, gemeinsame Prüfung von Abdeckung und Breite |
+| #29 | Tages- und Stunden-Erfahrungsband für eingefrorene Stände | Je Horizont 60 frühere Trainingstage und 30 spätere Prüftage, gemeinsame Prüfung von Abdeckung und Breite; Stunden nach lokaler Startzeit getrennt |
 | #30 | Getrennte Tagesaussicht aus Messpräfix, geschätzter Brücke und Zukunft | Keine Doppelzählung, Messlücken und Quellenrechte; keine kurzfristige Korrektur |
 
 Die neuen Darstellungen der Karte wurden bei 360 px in Hell/Dunkel und mit
