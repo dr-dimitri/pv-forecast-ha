@@ -14,10 +14,11 @@ und die konkretisierten Verträge in
 | #10 | Importbefund ohne erforderlichen Umbau | [Unabhängige Modulimporte](issue-pruefung.md) |
 | #22 | Reale AC-Wechselrichtergruppen mit nachgelagerter Gesamtgrenze | Rechenbeispiele, bitgleicher alter Pfad, UI, unveränderliche Kalibrierungsbasis |
 | #23 | Standortkorrektur bei erhaltenen IDs und alten Datenkontexten | Beide Standortquellen, Fehlerversuche, Migrationen, ursprüngliche Tagesgrenzen und neue Segmente |
+| #32 | Experimentelle Hinweise für wiederkehrenden Gesamtminderertrag | Geprüfte feste Tagesbasis, sieben gültige Tage, Lernstopp, Quittierung und ruhige Opt-in-Mitteilung |
 | #17 | Ross-Zelltemperatur als reine Beobachtungsvariante | Explizite Montageannahme je Dach, Referenzgleichung, gleichzeitige Rohmodellpaare und unveränderter Standard |
 | #31 | Zusammenhängendes Solarzeitfenster in Leseaktion und Karte | UTC/DST, Teilstunden, Hysterese, laufende Fenster, nativer HA-Script-Blueprint und EMHASS-Datenadapter |
 | #29 | Tages- und Stunden-Erfahrungsband für eingefrorene Stände | Je Horizont 60 frühere Trainingstage und 30 spätere Prüftage, gemeinsame Prüfung von Abdeckung und Breite; Stunden nach lokaler Startzeit getrennt |
-| #30 | Getrennte Tagesaussicht aus Messpräfix, geschätzter Brücke und Zukunft | Keine Doppelzählung, Messlücken und Quellenrechte; keine kurzfristige Korrektur |
+| #30 | Tagesaussicht und optional eingefrorene Zukunftskandidaten | Keine Doppelzählung, Messlücken und Quellenrechte; produktiv keine kurzfristige Korrektur |
 
 Die neuen Darstellungen der Karte wurden bei 360 px in Hell/Dunkel und mit
 Tastatur geprüft. Die Screenshots zeigen reproduzierbare Testdaten. Sie sind
@@ -49,8 +50,9 @@ kein Nachweis tatsächlicher Erträge oder einer erreichten Prognosegüte.
   Modul werden nicht aus unbelegten Standardwerten als bekannt ausgegeben.
 - **#32:** Hinweise auf wiederkehrende Mindererträge benötigen die geforderte
   belastbare Vergleichsbasis und einen Feldtest mit Treffer- und Fehlalarmrate.
-  Die Funktion ist noch nicht implementiert. Ein Vergleich mit der
-  Wetterprognose allein begründet keine Defektmeldung.
+  Die [experimentelle Beobachtung](minderertragshinweise.md) ist technisch
+  umgesetzt und hinter einer historischen Qualitätsprüfung gesperrt. Ein
+  Vergleich mit der Wetterprognose allein begründet keine Defektmeldung.
 
 Die P3-Erweiterungen **#20, #21 und #24** bleiben gemäß Roadmap bis zu einem
 belegten Bedarf zurückgestellt: Verschattung, weitere Prognosetage und mehrere

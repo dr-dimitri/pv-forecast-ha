@@ -24,6 +24,7 @@ from .temperature_comparison import (
     parameter_id,
     validate_comparison,
 )
+from .underperformance import discard_invalid_references, empty_state, validate_state
 
 type Horizon = Literal[
     "daily_previous_18", "daily_same_06", "hourly_1h", "hourly_3h", "daily_remaining_12"
@@ -311,6 +312,7 @@ class HistoryArchive:
         self.timezone = ZoneInfo(timezone)
         self.records: dict[str, ArchiveRecord] = {}
         self.retention_truncated = False
+        self.underperformance = empty_state()
         self._configuration_changes: list[tuple[datetime, str]] = []
         self._latest_observed_at: datetime | None = None
 
@@ -794,6 +796,8 @@ class HistoryArchive:
                     deleted_sources=tuple(sorted({*record.deleted_sources, source_id})),
                 )
                 changed = True
+        if changed:
+            discard_invalid_references(self.underperformance, self.records)
         return changed
 
     def external_sources(self) -> tuple[dict[str, str | None], ...]:
@@ -1073,6 +1077,7 @@ class HistoryArchive:
             "window_start": start_day.isoformat(),
             "window_end_exclusive": end_day.isoformat(),
             "retention_truncated": self.retention_truncated,
+            "underperformance": self.underperformance,
             "latest_observed_at": (
                 self._latest_observed_at.isoformat()
                 if self._latest_observed_at
@@ -1096,6 +1101,7 @@ class HistoryArchive:
         return {
             "timezone": self.timezone.key,
             "retention_truncated": self.retention_truncated,
+            "underperformance": self.underperformance,
             "latest_observed_at": (
                 self._latest_observed_at.isoformat()
                 if self._latest_observed_at
@@ -1124,6 +1130,7 @@ class HistoryArchive:
                 )
             archive = cls(timezone)
             archive.retention_truncated = data["retention_truncated"]
+            archive.underperformance = validate_state(data.get("underperformance"))
             for item in data["configuration_changes"]:
                 instant = _timestamp(item["observed_at"])
                 if archive._configuration_changes and (

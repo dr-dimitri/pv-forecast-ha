@@ -141,10 +141,12 @@ class HistoryFlowMixin:
             "history_settings": "Archivierung aktivieren oder pausieren",
             "comparison_forecast": "Vorhandene Tagesprognose zum Vergleich zuordnen",
         }
+        menu["underperformance_settings"] = "Experimentelle Minderertragshinweise"
         menu["temperature_roof"] = "Temperaturvergleich je Dach vorbereiten"
         if comparison:
             menu["remove_comparison_forecast"] = "Vergleichszuordnung entfernen"
         if self._history_entry() is not None:
+            menu["underperformance_control"] = "Prüfhinweis quittieren oder löschen"
             menu["history_report"] = "Soll-Ist-Bericht ansehen (7/30/90 Tage)"
             menu["delete_history"] = "Lokales Prognosearchiv löschen"
         menu["history_done"] = "Fertig"
@@ -204,6 +206,62 @@ class HistoryFlowMixin:
                             "short_term_enabled", False
                         ),
                     ): BooleanSelector(),
+                }
+            ),
+        )
+
+    async def async_step_underperformance_settings(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Beobachtung und allgemeine lokale Mitteilung getrennt aktivieren."""
+        keys = ("underperformance_enabled", "underperformance_notifications")
+        if user_input is not None:
+            for key in keys:
+                self._history_options()[key] = bool(user_input.get(key))
+            return await self.async_step_history()
+        return self.async_show_form(
+            step_id="underperformance_settings",
+            data_schema=vol.Schema(
+                {
+                    vol.Optional(
+                        key, default=self._history_options().get(key, False)
+                    ): BooleanSelector()
+                    for key in keys
+                }
+            ),
+        )
+
+    async def async_step_underperformance_control(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Quittieren beendet nur Mitteilungen; Löschen beginnt bewusst neu."""
+        entry = self._history_entry()
+        manager = getattr(getattr(entry, "runtime_data", None), "history", None)
+        errors = {}
+        if user_input is not None:
+            if user_input.get("confirm") is not True:
+                errors["base"] = "underperformance_confirmation_required"
+            elif manager is None or not manager.loaded:
+                errors["base"] = "underperformance_unavailable"
+            else:
+                try:
+                    await manager.async_observation_control(user_input["action"])
+                except (HomeAssistantError, ValueError):
+                    errors["base"] = "underperformance_unavailable"
+                else:
+                    return await self.async_step_history()
+        return self.async_show_form(
+            step_id="underperformance_control",
+            errors=errors,
+            data_schema=vol.Schema(
+                {
+                    vol.Required("action", default="acknowledge"): SelectSelector(
+                        SelectSelectorConfig(
+                            options=["acknowledge", "clear"],
+                            translation_key="underperformance_control",
+                        )
+                    ),
+                    vol.Required("confirm", default=False): BooleanSelector(),
                 }
             ),
         )

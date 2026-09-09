@@ -160,6 +160,7 @@ def evaluate_experience_band(
     target: ArchiveRecord,
     *,
     as_of: datetime,
+    include_reference: bool = False,
 ) -> dict[str, Any]:
     """Ein festes Band mit 60 früheren und 30 späteren Tagen prüfen.
 
@@ -350,6 +351,12 @@ def evaluate_experience_band(
             lower_kwh=lower,
             upper_kwh=upper,
         )
+    if include_reference and not reasons:
+        # Interne Beobachter benötigen genau dieselbe unveränderte Stichprobe.
+        result["reference"] = {
+            "residuals_kwh": list(band),
+            "record_ids": [case.record.record_id for case in (*training, *validation)],
+        }
     return result
 
 

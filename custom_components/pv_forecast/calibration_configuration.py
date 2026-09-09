@@ -46,6 +46,7 @@ _STATUSES = {
     "invalidated": "Frühere Freigabe durch geänderte Daten aufgehoben",
     "blocked": "Voraussetzungen derzeit nicht erfüllt",
     "prerequisites_missing": "Voraussetzungen derzeit nicht erfüllt",
+    "underperformance_paused": "Wegen eines Minderertragshinweises pausiert; Faktor 1",
     "storage_unavailable": "Lernspeicher derzeit nicht verfügbar",
 }
 _REASONS = {

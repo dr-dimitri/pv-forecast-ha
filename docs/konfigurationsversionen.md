@@ -109,3 +109,11 @@ Vergleichsstände mit ihrer ursprünglichen Parameterwahl. Versionen 1–4 werde
 verlustfrei migriert; bestehende Datensätze erhalten keine erfundenen
 Alternativprognosen. Config Entries bleiben 1.1.
 Siehe [Temperaturvergleich](temperaturvergleich.md).
+
+## Archiv-Store 6: experimentelle Minderertragshinweise
+
+Version 6 ergänzt optional einen begrenzten Hinweiszustand mit höchstens 97
+Referenzen und Inhaltsfingerprints. Versionen 1–5 werden ohne Datenverlust
+übernommen; alte Hinweise werden nicht erfunden. Die zusätzliche Grenze von
+64 KiB zählt zur bestehenden Archivgrenze. Config Entries bleiben bei 1.1.
+Details: [Experimentelle Minderertragshinweise](minderertragshinweise.md).
