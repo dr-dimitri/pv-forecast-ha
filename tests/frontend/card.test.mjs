@@ -787,3 +787,33 @@ test('Ein Tageswechsel während einer verspäteten Antwort übernimmt nur die ak
   } finally { card.disconnectedCallback(); }
   assert.equal(cache.timer, null);
 });
+
+test("Tagesübersicht trennt bei Morgen die heutigen Werte und hält alle Detailbereiche erreichbar", async () => {
+  const { state } = await load("sunny", { day: "tomorrow" });
+  const html = renderContent({ ...config, day: "tomorrow" }, state);
+  assert.match(html, /aria-label="Heutiger Stand"/);
+  assert.match(html, /Energie im Tagesverlauf · Morgen/);
+  assert.match(html, /Tagesaussicht für heute/);
+  for (const id of ["overview-heading", "planning-heading", "comparison-heading"]) {
+    assert.match(html, new RegExp(`data-section="${id}"`));
+    assert.match(html, new RegExp(`id="${id}" tabindex="-1"`));
+  }
+  for (const id of ["outlook", "planning", "uncertainty", "values", "report"]) assert.match(html, new RegExp(`id="${id}"`));
+  assert.equal(state.forecast.data.summary.remaining_today_kwh, 10.76);
+});
+
+test("Dachansicht bietet ausschließlich vorhandene Aufgaben und behält die Intervalltabelle", async () => {
+  const { state } = await load("sunny", { roof_id: "south" });
+  const html = renderContent({ ...config, roof_id: "south" }, state);
+  assert.doesNotMatch(html, /data-section="planning-heading"|id="planning-heading"/);
+  assert.match(html, /data-section="comparison-heading"/);
+  assert.match(html, /id="values"/);
+});
+
+test("Ein wartender Tageswechsel bezeichnet den noch sichtbaren Verlauf mit seinem tatsächlichen Tag", async () => {
+  const { state } = await load();
+  const html = renderContent({ ...config, day: "tomorrow" }, { ...state, selectionPending: true });
+  assert.match(html, /Energie im Tagesverlauf · Heute/);
+  assert.match(html, /Auswahl wird geladen/);
+  assert.doesNotMatch(html, /Energie im Tagesverlauf · Morgen/);
+});
