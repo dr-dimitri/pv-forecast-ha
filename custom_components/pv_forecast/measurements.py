@@ -57,8 +57,23 @@ class SourceConfig:
     max_interval_minutes: float = 60
     confirmed_pv: bool = True
     confirmed_disjoint: bool = True
+    upstream_entity_id: str | None = None
+    upstream_registry_id: str | None = None
+    helper_entry_id: str | None = None
 
     def __post_init__(self) -> None:
+        upstream = (
+            self.upstream_entity_id,
+            self.upstream_registry_id,
+            self.helper_entry_id,
+        )
+        if any(value is not None for value in upstream) and (
+            not all(isinstance(value, str) and value for value in upstream)
+            or not str(self.upstream_entity_id).startswith("sensor.")
+            or self.kind != "total"
+            or not self.derived_energy
+        ):
+            raise ValueError("Die Herkunft des Energiehelfers ist unvollständig")
         if (
             not isinstance(self.source_id, str)
             or not self.source_id.strip()
@@ -97,6 +112,9 @@ class SourceConfig:
                 max_interval_minutes=data.get("max_interval_minutes", 60),
                 confirmed_pv=data.get("confirmed_pv", False),
                 confirmed_disjoint=data.get("confirmed_disjoint", False),
+                upstream_entity_id=data.get("upstream_entity_id"),
+                upstream_registry_id=data.get("upstream_registry_id"),
+                helper_entry_id=data.get("helper_entry_id"),
             )
         except (KeyError, TypeError) as err:
             raise ValueError("Die Messquelle ist unvollständig") from err
@@ -113,6 +131,15 @@ class SourceConfig:
             "max_interval_minutes": self.max_interval_minutes,
             "confirmed_pv": self.confirmed_pv,
             "confirmed_disjoint": self.confirmed_disjoint,
+            **(
+                {
+                    "upstream_entity_id": self.upstream_entity_id,
+                    "upstream_registry_id": self.upstream_registry_id,
+                    "helper_entry_id": self.helper_entry_id,
+                }
+                if self.upstream_registry_id is not None
+                else {}
+            ),
         }
 
     @property
@@ -123,6 +150,10 @@ class SourceConfig:
             if self.registry_id is not None
             else f"entity:{self.entity_id}"
         )
+        if self.upstream_registry_id is not None:
+            identity += (
+                f"/power:{self.upstream_registry_id}/helper:{self.helper_entry_id}"
+            )
         return identity, self.kind, self.scope, self.derived_energy
 
 

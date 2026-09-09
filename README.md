@@ -174,11 +174,38 @@ nicht zu den von der Integration ausgewählten Diagnosedaten.
 
 ## Echte PV-Erzeugung zuordnen (optional)
 
-Im Abschlussdialog der Einrichtung oder unter **Konfigurieren → Messquellen**
-kannst du bereits vorhandene HA-Sensoren auswählen. Die Prognose funktioniert
-auch ohne Messquelle. Pro Quelle wählst du die Messart, beschreibst die gemessene
-Anlage beziehungsweise ihren Teil und prüfst die Vorschau mit Einheit und
-letztem gültigem Messwert.
+Im Abschlussdialog unter **PV-Erzeugung einrichten (optional)** oder später unter
+**Konfigurieren → PV-Erzeugung und Messquellen → PV-Erzeugung hinzufügen** wählst
+du dein bereits eingerichtetes Gerät aus. Die Prognose funktioniert auch ohne
+Messquelle.
+
+**KOSTAL KSEM, einschließlich G2:** Voraussetzung ist die eingerichtete
+[Integration von MeisterTR](https://github.com/MeisterTR/ha-kostal-smartmeter)
+(`ksem`) mit einem aktuellen AC-Summenwert. Wähle dein KSEM in der Auswahlbox und
+bestätige, dass seine Wechselrichter keine Batterie haben, alle Dächer dieser
+Anlage erfasst sind und keine Erzeugung doppelt gezählt wird. Die Zuordnung nutzt
+Register 40974 (`Sum output inverter AC`), nicht Netzexport oder DC-Leistung.
+
+Beim Speichern erstellt der Assistent einen nativen HA-Integral-Helfer in kWh
+oder verwendet einen passenden vorhandenen. Du brauchst weder einen Sensornamen
+noch Umrechnungsparameter einzugeben. Die Trapezregel integriert gemeldete
+Leistungswerte; ohne neue Meldung wird der letzte Wert nicht zeitgesteuert
+fortgeschrieben. Die abgeleitete Messquelle erwartet spätestens alle fünf
+Minuten eine Meldung. Längere Abstände und ungültige Ausgangswerte unterbrechen
+die vollständige Erfassung bei `pv_forecast`. Eine vom nativen Helfer selbst
+über eine lange Pause angenäherte Energie wird dort nicht als vollständig
+beobachteter Ertrag übernommen. Ein echter AC-Ertragszähler ist vorzuziehen,
+wenn vorhanden: Er kann auch bei ausgefallenem Home Assistant weiterzählen.
+
+Vor dem Speichern bleibt die Auswahl ein Entwurf. Abbruch legt keinen Helfer
+an. Bereits gespeicherte native Helfer bleiben beim Entfernen der Zuordnung
+oder von `pv_forecast` erhalten, weil andere Dashboards sie verwenden können;
+sie lassen sich bewusst unter **Geräte & Dienste → Helfer** entfernen.
+
+Über **Anderen Sensor selbst auswählen** bleibt die manuelle Zuordnung
+verfügbar: Messart wählen, Messumfang beschreiben und Vorschau prüfen. Weitere
+Geräteprofile lassen sich zentral ergänzen; der
+[Adaptervertrag](docs/messquellen-adapter.md) beschreibt die Erweiterung.
 
 Unterstützt werden fortlaufende oder täglich zurückgesetzte **Energiezähler in
 Wh/kWh** sowie optional **Leistung in W/kW**. Die Quelle muss tatsächlich

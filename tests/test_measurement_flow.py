@@ -87,9 +87,14 @@ async def _options(hass, entry):
 async def _choose(hass, result, step_id):
     """Eine vorhandene Menüaktion auslösen."""
 
-    return await hass.config_entries.options.async_configure(
+    result = await hass.config_entries.options.async_configure(
         result["flow_id"], {"next_step_id": step_id}
     )
+    if step_id == "add_measurement":
+        return await hass.config_entries.options.async_configure(
+            result["flow_id"], {"device": "manual"}
+        )
+    return result
 
 
 @pytest.mark.asyncio
@@ -116,6 +121,9 @@ async def test_setup_measurement_preview_confirmation_and_independent_edit(hass)
         )
         result = await hass.config_entries.flow.async_configure(
             result["flow_id"], {"next_step_id": "add_measurement"}
+        )
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {"device": "manual"}
         )
         assert voluptuous_serialize.convert(
             result["data_schema"], custom_serializer=cv.custom_serializer

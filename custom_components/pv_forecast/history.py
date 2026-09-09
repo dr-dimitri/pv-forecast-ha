@@ -808,6 +808,12 @@ class HistoryArchive:
             for source in record.measurement_sources
         }
         sources.update(
+            (source.upstream_entity_id, source.upstream_registry_id)
+            for record in self.records.values()
+            for source in record.measurement_sources
+            if source.upstream_registry_id is not None
+        )
+        sources.update(
             (record.comparison.entity_id, record.comparison.registry_id)
             for record in self.records.values()
             if record.comparison is not None

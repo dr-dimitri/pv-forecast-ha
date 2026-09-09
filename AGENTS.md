@@ -590,3 +590,9 @@ die experimentelle Anwendung. Ein synthetischer Winter-/Sommervergleich belegt
 nur den zeitabhängigen Mechanismus; der reale Zusatznutzen gegenüber konstanten
 Verlusten oder Kalibrierung bleibt offen. Nahverschattung, elektrische Stringeffekte,
 diffuse Himmelsverdeckung und 3D-Modelle sind ausdrücklich nicht enthalten.
+
+## Geführte Messquellenauswahl für vorhandene Geräte
+
+Auf ausdrücklichen Anwenderwunsch ergänzt der Config-/Options-Flow eine einfache Auswahl bereits eingerichteter Geräte. Der erste Adapter erkennt KOSTAL KSEM aus der Integration `ksem` anhand der Registry und des AC-Summenregisters 40974. Bestätigung: keine Batterie an den erfassten Wechselrichtern, vollständige AC-PV-Messgrenze und keine doppelte Energiezuordnung. Weitere Adapter beschreiben Erkennung und Messart zentral; Netz-/DC-/Verbrauchssensoren werden nicht als PV-Ertrag vorgeschlagen. Die manuelle Zuordnung bleibt erhalten.
+
+Für bestätigte Leistungsmessungen erstellt der Assistent erst beim Speichern einen nativen HA-Integral-Helfer oder verwendet einen passenden vorhandenen. kWh, Trapezregel und ereignisbasierte Integration ohne Fortschreibung stehengebliebener Messwerte sind festgelegt. Ein solcher Helfer bleibt als eigenständiger, auch anderweitig nutzbarer HA-Helfer beim Entfernen der PV-Zuordnung erhalten; dies wird vorab erklärt. Abbruch vor dem Speichern erzeugt keinen Helfer, Fehler beim Anlegen rollen neu angelegte Helfer zurück. Abgeleitete Energie bleibt gekennzeichnet. Quellenidentität, Leserechte und Datenlücken berücksichtigen auch den zugrunde liegenden Leistungssensor. Keine eigenen Geräteabrufe, keine eigene numerische Integration, keine neuen Prognosesensoren oder öffentlichen Aktionen. Config-Entry-Schema bleibt 1.1. Die Ausnahme erweitert ausschließlich die Einrichtung nativer Messhelfer und ersetzt die entgegenstehende Beschränkung auf bereits vorhandene Helfer. Offline-Tests ersetzen keine reale KSEM-Erprobung.
