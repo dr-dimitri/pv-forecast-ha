@@ -64,6 +64,23 @@ ersetzt keine Verbrauchs-, Speicher- oder Tarifdaten. Diese abgegrenzte
 Erweiterung ist in Issue #1 konkretisiert und ersetzt nur die entgegenstehenden
 V1-Grenzen; die übrigen Architektur- und Modellvorgaben gelten weiter.
 
+## Erweiterung nach V1: Energy-Adapter aus Issue #15
+
+Der native, rein lesende Integrationsadapter `energy.py` stellt über
+`async_get_solar_forecast` die gemeinsame Gesamtzeitreihe als `wh_hours` bereit.
+UTC-Intervallbeginne bleiben eindeutig; kWh werden genau einmal in Wh umgerechnet.
+Innere lokale Tagesgrenzen innerhalb eines Intervalls werden proportional geteilt.
+Ohne einen erfolgreichen, vollständigen Stand für die beiden aktuellen lokalen
+Tage gibt der Adapter keine Prognose aus, da der native Vertrag weder Alter noch
+Fehler oder Abdeckung kenntlich machen kann. Es entstehen keine zusätzlichen
+Entities, Abrufe, Konfigurationsfelder oder Statistikklassen.
+
+Die Einrichtung setzt echte Solarproduktionszähler im Energy Dashboard voraus.
+Die Gesamtprognose wird genau einem solchen Zähler zugeordnet. Bekannte Grenzen
+des nativen Frontends bei Mehrfachzuordnung (#52) und DST-/Teilstundenanzeige (#53)
+werden dokumentiert; die interne UTC-Zeitreihe bleibt maßgeblich. Diese in #1
+konkretisierte Ausnahme erweitert ausschließlich den nativen Plattformumfang.
+
 ## Konfiguration
 
 Die Einrichtung erfolgt ausschließlich über einen Config Flow; YAML ist nicht

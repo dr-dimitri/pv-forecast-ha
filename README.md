@@ -19,6 +19,7 @@ Home-Assistant-Oberfläche. YAML wird nicht unterstützt.
 - Restertrag heute, Ertrag der nächsten 60 Minuten, geschätzte Leistung jetzt
   und Beginn der stärksten Prognosestunde heute
 - lesende Aktion für die gemeinsame Stundenprognose in Automationen
+- native Solarprognose im Home-Assistant-Energie-Dashboard
 - mehrere Dachflächen mit eigener Leistung, Ausrichtung, Neigung und eigenem
   Systemwirkungsgrad
 - Übernahme des in Home Assistant hinterlegten Standorts oder einmalige
@@ -168,6 +169,37 @@ im Recorder vervielfacht.
 
 PV-Erzeugung allein beschreibt keinen verfügbaren Überschuss. Verbrauch,
 Speicherzustand und Tarife sind zusätzliche Daten für entsprechende Entscheidungen.
+
+## Prognose im Energie-Dashboard
+
+1. Öffne die Konfiguration des **Energie-Dashboards**.
+2. Füge unter **Solarproduktion** einen vorhandenen Sensor hinzu, der die
+   tatsächlich erzeugte PV-Energie misst, oder bearbeite eine bestehende Quelle.
+3. Wähle bei der Solarproduktionsprognose deine **PV-Ertragsprognose**-Anlage aus
+   und speichere die Änderung. Die native Solarproduktionsgrafik kann nun die
+   erwartete Erzeugung zusammen mit den echten Erträgen anzeigen.
+
+Die Prognosesensoren sind keine gemessenen Energiezähler und werden hier nicht
+als Erzeugungsquelle ausgewählt. Bei mehreren realen Solarzählern wird die
+Gesamtprognose **genau einem Zähler** zugeordnet. Das untersuchte HA-Frontend
+addiert eine mehrfach zugeordnete Anlage sonst mehrfach in der Grafik, obwohl
+das Backend sie nur einmal abruft ([bekannte Grenze #52](https://github.com/dr-dimitri/pv-forecast-ha/issues/52)).
+
+Die Energy-Anbindung liest dieselben geclippten Gesamtintervalle wie die
+Tagessensoren. Sie rechnet kWh in Wh um und erhält lokale Tagesanteile sowie
+eindeutige UTC-Zeitpunkte. Es entstehen keine zusätzlichen Wetterabrufe oder
+Entities. Nach einem Abruffehler, während des Entladens oder solange die beiden
+aktuellen lokalen Tage nicht vollständig abgedeckt sind, wird keine Kurve
+geliefert. Das native Format kann ältere oder unvollständige Daten nicht als
+solche kennzeichnen. Die Leseaktion bietet weiterhin die beschriebenen Metadaten.
+
+Bei der Herbst-Zeitumstellung und in Teilstundenzeitzonen kann das native
+HA-Frontend verschiedene Prognoseintervalle in einem Stundenpunkt zusammenfassen.
+Die im Adapter erhaltenen UTC-Zeitpunkte und Energiesummen ändern diese
+Darstellungsgrenze nicht ([bekannte Grenze #53](https://github.com/dr-dimitri/pv-forecast-ha/issues/53)).
+Die Grenzen wurden mit HA 2026.8.3 und Frontend 20260729.7 nachvollzogen.
+Weitere Hinweise zu den nativen Karten stehen in der
+[HA-Dokumentation zum Energie-Dashboard](https://www.home-assistant.io/dashboards/energy/).
 
 ## Berechnungsmodell
 
