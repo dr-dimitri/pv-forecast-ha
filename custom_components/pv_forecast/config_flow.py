@@ -364,7 +364,7 @@ def _ensure_unique_roof_name(
 class PvForecastConfigFlow(
     HistoryFlowMixin, MeasurementFlowMixin, ConfigFlow, domain=DOMAIN
 ):
-    """Config Flow für genau eine PV-Prognose-Konfiguration."""
+    """Config Flow für unabhängig konfigurierte logische PV-Anlagen."""
 
     VERSION = 1
     MINOR_VERSION = 1
@@ -373,6 +373,9 @@ class PvForecastConfigFlow(
         """Zwischenzustand des mehrstufigen Flows initialisieren."""
 
         self._location: dict[str, Any] = {}
+        self._plant_unique_id = uuid4().hex
+        self._confirmed_neighbors: set[str] = set()
+        self._confirmed_site: tuple[float, float] | None = None
         self._roofs: list[dict[str, Any]] = []
         self._roof_index = 0
         self._options: dict[str, Any] = {}
@@ -420,8 +423,7 @@ class PvForecastConfigFlow(
         """Standortquelle in einem lokalisierten Formular wählen."""
 
         if self._reconfigure_entry is None:
-            await self.async_set_unique_id(DOMAIN)
-            self._abort_if_unique_id_configured()
+            await self.async_set_unique_id(self._plant_unique_id)
         errors: dict[str, str] = {}
         if user_input is not None:
             location_source = user_input.get(CONF_LOCATION_SOURCE)
@@ -513,15 +515,117 @@ class PvForecastConfigFlow(
             errors=errors,
         )
 
-    async def _async_location_complete(self) -> ConfigFlowResult:
-        """Nach einer Standortänderung vorhandene Dächer erneut prüfen."""
+    def _site_key(self) -> tuple[float, float]:
+        """Gerundete Koordinaten nur als Hinweis auf mögliche Duplikate verwenden."""
+        return tuple(
+            round(float(self._location[key]), 4)
+            for key in (CONF_LATITUDE, CONF_LONGITUDE)
+        )
 
+    def _neighbors(self) -> list[ConfigEntry]:
+        return [
+            entry
+            for entry in self._async_current_entries()
+            if tuple(
+                round(float(entry.data[key]), 4)
+                for key in (CONF_LATITUDE, CONF_LONGITUDE)
+            )
+            == self._site_key()
+        ]
+
+    def _plant_name_taken(self, name: str) -> bool:
+        """Auch unmittelbar vor Abschluss inzwischen vergebene Namen erkennen."""
+        return any(
+            name.strip().casefold()
+            in {
+                str(
+                    entry.data.get(
+                        "plant_name",
+                        entry.data.get(CONF_LOCATION_NAME, entry.title),
+                    )
+                )
+                .strip()
+                .casefold(),
+                entry.title.strip().casefold(),
+            }
+            for entry in self._async_current_entries()
+        )
+
+    def _needs_plant_confirmation(self) -> bool:
+        return bool(self._async_current_entries()) and (
+            not self._location.get("plant_name")
+            or self._plant_name_taken(str(self._location.get("plant_name", "")))
+            or self._confirmed_site != self._site_key()
+            or not {entry.entry_id for entry in self._neighbors()}
+            <= self._confirmed_neighbors
+        )
+
+    async def _async_location_complete(self) -> ConfigFlowResult:
+        """Neue Standorte gegen vorhandene und laufende Einrichtungen prüfen."""
         if self._reconfigure_entry is not None:
+            if "plant_name" in self._reconfigure_entry.data:
+                self._location["plant_name"] = self._reconfigure_entry.data[
+                    "plant_name"
+                ]
             self._reconfigure_tested = False
             return await self.async_step_reconfigure_confirm()
+        self.context["pv_site"] = self._site_key()
+        if any(
+            flow["flow_id"] != self.flow_id
+            and flow["context"].get("pv_site") == self._site_key()
+            for flow in self.hass.config_entries.flow.async_progress_by_handler(DOMAIN)
+        ):
+            return self.async_abort(reason="already_in_progress")
+        if self._needs_plant_confirmation():
+            return await self.async_step_plant()
+        return await self._async_plant_complete()
+
+    async def _async_plant_complete(self) -> ConfigFlowResult:
         if self._roofs:
             return await self.async_step_system()
         return await self.async_step_roof()
+
+    async def async_step_plant(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Weitere Anlagen benennen und am selben Ort ausdrücklich unterscheiden."""
+        neighbors = self._neighbors()
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            name = user_input.get("plant_name")
+            if neighbors and user_input.get("confirm_separate_plant") is not True:
+                return self.async_abort(reason="already_configured")
+            if not isinstance(name, str) or not 1 <= len(name.strip()) <= 100:
+                errors["base"] = "invalid_plant_name"
+            elif self._plant_name_taken(name):
+                errors["base"] = "duplicate_plant_name"
+            else:
+                self._location["plant_name"] = name.strip()
+                self._confirmed_site = self._site_key()
+                self._confirmed_neighbors = {entry.entry_id for entry in neighbors}
+                return await self._async_plant_complete()
+        schema = {
+            vol.Required(
+                "plant_name",
+                default=self._location.get(
+                    "plant_name", self._location[CONF_LOCATION_NAME]
+                ),
+            ): TextSelector()
+        }
+        if neighbors:
+            schema[vol.Required("confirm_separate_plant", default=False)] = (
+                BooleanSelector()
+            )
+        return self.async_show_form(
+            step_id="plant",
+            data_schema=vol.Schema(schema),
+            errors=errors,
+            description_placeholders={
+                "existing": ", ".join(
+                    entry.title for entry in self._async_current_entries()
+                )
+            },
+        )
 
     async def async_step_reconfigure(
         self, user_input: dict[str, Any] | None = None
@@ -621,6 +725,9 @@ class PvForecastConfigFlow(
             data_schema=vol.Schema({}),
             errors=errors,
             description_placeholders={
+                "plant_name": str(
+                    self._location.get("plant_name", self._location[CONF_LOCATION_NAME])
+                ),
                 "location": str(self._location[CONF_LOCATION_NAME]),
                 "latitude": str(self._location[CONF_LATITUDE]),
                 "longitude": str(self._location[CONF_LONGITUDE]),
@@ -763,6 +870,9 @@ class PvForecastConfigFlow(
                 "history",
             ],
             description_placeholders={
+                "plant_name": str(
+                    self._location.get("plant_name", self._location[CONF_LOCATION_NAME])
+                ),
                 "location": str(self._location[CONF_LOCATION_NAME]),
                 "location_source": location_source,
                 "latitude": f"{float(self._location[CONF_LATITUDE]):.6f}",
@@ -779,8 +889,11 @@ class PvForecastConfigFlow(
         """Die im Abschlussdialog bestätigte Konfiguration anlegen."""
 
         translations = await _async_ui_translations(self.hass)
+        if self._needs_plant_confirmation():
+            return await self.async_step_plant()
+        name = self._location.get("plant_name", self._location[CONF_LOCATION_NAME])
         return self.async_create_entry(
-            title=translations["title"],
+            title=f"{translations['title']} · {name}",
             data=self._location,
             options=self._options,
         )
