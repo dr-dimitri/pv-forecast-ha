@@ -1,15 +1,46 @@
-# PV-Forecast-Karte
+# PV-Dashboard und PV-Forecast-Karte
 
-Die freiwillige Karte zeigt die PV-Erzeugung in deinem bestehenden
-Home-Assistant-Dashboard. Sie benötigt keine weiteren Karten, Templates oder
+Die freiwillige PV-Seite zeigt die PV-Erzeugung direkt in der HA-Seitenleiste.
+Ihre Karte lässt sich auch in bestehenden Home-Assistant-Dashboards verwenden.
+Sie benötigt keine weiteren Karten, Templates oder
 zusätzlichen Wetterzugänge. Das Backend funktioniert weiterhin ohne Karte.
 
-## Installation ohne YAML
+## Dashboard direkt über die Integration einrichten
 
 1. Die Integration über HACS als benutzerdefiniertes Repository
    `dr-dimitri/pv-forecast-ha` vom Typ **Integration** installieren beziehungsweise
    aktualisieren und Home Assistant neu starten. Das Kartenmodul gehört zum
    Integrationspaket; es ist kein separates HACS-Frontend-Repository.
+2. **Einstellungen → Geräte & Dienste → PV-Ertragsprognose → Konfigurieren →
+   PV-Dashboard einrichten** öffnen. Bei einer neuen Anlage steht dieselbe
+   Auswahl im Abschlussdialog vor dem endgültigen Speichern bereit.
+3. **PV-Dashboard in der Seitenleiste anzeigen** einschalten, einen Titel wählen
+   und speichern. Sobald die Anlage und das HA-Frontend geladen sind, erscheint
+   die PV-Seite in der Seitenleiste. Ressourcenregistrierung und YAML entfallen.
+
+Die Funktion ist standardmäßig ausgeschaltet. Jede Anlage kann ihre eigene
+Seite erhalten. Über denselben Dialog lässt sich die Seite umbenennen oder
+abschalten. Der Titel ändert ihre URL nicht; Reload und Neustart stellen die
+gewählte Seite wieder her. Beim Entladen oder Entfernen einer Anlage verschwindet
+nur deren eigene Seite. Ein- und Ausschalten oder Umbenennen lädt die Integration
+nicht neu und verändert weder Wetterabrufe noch Prognose- oder Archivdaten.
+
+Die Seite verwendet ein festes Kartenlayout, das von der Integration verwaltet
+wird. Ihre Zusammenstellung ist nicht über den Lovelace-Dashboard-Editor
+bearbeitbar. Für eigene Zusammenstellungen dient die einzelne Karte im nächsten
+Abschnitt. Bestehende Dashboards, deren Ressourcen und dein Standarddashboard
+werden bei der Einrichtung nicht geändert.
+
+Technisch verwendet die Seite den
+[offiziellen HA-Custom-Panelvertrag](https://developers.home-assistant.io/docs/frontend/custom-ui/creating-custom-panels/).
+Das HA-Frontend lädt dabei das gebündelte Modul selbst. Das Menü oben links öffnet
+die HA-Seitenleiste auch auf schmalen Bildschirmen. Ohne Frontend bleibt das
+Backend nutzbar; der Optionsdialog zeigt den Wartestatus. Eine bereits fremd
+belegte Panel-Adresse wird nicht überschrieben und als Konflikt angezeigt.
+
+## Einzelne Karte im eigenen Dashboard einrichten
+
+1. Die Integration wie oben installieren beziehungsweise aktualisieren.
 2. Im Benutzerprofil gegebenenfalls den erweiterten Modus aktivieren. Unter
    **Einstellungen → Dashboards → Drei-Punkte-Menü → Ressourcen** eine Ressource
    hinzufügen: URL `/pv_forecast/pv-forecast-card.js?v=1`, Typ **JavaScript-Modul**.
@@ -24,8 +55,8 @@ Diese Ressourcenverwaltung ist der
 Das Paket unterstützt dieselbe Mindestversion wie die Integration (HA 2025.12).
 Die Karte prüft `schema_version=1` und `view_version=1`. Wenn die
 Darstellungsdaten noch fehlen, zeigt sie einen verständlichen Updatehinweis.
-Dashboard-Ressourcen werden nicht automatisch in andere Konfigurationen
-hineingeschrieben. Nach Entfernen der Integration kann ihre Kartenressource in
+Lovelace-Ressourcen werden ausschließlich bei dieser manuellen Einrichtung
+gespeichert. Nach Entfernen der Integration kann ihre Kartenressource in
 diesem Dialog ebenfalls entfernt werden.
 
 ## Werte und Kurven verstehen
@@ -110,6 +141,13 @@ Browser-Demo liegt unter `tests/frontend/demo.html` und simuliert ausschließlic
 die drei vorhandenen Leseaktionen. Ihr Aufrufzähler macht gemeinsame Abrufe
 und das Pausieren beim Ausblenden überprüfbar.
 
+Mit `?panel=1&scenario=sunny&width=360&theme=light` beziehungsweise `theme=dark`
+zeigt dieselbe Demo die verwaltete Dashboard-Seite. Geprüft sind die
+Tastaturaktivierung des Menüknopfs, Tageswechsel, fehlender horizontaler Überlauf
+und das Beenden der Kartenabfragen beim Ausblenden beziehungsweise Entfernen.
+Die Python-Tests prüfen Config-/Options-Flow, mehrere Anlagen, stabile URLs,
+Reload, Entladen, Frontendstart, Abbruch und Konflikte über die HA-Panelregistrierung.
+
 Die folgenden Browseraufnahmen stammen aus der deterministischen Offline-Demo
 mit synthetischen Prognosen und Messwerten; sie zeigen keine reale Anlage.
 
@@ -120,6 +158,10 @@ mit synthetischen Prognosen und Messwerten; sie zeigen keine reale Anlage.
 | Mobil, hell (360 px) | Mobil, dunkel (360 px) |
 | --- | --- |
 | ![Mobile Karte mit heller Darstellung](images/karte-mobil-hell.png) | ![Mobile Karte mit dunkler Darstellung](images/karte-mobil-dunkel.png) |
+
+| Dashboard-Seite, hell (360 px) | Dashboard-Seite, dunkel (360 px) |
+| --- | --- |
+| ![PV-Dashboard mit heller Darstellung](images/dashboard-mobil-light.png) | ![PV-Dashboard mit dunkler Darstellung](images/dashboard-mobil-dark.png) |
 
 Die moderierten Tests mit fünf realen PV-Anwendern aus #28 sind weiterhin
 geplant. Automatisierte Prüfungen und Screenshots ersetzen weder diese Tests

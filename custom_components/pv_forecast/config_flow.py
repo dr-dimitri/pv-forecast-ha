@@ -67,6 +67,8 @@ from .const import (
     LOCATION_SOURCE_HOME_ASSISTANT,
     ROOF_DIRECTION_CUSTOM,
 )
+from .dashboard import CONF_DASHBOARD_ENABLED
+from .dashboard_configuration import DashboardFlowMixin
 from .geocoding import (
     AddressNotFoundError,
     GeocodingConnectionError,
@@ -364,7 +366,11 @@ def _ensure_unique_roof_name(
 
 
 class PvForecastConfigFlow(
-    HistoryFlowMixin, MeasurementFlowMixin, ConfigFlow, domain=DOMAIN
+    DashboardFlowMixin,
+    HistoryFlowMixin,
+    MeasurementFlowMixin,
+    ConfigFlow,
+    domain=DOMAIN,
 ):
     """Config Flow für unabhängig konfigurierte logische PV-Anlagen."""
 
@@ -408,6 +414,18 @@ class PvForecastConfigFlow(
     ) -> ConfigFlowResult:
         """Nach der optionalen Archivierung zum Abschlussdialog zurückkehren."""
 
+        return await self.async_step_summary()
+
+    def _dashboard_context(self) -> tuple[dict[str, Any], str, str]:
+        name = str(
+            self._location.get(
+                "plant_name", self._location.get(CONF_LOCATION_NAME, "PV")
+            )
+        )
+        return self._options, name, "after_setup"
+
+    async def _async_dashboard_done(self, options: dict[str, Any]) -> ConfigFlowResult:
+        self._options = options
         return await self.async_step_summary()
 
     @staticmethod
@@ -872,8 +890,16 @@ class PvForecastConfigFlow(
                 "edit_system",
                 "measurements",
                 "history",
+                "dashboard",
             ],
             description_placeholders={
+                "dashboard": translations[
+                    (
+                        "common.dashboard_selected"
+                        if self._options.get(CONF_DASHBOARD_ENABLED) is True
+                        else "common.dashboard_off"
+                    )
+                ],
                 "plant_name": str(
                     self._location.get("plant_name", self._location[CONF_LOCATION_NAME])
                 ),
@@ -926,6 +952,7 @@ class PvForecastConfigFlow(
 
 
 class PvForecastOptionsFlow(
+    DashboardFlowMixin,
     ShadingFlowMixin,
     InverterGroupFlowMixin,
     CalibrationFlowMixin,
@@ -946,6 +973,22 @@ class PvForecastOptionsFlow(
         self._selected_roof_id: str | None = None
         self._roof_removal_groups: list[dict[str, Any]] | None = None
         self._measurement_draft: dict[str, Any] | None = None
+
+    def _dashboard_context(self) -> tuple[dict[str, Any], str, str]:
+        entry = self.config_entry
+        manager = getattr(getattr(entry, "runtime_data", None), "dashboard", None)
+        return (
+            dict(entry.options),
+            str(
+                entry.data.get(
+                    "plant_name", entry.data.get(CONF_LOCATION_NAME, entry.title)
+                )
+            ),
+            manager.status if manager is not None else "after_setup",
+        )
+
+    async def _async_dashboard_done(self, options: dict[str, Any]) -> ConfigFlowResult:
+        return self.async_create_entry(title="", data=options)
 
     def _measurement_options(self) -> dict[str, Any]:
         """Alle unabhängigen Optionen beim Bearbeiten der Quellen bewahren."""
@@ -1028,6 +1071,7 @@ class PvForecastOptionsFlow(
         menu_options.append("measurements")
         menu_options.append("history")
         menu_options.append("calibration")
+        menu_options.append("dashboard")
         translations = await _async_ui_translations(self.hass)
         return self.async_show_menu(
             step_id="init",

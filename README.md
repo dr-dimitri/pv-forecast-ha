@@ -23,7 +23,8 @@ vorgesehen.
 - native Solarprognose im Home-Assistant-Energie-Dashboard
 - optionale lokale Erfassung bestehender PV-Ertragszähler mit Messdatenprüfung
 - optionales Prognosearchiv mit Soll-Ist-Berichten und bewusstem JSON-/CSV-Export
-- freiwillige Lovelace-Karte mit visuellem Editor, Tageskurven und Dachauswahl
+- freiwilliges PV-Dashboard direkt über die Integrationsoptionen; Lovelace-Karte
+  mit visuellem Editor, Tageskurven und Dachauswahl auch einzeln nutzbar
 - optionale Selbstkalibrierung mit getrennten Lern- und späteren Prüftagen
 - empirische Tagesbänder nach Prüfung passender eingefrorener Archivstände
 - zusammenhängende Solarzeitfenster und getrennte Tagesaussicht aus Messung,
@@ -284,10 +285,21 @@ Bestätigung von vorn. [Regeln, Bedienung und Grenzen](docs/kalibrierung.md)
 erklären insbesondere, warum ältere Archivtage nicht nachträglich als Lerntage
 verwendet werden und warum eine Verbesserung nicht garantiert ist.
 
-## Eigene Dashboard-Karte (optional)
+## PV-Dashboard und eigene Karte (optional)
 
-Das Integrationspaket enthält **PV Forecast** als eigene Lovelace-Karte. Füge
-unter **Einstellungen → Dashboards → Ressourcen** die URL
+Öffne **Einstellungen → Geräte & Dienste → PV-Ertragsprognose → Konfigurieren →
+PV-Dashboard einrichten**. Aktiviere **PV-Dashboard in der Seitenleiste anzeigen**,
+wähle den Titel und speichere. Bei einer neuen Anlage findest du dieselbe
+Auswahl im Abschlussdialog. Danach erscheint eine eigene PV-Seite in der
+HA-Seitenleiste, ohne YAML oder manuelle Ressourcenregistrierung.
+
+Das Dashboard ist standardmäßig aus. Jede Anlage erhält bei Bedarf ihre eigene
+Seite mit festem Kartenlayout. Titeländerung und Abschalten erfolgen im selben
+Dialog und lösen keinen Wetterabruf aus. Die Integration verwaltet diese Seite;
+deine vorhandenen Dashboards bleiben erhalten.
+
+Das Paket enthält **PV Forecast** außerdem als einzelne Lovelace-Karte für frei
+gestaltete Dashboards. Füge dafür unter **Einstellungen → Dashboards → Ressourcen** die URL
 `/pv_forecast/pv-forecast-card.js?v=1` als **JavaScript-Modul** hinzu. Danach
 kannst du die Karte über **Dashboard bearbeiten → Karte hinzufügen** und ihren
 visuellen Editor ohne YAML einrichten.
