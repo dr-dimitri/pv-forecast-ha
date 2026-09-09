@@ -1,7 +1,7 @@
 """Tests der Coordinator-Orchestrierung."""
 
 import asyncio
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from unittest.mock import AsyncMock, Mock, patch
 from zoneinfo import ZoneInfo
 
@@ -25,6 +25,8 @@ from custom_components.pv_forecast.const import (
     CONF_ROOFS,
     CONF_TIME_ZONE,
     DOMAIN,
+    OPEN_METEO_FORECAST_URL,
+    UPDATE_INTERVAL,
 )
 from custom_components.pv_forecast.coordinator import PvForecastCoordinator
 from custom_components.pv_forecast.models import (
@@ -32,8 +34,10 @@ from custom_components.pv_forecast.models import (
     ForecastResult,
     RoofForecast,
 )
+from custom_components.pv_forecast.runtime import async_get_open_meteo_client
 
 from .helpers import TIMEZONE, persisted_roof, roof, weather
+from .test_api import _hourly_payload
 
 
 def _entry(
@@ -61,7 +65,7 @@ def _entry(
 async def test_coordinator_uses_one_shared_client_update(hass) -> None:
     """Alle Dächer werden aus genau einem gebündelten Client-Aufruf berechnet."""
 
-    client = AsyncMock()
+    client = AsyncMock(retry_after=None)
     client.async_fetch_roofs.return_value = {
         "a": (weather(),),
         "b": (weather(),),
@@ -83,7 +87,7 @@ async def test_coordinator_uses_one_shared_client_update(hass) -> None:
 async def test_coordinator_converts_api_error_to_update_failed(hass) -> None:
     """Externe Fehler werden in den HA-Coordinator-Lebenszyklus übersetzt."""
 
-    client = AsyncMock()
+    client = AsyncMock(retry_after=None)
     client.async_fetch_roofs.side_effect = OpenMeteoConnectionError("offline")
     coordinator = PvForecastCoordinator(hass, _entry(hass), client)
     with pytest.raises(UpdateFailed):
@@ -103,7 +107,7 @@ async def test_coordinator_retains_valid_forecast_after_failed_update(
 ) -> None:
     """Unbrauchbare Antworten ersetzen keinen zuvor gültigen Tagesforecast."""
 
-    client = AsyncMock()
+    client = AsyncMock(retry_after=None)
     client.async_fetch_roofs.return_value = {"a": (weather(),), "b": (weather(),)}
     coordinator = PvForecastCoordinator(hass, _entry(hass), client)
     with patch(
@@ -112,12 +116,15 @@ async def test_coordinator_retains_valid_forecast_after_failed_update(
     ):
         await coordinator.async_refresh()
         previous = coordinator.data
+        previous_success_time = coordinator.last_update_success_time
+        assert previous_success_time is not None
         assert previous.total.today == pytest.approx(15)
         client.async_fetch_roofs.side_effect = error
         await coordinator.async_refresh()
 
     assert not coordinator.last_update_success
     assert coordinator.data is previous
+    assert coordinator.last_update_success_time == previous_success_time
 
 
 def _snapshot(local_day: date) -> ForecastResult:
@@ -167,7 +174,7 @@ async def test_daily_yield_exposes_only_covered_target_days(
 ) -> None:
     """Nur explizit im datierten Stand vorhandene Tage erhalten einen Zahlenwert."""
 
-    coordinator = PvForecastCoordinator(hass, _entry(hass), AsyncMock())
+    coordinator = PvForecastCoordinator(hass, _entry(hass), AsyncMock(retry_after=None))
     snapshot = _snapshot(date(2026, 8, 23))
     coordinator.async_set_updated_data(snapshot)
     with freeze_time(now):
@@ -182,7 +189,7 @@ async def test_daily_yield_exposes_only_covered_target_days(
 async def test_request_crossing_midnight_fetches_current_day_once(hass) -> None:
     """Ein Datumswechsel erhält die Bindung und ergänzt genau einen neuen Abruf."""
 
-    client = AsyncMock()
+    client = AsyncMock(retry_after=None)
     coordinator = PvForecastCoordinator(hass, _entry(hass), client)
     with freeze_time("2026-08-23T23:59:59+02:00") as frozen:
 
@@ -303,7 +310,7 @@ async def test_inflight_midnight_update_has_one_sequential_followup(
 async def test_midnight_followup_is_bounded_and_keeps_its_own_date(hass) -> None:
     """Auch bei erneutem Uhrsprung gibt es höchstens einen datierten Folgeabruf."""
 
-    client = AsyncMock()
+    client = AsyncMock(retry_after=None)
     coordinator = PvForecastCoordinator(hass, _entry(hass), client)
     with freeze_time("2026-08-23T23:59:59+02:00") as frozen:
 
@@ -330,7 +337,7 @@ async def test_delayed_midnight_does_not_refetch_already_covered_days(hass) -> N
     """Ein verspäteter Timer erkennt den inzwischen vollständig neuen Datenstand."""
 
     with freeze_time("2026-08-23T23:59:59+02:00") as frozen:
-        client = AsyncMock()
+        client = AsyncMock(retry_after=None)
 
         async def fetch(*args, **kwargs):
             frozen.move_to("2026-08-24T00:00:01+02:00")
@@ -359,7 +366,7 @@ async def test_delayed_midnight_does_not_refetch_already_covered_days(hass) -> N
 async def test_failed_midnight_followup_retains_previous_snapshot(hass) -> None:
     """Ein fehlgeschlagener Folgeabruf bleibt ein normaler Coordinator-Fehler."""
 
-    client = AsyncMock()
+    client = AsyncMock(retry_after=None)
     coordinator = PvForecastCoordinator(hass, _entry(hass), client)
     previous = _snapshot(date(2026, 8, 23))
     coordinator.async_set_updated_data(previous)
@@ -507,7 +514,7 @@ async def test_midnight_listener_follows_location_days_without_resetting_api_err
     await hass.config.async_set_time_zone("UTC")
     with freeze_time(before) as frozen:
         entry = _entry(hass, timezone, disable_polling=True)
-        client = AsyncMock()
+        client = AsyncMock(retry_after=None)
         coordinator = PvForecastCoordinator(hass, entry, client)
         local_day = datetime.fromisoformat(before).astimezone(ZoneInfo(timezone)).date()
         snapshot = _snapshot(local_day)
@@ -599,3 +606,136 @@ async def test_midnight_and_scheduled_poll_share_one_refresh(hass) -> None:
             assert fetch.await_count == 2
             assert entry.runtime_data.coordinator.last_update_success
             assert await hass.config_entries.async_unload(entry.entry_id)
+
+
+@pytest.mark.asyncio
+async def test_provider_pause_survives_manual_refresh_and_midnight(
+    hass, aioclient_mock
+) -> None:
+    """Die reale Abrufsperre schützt den Anbieter, ohne Tageslabels einzufrieren."""
+
+    with freeze_time("2026-08-23T23:50:00+02:00") as frozen:
+        aioclient_mock.get(
+            OPEN_METEO_FORECAST_URL,
+            json=_hourly_payload("2026-08-22T23:00", "2026-08-24T22:00"),
+        )
+        entry = _entry(hass)
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+        coordinator = entry.runtime_data.coordinator
+        previous = coordinator.data
+        previous_success_time = coordinator.last_update_success_time
+        assert previous_success_time == datetime(2026, 8, 23, 21, 50, tzinfo=UTC)
+        assert aioclient_mock.call_count == 1
+
+        aioclient_mock.clear_requests()
+        aioclient_mock.get(
+            OPEN_METEO_FORECAST_URL, status=429, headers={"Retry-After": "7200"}
+        )
+        frozen.move_to("2026-08-23T23:59:00+02:00")
+        await coordinator.async_refresh()
+        assert aioclient_mock.call_count == 1
+        assert not coordinator.last_update_success
+        assert isinstance(coordinator.last_exception, UpdateFailed)
+        assert coordinator.last_exception.retry_after == pytest.approx(7200)
+        assert coordinator.data is previous
+        assert coordinator.last_update_success_time == previous_success_time
+
+        # Selbst eine inzwischen gültige Antwort darf erst nach der Frist
+        # abgefragt werden; die nächste Antwort deckt den neuen lokalen Tag ab.
+        aioclient_mock.clear_requests()
+        aioclient_mock.get(
+            OPEN_METEO_FORECAST_URL,
+            json=_hourly_payload("2026-08-23T23:00", "2026-08-25T22:00"),
+        )
+        listener = Mock()
+        remove_listener = coordinator.async_add_listener(listener)
+        with patch.object(
+            coordinator,
+            "async_request_refresh",
+            wraps=coordinator.async_request_refresh,
+        ) as request_refresh:
+            frozen.move_to("2026-08-24T00:00:00+02:00")
+            async_fire_time_changed(hass)
+            await hass.async_block_till_done(wait_background_tasks=True)
+            listener.assert_called_once_with()
+            request_refresh.assert_not_called()
+        assert coordinator.get_daily_yield("today") == previous.total.tomorrow
+        assert coordinator.get_daily_yield("tomorrow") is None
+        assert not coordinator.last_update_success
+        assert coordinator.last_update_success_time == previous_success_time
+
+        # Beide öffentlichen Refresh-Wege gehen durch dieselbe API-Schranke.
+        await coordinator.async_refresh()
+        await coordinator.async_request_refresh()
+        await hass.async_block_till_done(wait_background_tasks=True)
+        assert aioclient_mock.call_count == 0
+        assert coordinator.last_exception.retry_after == pytest.approx(7140)
+        assert coordinator.data is previous
+        assert coordinator.last_update_success_time == previous_success_time
+
+        frozen.move_to("2026-08-24T01:58:59+02:00")
+        async_fire_time_changed(hass)
+        await hass.async_block_till_done(wait_background_tasks=True)
+        assert aioclient_mock.call_count == 0
+
+        frozen.move_to("2026-08-24T01:59:01+02:00")
+        async_fire_time_changed(hass)
+        await hass.async_block_till_done(wait_background_tasks=True)
+        assert aioclient_mock.call_count == 1
+        assert coordinator.last_update_success
+        assert coordinator.data.local_date == date(2026, 8, 24)
+        assert coordinator.get_daily_yield("tomorrow") is not None
+        assert coordinator.last_update_success_time > previous_success_time
+        assert coordinator.update_interval == UPDATE_INTERVAL
+
+        # Nach dem Erfolg gilt wieder das normale 30-Minuten-Intervall.
+        frozen.move_to("2026-08-24T02:28:59+02:00")
+        async_fire_time_changed(hass)
+        await hass.async_block_till_done(wait_background_tasks=True)
+        assert aioclient_mock.call_count == 1
+        frozen.move_to("2026-08-24T02:29:02+02:00")
+        async_fire_time_changed(hass)
+        await hass.async_block_till_done(wait_background_tasks=True)
+        assert aioclient_mock.call_count == 2
+        assert coordinator.last_update_success
+        remove_listener()
+        assert await hass.config_entries.async_unload(entry.entry_id)
+
+
+@pytest.mark.asyncio
+async def test_very_large_provider_pause_is_scheduled_without_overflow(
+    hass, aioclient_mock
+) -> None:
+    """Auch eine extreme endliche Anbieterfrist wird ohne Verkürzung eingeplant."""
+
+    with freeze_time("2026-08-23T23:59:00+02:00") as frozen:
+        aioclient_mock.get(
+            OPEN_METEO_FORECAST_URL,
+            status=429,
+            headers={"Retry-After": str(10**100)},
+        )
+        client = async_get_open_meteo_client(hass)
+        coordinator = PvForecastCoordinator(hass, _entry(hass), client)
+        listener = Mock()
+        remove_listener = coordinator.async_add_listener(listener)
+        coordinator.async_start_day_updates()
+        with patch.object(hass.loop, "call_at", wraps=hass.loop.call_at) as call_at:
+            await coordinator.async_refresh()
+        assert not coordinator.last_update_success
+        assert isinstance(coordinator.last_exception, UpdateFailed)
+        assert coordinator.last_exception.retry_after == pytest.approx(1e100)
+        assert any(call.args[0] >= 1e100 for call in call_at.call_args_list)
+        assert aioclient_mock.call_count == 1
+
+        listener.reset_mock()
+        frozen.move_to("2026-08-24T00:00:00+02:00")
+        async_fire_time_changed(hass)
+        await hass.async_block_till_done(wait_background_tasks=True)
+        listener.assert_called_once_with()
+        await coordinator.async_refresh()
+        assert aioclient_mock.call_count == 1
+        assert client.retry_after == pytest.approx(1e100)
+        assert coordinator._unsub_refresh is not None
+        remove_listener()
+        await coordinator.async_shutdown()

@@ -1,5 +1,6 @@
 """Tests für Transportgrenze und Open-Meteo-Parsing."""
 
+import asyncio
 from datetime import UTC, date, datetime, timedelta
 from unittest.mock import AsyncMock, patch
 from zoneinfo import ZoneInfo
@@ -12,6 +13,11 @@ from custom_components.pv_forecast.api import (
     OpenMeteoClient,
     OpenMeteoConnectionError,
     OpenMeteoDataError,
+    OpenMeteoRateLimitError,
+    OpenMeteoRequestState,
+    OpenMeteoRetryError,
+    OpenMeteoRetryPendingError,
+    OpenMeteoTemporaryError,
     parse_open_meteo_response,
 )
 from custom_components.pv_forecast.calculations import calculate_forecast
@@ -537,7 +543,7 @@ async def test_roofs_share_requests_for_equal_geometry() -> None:
     """Geometrien teilen Abrufe und behalten auch über Mitternacht denselben Tag."""
 
     client = OpenMeteoClient(_Session(_Response(_payload())))
-    client.async_fetch = AsyncMock(
+    client._async_fetch = AsyncMock(
         side_effect=[OpenMeteoForecast((weather(),)), OpenMeteoForecast((weather(),))]
     )
     with patch("custom_components.pv_forecast.api.datetime", wraps=datetime) as clock:
@@ -552,10 +558,10 @@ async def test_roofs_share_requests_for_equal_geometry() -> None:
             (roof("a", azimuth=180), roof("b", azimuth=180), roof("c", azimuth=90)),
         )
         clock.now.assert_called_once_with(UTC)
-    assert client.async_fetch.await_count == 2
+    assert client._async_fetch.await_count == 2
     assert set(result) == {"a", "b", "c"}
     assert result["a"] is result["b"]
-    assert [call.kwargs for call in client.async_fetch.await_args_list] == [
+    assert [call.kwargs for call in client._async_fetch.await_args_list] == [
         {
             "tilt_deg": 35,
             "open_meteo_azimuth_deg": 0,
@@ -567,3 +573,430 @@ async def test_roofs_share_requests_for_equal_geometry() -> None:
             "local_date": date(2026, 9, 9),
         },
     ]
+
+
+def _http_error(status: int, retry_after: str | None = None) -> ClientResponseError:
+    """Eine HTTP-Fehlerantwort mit optionaler Anbieterpause erzeugen."""
+
+    return ClientResponseError(
+        None,
+        (),
+        status=status,
+        headers={"Retry-After": retry_after} if retry_after is not None else None,
+    )
+
+
+@pytest.mark.parametrize(
+    ("error", "expected"),
+    [
+        (_http_error(429), OpenMeteoRateLimitError),
+        *(
+            (_http_error(status), OpenMeteoTemporaryError)
+            for status in (408, 500, 502, 503, 504)
+        ),
+        (TimeoutError(), OpenMeteoTemporaryError),
+        (ClientError("Verbindung abgebrochen"), OpenMeteoTemporaryError),
+        (_http_error(400), OpenMeteoConnectionError),
+        (_http_error(401), OpenMeteoConnectionError),
+        (_http_error(404), OpenMeteoConnectionError),
+        (_http_error(501), OpenMeteoConnectionError),
+    ],
+)
+async def test_http_errors_have_controlled_retry_classification(
+    error: Exception, expected: type[OpenMeteoConnectionError]
+) -> None:
+    """Nur Ratenbegrenzung und festgelegte temporäre Fehler erzeugen eine Pause."""
+
+    session = _Session(_Response({}, error))
+    client = OpenMeteoClient(session)
+    with patch("custom_components.pv_forecast.api.monotonic", return_value=1000):
+        with pytest.raises(expected) as raised:
+            await client.async_resolve_timezone(52, 13)
+        assert type(raised.value) is expected
+        if isinstance(error, ClientResponseError):
+            assert f"HTTP {error.status}" in str(raised.value)
+        if issubclass(expected, OpenMeteoRetryError):
+            assert client.retry_after == 3600
+        else:
+            assert client.retry_after is None
+    assert session.calls == 1
+
+
+@pytest.mark.parametrize(
+    ("header", "expected"),
+    [
+        ("90", 90),
+        (" 120 ", 120),
+        ("28800", 28800),
+        ("100000000000000000000", 1e20),
+        ("Wed, 09 Sep 2026 14:00:00 GMT", 7200),
+        ("Wednesday, 09-Sep-26 14:00:00 GMT", 7200),
+        ("Wed Sep  9 14:00:00 2026", 7200),
+        (
+            "Tuesday, 09-Sep-70 12:00:00 GMT",
+            (
+                datetime(2070, 9, 9, 12, tzinfo=UTC)
+                - datetime(2026, 9, 9, 12, tzinfo=UTC)
+            ).total_seconds(),
+        ),
+        (
+            "Wednesday, 09-Sep-76 12:00:00 GMT",
+            (
+                datetime(2076, 9, 9, 12, tzinfo=UTC)
+                - datetime(2026, 9, 9, 12, tzinfo=UTC)
+            ).total_seconds(),
+        ),
+        ("Wednesday, 09-Sep-76 12:00:01 GMT", 3600),
+        ("Thursday, 09-Sep-77 12:00:00 GMT", 3600),
+        (None, 3600),
+        ("0", 3600),
+        ("-20", 3600),
+        ("+20", 3600),
+        ("1.5", 3600),
+        ("1e4", 3600),
+        ("nan", 3600),
+        ("inf", 3600),
+        ("١٢٠", 3600),
+        ("", 3600),
+        ("unbekannt", 3600),
+        ("9" * 400, 3600),
+        ("Wed, 09 Sep 2026 12:00:00 GMT", 3600),
+        ("Wed, 09 Sep 2026 11:00:00 GMT", 3600),
+        ("Wed, 09 Sep 2026 14:00:00", 3600),
+        ("Wed, 09 Sep 2026 14:00:00 +0000", 3600),
+    ],
+)
+@freeze_time("2026-09-09T12:00:00+00:00")
+async def test_retry_after_header_validation(
+    header: str | None, expected: float
+) -> None:
+    """Positive Anbieterfristen gelten; unbrauchbare Angaben nutzen den Backoff."""
+
+    client = OpenMeteoClient(_Session(_Response({}, _http_error(429, header))))
+    with patch("custom_components.pv_forecast.api.monotonic", return_value=1000):
+        with pytest.raises(OpenMeteoRateLimitError):
+            await client.async_resolve_timezone(52, 13)
+        assert client.retry_after == expected
+
+
+@freeze_time("2090-09-09T12:00:00+00:00")
+async def test_rfc850_year_resolves_across_century_boundary() -> None:
+    """Das Rohjahr 00 gehört bei Empfang 2090 zu 2100 statt fest zu 2000."""
+
+    client = OpenMeteoClient(
+        _Session(_Response({}, _http_error(503, "Thursday, 09-Sep-00 12:00:00 GMT")))
+    )
+    with patch("custom_components.pv_forecast.api.monotonic", return_value=1000):
+        with pytest.raises(OpenMeteoTemporaryError):
+            await client.async_resolve_timezone(52, 13)
+        assert (
+            client.retry_after
+            == (
+                datetime(2100, 9, 9, 12, tzinfo=UTC)
+                - datetime(2090, 9, 9, 12, tzinfo=UTC)
+            ).total_seconds()
+        )
+
+
+async def test_shared_pause_blocks_every_public_operation_without_http() -> None:
+    """Clients für Flow und Forecast beachten dieselbe verbleibende Abrufpause."""
+
+    state = OpenMeteoRequestState()
+    session = _Session(_Response({}, _http_error(429, "7200")))
+    first = OpenMeteoClient(session, request_state=state)
+    second = OpenMeteoClient(session, request_state=state)
+    with patch("custom_components.pv_forecast.api.monotonic", return_value=1000) as now:
+        with pytest.raises(OpenMeteoRateLimitError):
+            await first.async_resolve_timezone(52, 13)
+        now.return_value += 60
+        assert second.retry_after == 7140
+        with pytest.raises(OpenMeteoRetryPendingError):
+            await second.async_fetch_roofs(52, 13, "Europe/Berlin", (roof(),))
+        with pytest.raises(OpenMeteoRetryPendingError):
+            await second.async_fetch(
+                52, 13, "Europe/Berlin", tilt_deg=35, open_meteo_azimuth_deg=0
+            )
+        with pytest.raises(OpenMeteoRetryPendingError):
+            await second.async_resolve_timezone(52, 13)
+        assert session.calls == 1
+        now.return_value += 7140
+        assert first.retry_after is None
+        with pytest.raises(OpenMeteoRateLimitError):
+            await second.async_resolve_timezone(52, 13)
+        assert session.calls == 2
+
+
+async def test_backoff_caps_and_only_validated_success_resets_failure_sequence() -> (
+    None
+):
+    """60/120/240 Minuten zählen Operationen; ein kaputtes 200 ist kein Erfolg."""
+
+    session = _Session(_Response({}, _http_error(503)))
+    client = OpenMeteoClient(session)
+    with patch("custom_components.pv_forecast.api.monotonic", return_value=1000) as now:
+        for expected in (3600, 7200, 14400, 14400):
+            with pytest.raises(OpenMeteoTemporaryError):
+                await client.async_resolve_timezone(52, 13)
+            assert client.retry_after == expected
+            now.return_value += expected
+
+        session.response = _Response({"timezone": "ungültig"})
+        with pytest.raises(OpenMeteoDataError):
+            await client.async_resolve_timezone(52, 13)
+        assert client.retry_after is None
+        session.response = _Response({}, _http_error(503))
+        with pytest.raises(OpenMeteoTemporaryError):
+            await client.async_resolve_timezone(52, 13)
+        assert client.retry_after == 14400
+        now.return_value += 14400
+
+        session.response = _Response({"timezone": "Europe/Berlin"})
+        assert await client.async_resolve_timezone(52, 13) == "Europe/Berlin"
+        assert client.retry_after is None
+        session.response = _Response({}, _http_error(503))
+        with pytest.raises(OpenMeteoTemporaryError):
+            await client.async_resolve_timezone(52, 13)
+        assert client.retry_after == 3600
+
+
+@pytest.mark.parametrize("grouped", [False, True])
+async def test_only_complete_forecast_operation_resets_backoff(grouped: bool) -> None:
+    """Erst validierte Stundenraster beenden die Fehlerfolge eines Forecasts."""
+
+    session = _Session(_Response({}, _http_error(503)))
+    client = OpenMeteoClient(session)
+
+    async def fetch():
+        if grouped:
+            return await client.async_fetch_roofs(
+                52,
+                13,
+                "Europe/Berlin",
+                (roof("a"), roof("b", azimuth=90)),
+                local_date=date(2026, 9, 9),
+            )
+        return await client.async_fetch(
+            52,
+            13,
+            "Europe/Berlin",
+            tilt_deg=35,
+            open_meteo_azimuth_deg=0,
+            local_date=date(2026, 9, 9),
+        )
+
+    with patch("custom_components.pv_forecast.api.monotonic", return_value=1000) as now:
+        with pytest.raises(OpenMeteoTemporaryError):
+            await fetch()
+        now.return_value += 3600
+        session.response = _Response(_payload())
+        with pytest.raises(OpenMeteoDataError):
+            await fetch()
+        session.response = _Response({}, _http_error(503))
+        with pytest.raises(OpenMeteoTemporaryError):
+            await fetch()
+        assert client.retry_after == 7200
+        now.return_value += 7200
+        session.response = _Response(
+            _hourly_payload("2026-09-08T23:00", "2026-09-10T22:00")
+        )
+        await fetch()
+        session.response = _Response({}, _http_error(503))
+        with pytest.raises(OpenMeteoTemporaryError):
+            await fetch()
+        assert client.retry_after == 3600
+
+
+class _GatedResponse(_Response):
+    """Laufende Antworten gezielt freigeben oder durch Abbruch beenden."""
+
+    def __init__(self, payload: object, error: Exception | None = None) -> None:
+        super().__init__(payload, error)
+        self.entered = asyncio.Event()
+        self.release = asyncio.Event()
+        self.finished = asyncio.Event()
+        self.cancelling = asyncio.Event()
+        self.cancel_cleanup_release = None
+        self.cancelled = False
+        self.task = None
+
+    async def __aenter__(self):
+        self.task = asyncio.current_task()
+        self.entered.set()
+        try:
+            await self.release.wait()
+        except asyncio.CancelledError:
+            self.cancelled = True
+            self.cancelling.set()
+            if self.cancel_cleanup_release is not None:
+                await self.cancel_cleanup_release.wait()
+            self.finished.set()
+            raise
+        return self
+
+    async def __aexit__(self, exc_type, exc, traceback):
+        self.finished.set()
+        return False
+
+
+class _SequenceSession:
+    """Getrennte Antworten ohne echten Transport in Aufrufreihenfolge liefern."""
+
+    def __init__(self, responses: list[_Response]) -> None:
+        self.responses = responses
+        self.calls = []
+
+    def get(self, *args, **kwargs):
+        response = self.responses[len(self.calls)]
+        self.calls.append(kwargs)
+        return response
+
+
+async def test_parallel_wave_keeps_longest_pause_and_counts_one_failure() -> None:
+    """Vier laufende Geometrien werden beendet, wartende starten nach 429 nicht."""
+
+    payload = _hourly_payload("2026-09-08T23:00", "2026-09-10T22:00")
+    responses = [
+        _GatedResponse({}, _http_error(429, "120")),
+        _GatedResponse({}, _http_error(503, "28800")),
+        _GatedResponse(payload),
+        _GatedResponse({}, _http_error(503, "3600")),
+    ]
+    session = _SequenceSession(responses)
+    client = OpenMeteoClient(session)
+    with patch("custom_components.pv_forecast.api.monotonic", return_value=1000) as now:
+        operation = asyncio.create_task(
+            client.async_fetch_roofs(
+                52,
+                13,
+                "Europe/Berlin",
+                tuple(roof(str(index), tilt=index) for index in range(6)),
+                local_date=date(2026, 9, 9),
+            )
+        )
+        await asyncio.gather(*(response.entered.wait() for response in responses))
+        assert len(session.calls) == 4
+        for index, expected in ((0, 120), (2, 120), (1, 28800), (3, 28800)):
+            responses[index].release.set()
+            await responses[index].finished.wait()
+            assert client.retry_after == expected
+            assert len(session.calls) == 4
+        with pytest.raises(OpenMeteoRateLimitError):
+            await operation
+        assert all(response.task.done() for response in responses)
+        assert client.retry_after == 28800
+
+        now.return_value += 28800
+        session.responses.append(_Response({}, _http_error(503)))
+        with pytest.raises(OpenMeteoTemporaryError):
+            await client.async_resolve_timezone(52, 13)
+        assert client.retry_after == 7200
+
+
+async def test_expired_short_pause_still_stops_failed_wave() -> None:
+    """Eine abgelaufene Frist startet keine weiteren Dächer derselben Fehlerwelle."""
+
+    payload = _hourly_payload("2026-09-08T23:00", "2026-09-10T22:00")
+    responses = [_GatedResponse({}, _http_error(429, "1"))] + [
+        _GatedResponse(payload) for _ in range(3)
+    ]
+    session = _SequenceSession([*responses, _Response(payload), _Response(payload)])
+    client = OpenMeteoClient(session)
+    failure_recorded = False
+
+    def monotonic_time():
+        nonlocal failure_recorded
+        if responses[0].finished.is_set():
+            if failure_recorded:
+                return 1002
+            failure_recorded = True
+        return 1000
+
+    with patch("custom_components.pv_forecast.api.monotonic", monotonic_time):
+        operation = asyncio.create_task(
+            client.async_fetch_roofs(
+                52,
+                13,
+                "Europe/Berlin",
+                tuple(roof(str(index), tilt=index) for index in range(6)),
+                local_date=date(2026, 9, 9),
+            )
+        )
+        await asyncio.gather(*(response.entered.wait() for response in responses))
+        for response in responses:
+            response.release.set()
+        with pytest.raises(OpenMeteoRateLimitError):
+            await operation
+        assert client.retry_after is None
+        assert len(session.calls) == 4
+        session.responses[4] = _Response({"timezone": "Europe/Berlin"})
+        assert await client.async_resolve_timezone(52, 13) == "Europe/Berlin"
+        assert len(session.calls) == 5
+
+
+async def test_distinct_clients_serialize_whole_operations() -> None:
+    """Ein wartender Einzelabruf beginnt erst nach allen Geometrien der Welle."""
+
+    payload = _hourly_payload("2026-09-08T23:00", "2026-09-10T22:00")
+    responses = [_GatedResponse(payload), _GatedResponse(payload)]
+    session = _SequenceSession([*responses, _Response({"timezone": "Europe/Berlin"})])
+    state = OpenMeteoRequestState()
+    first = OpenMeteoClient(session, state)
+    second = OpenMeteoClient(session, state)
+    grouped = asyncio.create_task(
+        first.async_fetch_roofs(
+            52,
+            13,
+            "Europe/Berlin",
+            (roof("a"), roof("b", azimuth=90)),
+            local_date=date(2026, 9, 9),
+        )
+    )
+    await asyncio.gather(*(response.entered.wait() for response in responses))
+    metadata = asyncio.create_task(second.async_resolve_timezone(52, 13))
+    await asyncio.sleep(0)
+    assert len(session.calls) == 2
+    responses[0].release.set()
+    await responses[0].finished.wait()
+    assert len(session.calls) == 2
+    assert not metadata.done()
+    responses[1].release.set()
+    assert set(await grouped) == {"a", "b"}
+    assert await metadata == "Europe/Berlin"
+    assert len(session.calls) == 3
+
+
+async def test_cancelled_wave_drains_active_and_waiting_geometry_tasks() -> None:
+    """Abbruch räumt alle Unteraufgaben auf und gibt die Operation wieder frei."""
+
+    responses = [_GatedResponse({}) for _ in range(4)]
+    responses[0].cancel_cleanup_release = asyncio.Event()
+    session = _SequenceSession([*responses, _Response({"timezone": "Europe/Berlin"})])
+    state = OpenMeteoRequestState()
+    client = OpenMeteoClient(session, state)
+    other_client = OpenMeteoClient(session, state)
+    operation = asyncio.create_task(
+        client.async_fetch_roofs(
+            52,
+            13,
+            "Europe/Berlin",
+            tuple(roof(str(index), tilt=index) for index in range(6)),
+            local_date=date(2026, 9, 9),
+        )
+    )
+    await asyncio.gather(*(response.entered.wait() for response in responses))
+    metadata = asyncio.create_task(other_client.async_resolve_timezone(52, 13))
+    await asyncio.sleep(0)
+    assert len(session.calls) == 4
+    operation.cancel()
+    await responses[0].cancelling.wait()
+    assert not operation.done()
+    assert not metadata.done()
+    assert len(session.calls) == 4
+    responses[0].cancel_cleanup_release.set()
+    with pytest.raises(asyncio.CancelledError):
+        await operation
+    assert all(response.cancelled for response in responses)
+    assert all(response.task.done() for response in responses)
+    assert await metadata == "Europe/Berlin"
+    assert len(session.calls) == 5
+    assert client.retry_after is None

@@ -6,11 +6,10 @@ from dataclasses import dataclass
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .api import OpenMeteoClient
 from .const import PLATFORMS
 from .coordinator import PvForecastCoordinator
+from .runtime import async_get_open_meteo_client
 
 
 @dataclass(slots=True)
@@ -26,7 +25,7 @@ type PvForecastConfigEntry = ConfigEntry[PvForecastRuntimeData]
 async def async_setup_entry(hass: HomeAssistant, entry: PvForecastConfigEntry) -> bool:
     """Integration aus einem Config Entry einrichten."""
 
-    client = OpenMeteoClient(async_get_clientsession(hass))
+    client = async_get_open_meteo_client(hass)
     coordinator = PvForecastCoordinator(hass, entry, client)
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
     await coordinator.async_config_entry_first_refresh()

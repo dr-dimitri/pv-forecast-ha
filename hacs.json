@@ -1,3 +1,4 @@
 {
-  "name": "PV-Ertragsprognose"
+  "name": "PV-Ertragsprognose",
+  "homeassistant": "2025.12.0"
 }
