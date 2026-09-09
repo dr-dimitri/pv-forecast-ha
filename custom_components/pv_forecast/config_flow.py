@@ -1230,6 +1230,7 @@ class PvForecastOptionsFlow(
     ) -> ConfigFlowResult:
         """Das Entfernen der ausgewählten Dachfläche ausdrücklich bestätigen."""
 
+        errors: dict[str, str] = {}
         roofs = self._roofs()
         roof = next(
             candidate
@@ -1238,15 +1239,19 @@ class PvForecastOptionsFlow(
         )
         if user_input is not None:
             if bool(user_input.get(CONF_CONFIRM_REMOVE)):
-                if self._roof_removal_groups != self._inverter_groups():
+                if len(roofs) <= 1:
+                    errors["base"] = "last_roof_required"
+                elif self._roof_removal_groups != self._inverter_groups():
                     return self.async_abort(reason="reconfigure_entry_changed")
-                remaining = [
-                    candidate
-                    for candidate in roofs
-                    if candidate[CONF_ROOF_ID] != self._selected_roof_id
-                ]
-                return self._finish_with_unchanged_inverter(remaining)
-            return await self.async_step_init()
+                else:
+                    remaining = [
+                        candidate
+                        for candidate in roofs
+                        if candidate[CONF_ROOF_ID] != self._selected_roof_id
+                    ]
+                    return self._finish_with_unchanged_inverter(remaining)
+            else:
+                return await self.async_step_init()
 
         texts = await self._async_inverter_texts()
         self._roof_removal_groups = deepcopy(self._inverter_groups())
@@ -1261,6 +1266,7 @@ class PvForecastOptionsFlow(
                 changes.append(texts[key].format(name=group[CONF_NAME]))
         return self.async_show_form(
             step_id="confirm_remove_roof",
+            errors=errors,
             data_schema=vol.Schema(
                 {vol.Required(CONF_CONFIRM_REMOVE, default=False): BooleanSelector()}
             ),

@@ -737,7 +737,8 @@
       "invalid_horizon_roof": "Bitte eine vorhandene Dachfläche auswählen.",
       "invalid_dashboard": "Bei aktivem Dashboard bitte einen Titel mit 1 bis 80 Zeichen angeben.",
       "measurement_device_unavailable": "Das Gerät ist nicht mehr verfügbar. Prüfe seine Integration und wähle es erneut aus.",
-      "measurement_helper_failed": "Der Energiezähler konnte nicht eingerichtet werden. Bitte prüfe die Messquelle und versuche es erneut."
+      "measurement_helper_failed": "Der Energiezähler konnte nicht eingerichtet werden. Bitte prüfe die Messquelle und versuche es erneut.",
+      "last_roof_required": "Mindestens eine Dachfläche muss erhalten bleiben. Füge zuerst ein neues Dach hinzu. Wenn du die PV-Anlage nicht mehr verwenden möchtest, entferne ihren Integrationseintrag."
     },
     "abort": {
       "reconfigure_entry_changed": "Die Anlage wurde während der Bearbeitung anderweitig geändert. Bitte starte die Bearbeitung erneut."

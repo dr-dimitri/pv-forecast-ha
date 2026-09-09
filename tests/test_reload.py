@@ -16,6 +16,7 @@ from pytest_homeassistant_custom_component.common import (
 from custom_components.pv_forecast.api import OpenMeteoConnectionError
 from custom_components.pv_forecast.const import (
     CONF_AZIMUTH,
+    CONF_CONFIRM_REMOVE,
     CONF_INSTALLED_POWER_KWP,
     CONF_LATITUDE,
     CONF_LONGITUDE,
@@ -174,6 +175,50 @@ async def test_options_saved_during_reload_trigger_consistent_followup(
         async_fire_time_changed(hass)
         await hass.async_block_till_done(wait_background_tasks=True)
         assert client_fetch.await_count == 3
+
+
+@pytest.mark.asyncio
+async def test_last_roof_deletion_keeps_loaded_runtime_without_reload(hass) -> None:
+    """Eine abgelehnte letzte Dachlöschung unterbricht weder Anlage noch Timer."""
+
+    entry = _entry(hass)
+    hass.config_entries.async_update_entry(
+        entry, options={CONF_ROOFS: [persisted_roof("only")]}
+    )
+    original_options = dict(entry.options)
+    with patch(
+        "custom_components.pv_forecast.api.OpenMeteoClient.async_fetch_roofs",
+        return_value={},
+    ) as client_fetch:
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+        runtime = entry.runtime_data
+        midnight_timer = runtime.coordinator._cancel_midnight
+        minute_timer = runtime.coordinator._cancel_minute
+        entities = _entity_ids(hass, entry)
+        with patch.object(hass.config_entries, "async_reload") as reload_entry:
+            result = await hass.config_entries.options.async_init(entry.entry_id)
+            result = await hass.config_entries.options.async_configure(
+                result["flow_id"], {"next_step_id": "remove_roof"}
+            )
+            result = await hass.config_entries.options.async_configure(
+                result["flow_id"], {CONF_ROOF_ID: "only"}
+            )
+            result = await hass.config_entries.options.async_configure(
+                result["flow_id"], {CONF_CONFIRM_REMOVE: True}
+            )
+            await hass.async_block_till_done(wait_background_tasks=True)
+            assert result["type"] is FlowResultType.FORM
+            assert result["errors"] == {"base": "last_roof_required"}
+            assert dict(entry.options) == original_options
+            assert entry.state is ConfigEntryState.LOADED
+            assert entry.runtime_data is runtime
+            assert runtime.coordinator._cancel_midnight is midnight_timer
+            assert runtime.coordinator._cancel_minute is minute_timer
+            assert _entity_ids(hass, entry) == entities
+            reload_entry.assert_not_called()
+            client_fetch.assert_awaited_once()
+        assert await hass.config_entries.async_unload(entry.entry_id)
 
 
 @pytest.mark.asyncio
