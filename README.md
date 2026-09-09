@@ -44,7 +44,7 @@ Einstrahlungs-, Temperatur-, Status- und Debug-Sensoren gehören nicht zum
 Funktionsumfang.
 
 Die noch erforderlichen Nutzertests, Gütenachweise und zurückgestellten
-Erweiterungen sind unter [Offene Abnahmen](docs/offene-abnahmen.md) ausgewiesen.
+Erweiterungen sind unter [Freiwillige Erprobung](docs/offene-abnahmen.md) ausgewiesen.
 
 ## Installation
 

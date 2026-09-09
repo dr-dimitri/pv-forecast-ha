@@ -1,9 +1,18 @@
-# Lieferumfang und offene Abnahmen
+# Lieferumfang und freiwillige Erprobung
 
 Der technische Lieferumfang ersetzt keine Prüfung mit echten PV-Anlagen.
 Die Roadmap in [Issue #25](https://github.com/dr-dimitri/pv-forecast-ha/issues/25)
 und die konkretisierten Verträge in
 [Issue #1](https://github.com/dr-dimitri/pv-forecast-ha/issues/1) bleiben maßgeblich.
+
+## Keine blockierende Nutzerabnahme
+
+Seit der Anwenderentscheidung vom 09.09.2026 sind Nutzerbefragungen und reale
+Feld-/Gütetests freiwillige Nachweise. Sie blockieren weder weitere Issues noch
+die technische Weiterentwicklung. Die Hinweise unten dokumentieren weiterhin,
+welche Aussagen noch nicht durch reale Erprobung belegt sind. Sie sind keine
+verpflichtende Aufgabenliste. Automatische Qualitätsprüfungen, Mindeststichproben
+und experimentelle Kennzeichnungen der Funktionen bleiben unverändert.
 
 ## Technisch umgesetzt
 
@@ -29,13 +38,13 @@ Die neuen Darstellungen der Karte wurden bei 360 px in Hell/Dunkel und mit
 Tastatur geprüft. Die Screenshots zeigen reproduzierbare Testdaten. Sie sind
 kein Nachweis tatsächlicher Erträge oder einer erreichten Prognosegüte.
 
-## Vor einer vollständigen Abnahme noch erforderlich
+## Freiwillige Erprobung und weiterhin fehlende Gütenachweise
 
 - **#26 und #28:** Die vorgesehenen moderierten Tests mit fünf echten
   PV-Anwendern bleiben offen. Zielwerte sind mindestens vier erfolgreiche
   Messquellenzuordnungen ohne Hilfe und vier Personen, die Restenergie und
   Messung/Prognose innerhalb von zehn Sekunden richtig erkennen.
-- **#31:** Reale Testanwender müssen ein Verbraucherfenster finden und eine
+- **#31:** Freiwillige Testanwender können ein Verbraucherfenster finden und eine
   freiwillige Automation einrichten. Der EMHASS-Adapter ist gegen den
   dokumentierten Datenvertrag offline geprüft; ein vollständiger realer
   Optimierungslauf mit Last, Tarifen und gegebenenfalls Speicher steht aus.
@@ -67,5 +76,8 @@ Die nativen HA-Frontendfehler **#52 und #53** liegen außerhalb dieses
 Integrationscodes. Ihre dokumentierten Grenzen und die eindeutige interne
 UTC-Zeitreihe bleiben bestehen.
 
-Die genannten Issues und die Roadmap bleiben offen, soweit ihre menschlichen
-Abnahmen oder beschriebenen Folgeschritte noch fehlen.
+Die früher dafür offengehaltenen Issues #17, #26, #29, #30, #31 und #32 sind
+auf Anwenderwunsch als nicht weiter geplante Aufgaben geschlossen. #18, #27
+und #28 bleiben geschlossen. Weitere technisch umsetzbare Arbeiten benötigen
+keine vorherige Rückmeldung einer Testgruppe. Nicht gelieferte weitergehende
+Varianten können bei konkretem Bedarf separat beauftragt werden.
