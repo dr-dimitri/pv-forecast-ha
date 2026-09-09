@@ -488,3 +488,7 @@ Unter **Konfigurieren → Prognosehorizont** lassen sich zwei bis sieben lokale 
 ## Mehrere unabhängige Anlagen
 
 Die Integration kann mehrfach eingerichtet werden. Jede logische Anlage erhält eigene Dächer, AC-Grenzen, Sensoren, Messquellen und Stores. Weitere Anlagen benötigen einen unterscheidbaren Namen; am selben Ort ist ihre Unabhängigkeit ausdrücklich zu bestätigen. Für eine Doppeleinrichtung derselben Anlage bitte den vorhandenen Eintrag bearbeiten. Bestehende IDs bleiben erhalten. Details: [Mehrere Anlagen](docs/mehrere-anlagen.md).
+
+## Optionales Horizontprofil
+
+Unter **Konfigurieren → Horizontprofil je Dach (experimentell)** lassen sich 12 oder 24 Höhenwinkel hinterlegen. Das Modell schätzt zeitabhängig blockiertes Direktlicht für einen entfernten Horizont der gesamten Dachfläche und erhält einen diffusen Rest. Eine Verbesserung mit echten Messdaten ist noch nicht belegt. Eingabeformat, Modellgrenzen und Vergleich zur Kalibrierung: [Horizontprofil](docs/horizontprofil.md).

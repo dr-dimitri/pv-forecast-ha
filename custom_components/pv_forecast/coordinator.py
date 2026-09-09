@@ -241,6 +241,8 @@ class PvForecastCoordinator(TimestampDataUpdateCoordinator[ForecastResult]):
                     timezone,
                     inverter_groups=inverter_groups,
                     forecast_days=forecast_days,
+                    latitude=latitude,
+                    longitude=longitude,
                 )
                 if (
                     self._shutdown_requested
@@ -268,6 +270,8 @@ class PvForecastCoordinator(TimestampDataUpdateCoordinator[ForecastResult]):
                             timezone,
                             inverter_groups=inverter_groups,
                             forecast_days=forecast_days,
+                            latitude=latitude,
+                            longitude=longitude,
                             temperature_coefficients={
                                 key: COEFFICIENTS[value]
                                 for key, value in mountings.items()

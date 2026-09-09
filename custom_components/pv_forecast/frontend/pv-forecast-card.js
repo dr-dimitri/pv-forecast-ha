@@ -425,6 +425,7 @@ export function renderContent(config, state, width = 600, report = null, reportD
     !view.complete ? "Prognose unvollständig. Schattierte Lücken werden nicht als null Ertrag dargestellt." : "",
     hasFlags ? "Eingabedaten enthalten Qualitätsmarkierungen. Das ist keine gemessene Prognosegüte." : "",
     statusText(measurement, "Messdaten"), statusText(state.history, "Archivdaten"),
+    view.horizon_shading?.active ? "Experimentelles Horizontprofil aktiv: Direktlicht wird geometrisch abgeschattet, ein diffuser Rest bleibt erhalten. Eine bessere Prognosegüte ist noch nicht belegt." : "",
     total?.quality_flags?.length ? "Messdaten enthalten Qualitätsmarkierungen; unvollständige Intervalle bleiben frei." : "",
     selectedSeries(state).history.some((item) => item.quality_flags?.length) ? "Die archivierten Prognosestände enthalten Qualitätsmarkierungen ihrer Eingabedaten." : "",
     measurement?.status === "ready" && !actualComplete ? finite(actual) ? "Ist heute ist nur der bisher belegte Teil; die Tageserfassung ist unvollständig." : "Für heute sind noch keine belegten Messwerte verfügbar." : "",
