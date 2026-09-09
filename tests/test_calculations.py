@@ -271,3 +271,126 @@ def test_invalid_coordinates_are_rejected(coordinates: tuple[float, float]) -> N
 
     with pytest.raises(InvalidConfigurationError):
         validate_coordinates(*coordinates)
+
+
+@pytest.mark.parametrize("inverter_limit", [None, 15])
+def test_finite_weather_overflow_is_controlled(inverter_limit: float | None) -> None:
+    """Extremes endliches GTI erzeugt weder unendliche Energie noch NaN."""
+
+    with pytest.raises(InvalidConfigurationError, match="Rohleistung"):
+        calculate_forecast(
+            (roof(),),
+            {"roof_1": (weather(gti=1e308),)},
+            inverter_limit,
+            date(2026, 8, 23),
+            TIMEZONE,
+        )
+
+
+@pytest.mark.parametrize(
+    ("ambient", "coefficient", "reference"),
+    [(1e308, -1e308, 25), (-1e308, -1e308, 25), (1e308, -0.0035, -1e308)],
+)
+def test_temperature_factor_overflow_is_controlled(
+    ambient: float, coefficient: float, reference: float
+) -> None:
+    """Auch ein negativer Rechenüberlauf wird vor der Begrenzung als Fehler erkannt."""
+
+    with pytest.raises(InvalidConfigurationError, match="Temperatur"):
+        temperature_factor(ambient, coefficient, reference)
+
+
+def test_corrected_dc_power_overflow_is_controlled() -> None:
+    """Endliche Faktoren dürfen beim Produkt keine unendliche DC-Leistung erzeugen."""
+
+    with pytest.raises(
+        InvalidConfigurationError, match="temperaturkorrigierte Leistung"
+    ):
+        calculate_dc_power_kw(roof(power=1000), weather(1000, -1e308))
+
+
+def test_total_losses_do_not_hide_raw_power_overflow() -> None:
+    """Hundert Prozent Verluste dürfen einen ungültigen Rechengang nicht heilen."""
+
+    with pytest.raises(InvalidConfigurationError, match="Rohleistung"):
+        calculate_dc_power_kw(roof(loss=1), weather(gti=1e308))
+
+
+@pytest.mark.parametrize("inverter_limit", [None, 15])
+def test_clipping_sum_overflow_is_controlled(inverter_limit: float | None) -> None:
+    """Eine überlaufende Dachsumme wird auch ohne eingestelltes AC-Limit verworfen."""
+
+    with pytest.raises(InvalidConfigurationError, match="Gesamtleistung"):
+        proportional_clipping({"a": 1e308, "b": 1e308}, inverter_limit)
+
+
+@pytest.mark.parametrize("invalid_power", [float("inf"), float("-inf"), float("nan")])
+def test_clipping_rejects_non_finite_power(invalid_power: float) -> None:
+    """Nicht endliche berechnete Leistungen bekommen keinen Wetter-Fallback."""
+
+    with pytest.raises(InvalidConfigurationError, match="Dachleistung"):
+        proportional_clipping({"a": invalid_power}, None)
+
+
+def test_interval_energy_overflow_is_controlled() -> None:
+    """Eine endliche Leistung darf bei längerer Integration nicht unendlich werden."""
+
+    with pytest.raises(InvalidConfigurationError, match="Intervallenergie"):
+        calculate_forecast(
+            (roof(power=1e308),),
+            {"roof_1": (weather(0.1, -1e6, minutes=360),)},
+            None,
+            date(2026, 8, 23),
+            TIMEZONE,
+        )
+
+
+@pytest.mark.parametrize("day_offset", [0, 1])
+def test_roof_daily_sum_overflow_is_controlled(day_offset: int) -> None:
+    """Endliche Stunden dürfen zusammen keine unendliche Dachenergie ergeben."""
+
+    points = tuple(
+        weather(
+            0.1, -1e6, end=datetime(2026, 8, 23 + day_offset, hour, tzinfo=TIMEZONE)
+        )
+        for hour in range(1, 7)
+    )
+    with pytest.raises(InvalidConfigurationError, match="Tagesenergie"):
+        calculate_forecast(
+            (roof(power=1e308),),
+            {"roof_1": points},
+            None,
+            date(2026, 8, 23),
+            TIMEZONE,
+        )
+
+
+@pytest.mark.parametrize("day_offset", [0, 1])
+def test_system_daily_sum_overflow_is_controlled(day_offset: int) -> None:
+    """Endliche Dach-Tageswerte können ohne zeitgleiche Leistungsspitze überlaufen."""
+
+    roofs = (roof("a", power=1e308), roof("b", power=1e308))
+    points = {
+        item.id: tuple(
+            weather(
+                0.1 if (hour <= 3) == (item.id == "a") else 0,
+                -1e6,
+                end=datetime(2026, 8, 23 + day_offset, hour, tzinfo=TIMEZONE),
+            )
+            for hour in range(1, 7)
+        )
+        for item in roofs
+    }
+    day_name = "heute" if day_offset == 0 else "morgen"
+    with pytest.raises(InvalidConfigurationError, match=f"Gesamtenergie {day_name}"):
+        calculate_forecast(roofs, points, None, date(2026, 8, 23), TIMEZONE)
+
+
+def test_large_finite_results_remain_allowed() -> None:
+    """Die Endlichkeitsgrenze erzwingt keine willkürlichen fachlichen Höchstwerte."""
+
+    assert calculate_dc_power_kw(roof(power=1), weather(gti=1e308)) == 1e305
+    assert proportional_clipping({"a": 8e307, "b": 8e307}, None) == {
+        "a": 8e307,
+        "b": 8e307,
+    }
