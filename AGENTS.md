@@ -95,7 +95,11 @@ Die Integration liegt unter `custom_components/pv_forecast/` und verwendet
 asynchronen Code, Typisierung sowie `ConfigEntry.runtime_data`.
 
 - `api.py`: ausschließlich HTTP-Kommunikation mit Open-Meteo, Timeouts,
-  Statusprüfung und Antwortvalidierung; keine PV-Berechnung.
+  Statusprüfung, gemeinsame Abrufpausen und Antwortvalidierung; keine
+  PV-Berechnung.
+- `runtime.py`: verbindet den Open-Meteo-Client mit der HA-Session und teilt
+  dessen flüchtigen Abrufzustand über Einrichtung und Reload hinweg. Dieser
+  Zustand gehört nicht in die gespeicherte Anlagenkonfiguration.
 - `geocoding.py`: ausschließlich die einmalige, benutzergesteuerte und
   strukturierte Adressauflösung über Nominatim einschließlich Antwortvalidierung.
 - `models.py`: typisierte, möglichst unveränderliche Modelle für Dachflächen,
@@ -134,8 +138,8 @@ werden weiterhin ausschließlich die zwei lokalen Zieltage prognostiziert.
 Jede unterschiedliche Kombination aus Neigung und Open-Meteo-Azimut braucht
 ihren eigenen GTI-Verlauf. Dächer mit identischer Geometrie teilen sich den
 Abruf. Alle nötigen Abrufe werden in einem Coordinator-Update gebündelt und
-parallel ausgeführt; die Anzahl der Requests darf niemals mit der Anzahl der
-Sensoren wachsen.
+mit höchstens vier gleichzeitigen HTTP-Requests ausgeführt; die Anzahl der
+Requests darf niemals mit der Anzahl der Sensoren wachsen.
 
 Open-Meteo-Zeitstempel bezeichnen bei GTI den Mittelwert der vorhergehenden
 Stunde. Tageszuordnung und Energieberechnung verwenden deshalb das tatsächliche
@@ -146,6 +150,15 @@ Antworten erzeugen einen kontrollierten Update-Fehler statt eines Absturzes.
 Der Coordinator aktualisiert standardmäßig alle 30 Minuten. Bestehende Daten
 bleiben bei einem vorübergehenden Updatefehler über den normalen
 `DataUpdateCoordinator`-Mechanismus erhalten.
+
+Bei HTTP 429 und vorübergehenden Transport-/Serverfehlern gilt die gemeinsame
+Abrufpause aus #13: gültiges `Retry-After` berücksichtigen, sonst begrenzter
+Backoff mit 60, 120 und höchstens 240 Minuten. Längere gültige Anbieterfristen
+werden nicht gekürzt. Der API-Client verhindert verfrühte Abrufe auch bei
+manuellen Aktualisierungen, Setup-Wiederholungen und Reloads. Erst vollständig
+validierter Erfolg setzt die Fehlerfolge zurück. Der native
+`TimestampDataUpdateCoordinator` hält den letzten erfolgreichen Abrufzeitpunkt;
+dieser ist ausdrücklich keine Ausgabezeit des Wettermodells.
 
 ## Berechnungsmodell
 

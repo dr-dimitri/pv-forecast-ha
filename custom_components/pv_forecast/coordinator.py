@@ -11,10 +11,13 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.event import async_track_point_in_utc_time
-from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+from homeassistant.helpers.update_coordinator import (
+    TimestampDataUpdateCoordinator,
+    UpdateFailed,
+)
 from homeassistant.util import dt as dt_util
 
-from .api import OpenMeteoClient, OpenMeteoError
+from .api import OpenMeteoClient, OpenMeteoError, OpenMeteoRetryError
 from .calculations import InvalidConfigurationError, calculate_forecast
 from .configuration import roofs_from_options
 from .const import (
@@ -30,7 +33,7 @@ from .models import ForecastDay, ForecastResult
 _LOGGER = logging.getLogger(__name__)
 
 
-class PvForecastCoordinator(DataUpdateCoordinator[ForecastResult]):
+class PvForecastCoordinator(TimestampDataUpdateCoordinator[ForecastResult]):
     """Lädt Wetterdaten zentral und erzeugt ein vollständiges Forecast-Ergebnis."""
 
     def __init__(
@@ -88,6 +91,7 @@ class PvForecastCoordinator(DataUpdateCoordinator[ForecastResult]):
             and not self._entry.pref_disable_polling
             and not self._update_in_progress
             and self.get_daily_yield("tomorrow") is None
+            and self._client.retry_after is None
         ):
             self._entry.async_create_background_task(
                 self.hass,
@@ -166,6 +170,11 @@ class PvForecastCoordinator(DataUpdateCoordinator[ForecastResult]):
                 ):
                     break
             return forecast
+        except OpenMeteoRetryError as err:
+            raise UpdateFailed(
+                f"PV-Prognose pausiert wegen eines vorübergehenden API-Fehlers: {err}",
+                retry_after=self._client.retry_after,
+            ) from err
         except (
             OpenMeteoError,
             InvalidConfigurationError,

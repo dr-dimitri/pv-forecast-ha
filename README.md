@@ -22,13 +22,16 @@ Home-Assistant-Oberfläche. YAML wird nicht unterstützt.
   Adressauflösung über Nominatim
 - optionales AC-Leistungslimit für einen gemeinsam genutzten Wechselrichter
 - stabile Sensor-IDs, auch wenn eine Dachfläche umbenannt wird
-- automatische Aktualisierung alle 30 Minuten
+- automatische Aktualisierung standardmäßig alle 30 Minuten
 
 Die Integration legt ausschließlich Prognosesensoren an. Wetter-,
 Einstrahlungs-, Temperatur-, Status- und Debug-Sensoren gehören nicht zum
 Funktionsumfang.
 
 ## Installation
+
+Voraussetzung ist **Home Assistant 2025.12.0 oder neuer**. Das gilt auch bei
+manueller Installation; HACS berücksichtigt diese Mindestversion beim Update.
 
 ### HACS
 
@@ -121,6 +124,14 @@ Bei einem fehlgeschlagenen Update greift weiterhin die normale
 Home-Assistant-Nichtverfügbarkeit, während der letzte Datenstand intern erhalten
 bleibt.
 
+Bei einer Abrufbegrenzung oder einem vorübergehenden API-Ausfall berücksichtigt
+die Integration die von Open-Meteo angegebene Wartefrist. Fehlt eine verwendbare
+Frist, steigt die Pause bei weiteren Fehlschlägen auf 60, 120 und höchstens
+240 Minuten. Eine längere gültige Anbieterfrist bleibt maßgeblich. Manuelle
+Aktualisierungen, Tageswechsel und erneute Einrichtungsversuche umgehen diese
+Pause nicht. Nach einem erfolgreichen Abruf gilt wieder der normale
+30-Minuten-Takt. Dauerhaft fehlerhafte Antworten werden getrennt behandelt.
+
 ## Berechnungsmodell
 
 Die Energie wird für jedes Wetterintervall nach folgendem Modell berechnet:
@@ -160,6 +171,12 @@ Anlagensimulation. Nicht berücksichtigt werden insbesondere:
 - Wetter- und Strahlungsdaten stammen von
   [Open-Meteo](https://open-meteo.com/) und werden unter
   [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) bereitgestellt.
+- Die Abrufe teilen sich nach Dachgeometrie auf; höchstens vier HTTP-Requests
+  laufen gleichzeitig. Vier Geometrien benötigen im normalen Halb-Stunden-Takt
+  ungefähr 192 HTTP-Requests pro Tag, zuzüglich Einrichtung und besonderer
+  Aktualisierungen. Open-Meteo unterscheidet diese Requests von gewichteten
+  API-Calls; die aktuellen [Kontingente und Nutzungsbedingungen](https://open-meteo.com/en/pricing)
+  gelten unabhängig davon.
 - Bei manueller Adresseingabe wird einmalig eine strukturierte Suchanfrage an
   [Nominatim](https://nominatim.org/) gesendet. Die zugrunde liegenden
   Kartendaten sind © [OpenStreetMap-Mitwirkende](https://www.openstreetmap.org/copyright)

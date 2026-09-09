@@ -224,7 +224,7 @@ async def _advance_to_summary(hass):
 
     result = await _advance_to_system(hass)
     with patch(
-        "custom_components.pv_forecast.config_flow.OpenMeteoClient.async_fetch_roofs",
+        "custom_components.pv_forecast.api.OpenMeteoClient.async_fetch_roofs",
         return_value={},
     ):
         result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
@@ -366,7 +366,7 @@ async def test_successful_setup_with_multiple_roofs(hass) -> None:
     )
 
     with patch(
-        "custom_components.pv_forecast.config_flow.OpenMeteoClient.async_fetch_roofs",
+        "custom_components.pv_forecast.api.OpenMeteoClient.async_fetch_roofs",
         return_value={},
     ) as fetch:
         result = await hass.config_entries.flow.async_configure(
@@ -444,7 +444,7 @@ async def test_editing_roofs_preserves_previously_entered_roofs(hass) -> None:
         result["flow_id"], ROOF_FORM | {CONF_NAME: "Westdach", CONF_AZIMUTH: "west"}
     )
     with patch(
-        "custom_components.pv_forecast.config_flow.OpenMeteoClient.async_fetch_roofs",
+        "custom_components.pv_forecast.api.OpenMeteoClient.async_fetch_roofs",
         return_value={},
     ):
         result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
@@ -476,7 +476,7 @@ async def test_editing_roofs_preserves_previously_entered_roofs(hass) -> None:
     assert result["step_id"] == "system"
 
     with patch(
-        "custom_components.pv_forecast.config_flow.OpenMeteoClient.async_fetch_roofs",
+        "custom_components.pv_forecast.api.OpenMeteoClient.async_fetch_roofs",
         return_value={},
     ):
         result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
@@ -532,11 +532,11 @@ async def test_address_is_geocoded_and_persisted(hass) -> None:
     )
     with (
         patch(
-            "custom_components.pv_forecast.config_flow.OpenMeteoClient.async_resolve_timezone",
+            "custom_components.pv_forecast.api.OpenMeteoClient.async_resolve_timezone",
             return_value="Europe/Berlin",
         ),
         patch(
-            "custom_components.pv_forecast.config_flow.OpenMeteoClient.async_fetch_roofs",
+            "custom_components.pv_forecast.api.OpenMeteoClient.async_fetch_roofs",
             return_value={},
         ),
     ):
@@ -568,11 +568,11 @@ async def test_address_timezone_is_used_for_summary_entry_and_forecasts(hass) ->
     await hass.config.async_set_time_zone("Europe/Berlin")
     with (
         patch(
-            "custom_components.pv_forecast.config_flow.OpenMeteoClient.async_resolve_timezone",
+            "custom_components.pv_forecast.api.OpenMeteoClient.async_resolve_timezone",
             return_value="Asia/Tokyo",
         ) as resolve_timezone,
         patch(
-            "custom_components.pv_forecast.config_flow.OpenMeteoClient.async_fetch_roofs",
+            "custom_components.pv_forecast.api.OpenMeteoClient.async_fetch_roofs",
             return_value={},
         ) as fetch,
     ):
@@ -612,7 +612,7 @@ async def test_home_assistant_location_keeps_timezone_without_lookup(hass) -> No
 
     await hass.config.async_set_time_zone("Europe/Berlin")
     with patch(
-        "custom_components.pv_forecast.config_flow.OpenMeteoClient.async_resolve_timezone"
+        "custom_components.pv_forecast.api.OpenMeteoClient.async_resolve_timezone"
     ) as resolve_timezone:
         result = await _advance_to_summary(hass)
         assert result["description_placeholders"]["timezone"] == "Europe/Berlin"
@@ -630,11 +630,11 @@ async def test_address_timezone_survives_forecast_retry_and_back_navigation(
     result = await _advance_address_to_system(hass)
     with (
         patch(
-            "custom_components.pv_forecast.config_flow.OpenMeteoClient.async_resolve_timezone",
+            "custom_components.pv_forecast.api.OpenMeteoClient.async_resolve_timezone",
             return_value="Asia/Tokyo",
         ) as resolve_timezone,
         patch(
-            "custom_components.pv_forecast.config_flow.OpenMeteoClient.async_fetch_roofs",
+            "custom_components.pv_forecast.api.OpenMeteoClient.async_fetch_roofs",
             side_effect=[OpenMeteoConnectionError("offline"), {}, {}, {}],
         ) as fetch,
     ):
@@ -680,11 +680,11 @@ async def test_address_timezone_error_can_be_retried_without_ha_fallback(
     result = await _advance_address_to_system(hass)
     with (
         patch(
-            "custom_components.pv_forecast.config_flow.OpenMeteoClient.async_resolve_timezone",
+            "custom_components.pv_forecast.api.OpenMeteoClient.async_resolve_timezone",
             side_effect=[error, "Asia/Tokyo"],
         ) as resolve_timezone,
         patch(
-            "custom_components.pv_forecast.config_flow.OpenMeteoClient.async_fetch_roofs",
+            "custom_components.pv_forecast.api.OpenMeteoClient.async_fetch_roofs",
             return_value={},
         ) as fetch,
     ):
@@ -714,7 +714,7 @@ async def test_changed_address_discards_old_timezone_even_if_lookup_fails(hass) 
     result = await _advance_address_to_system(hass)
     with (
         patch(
-            "custom_components.pv_forecast.config_flow.OpenMeteoClient.async_resolve_timezone",
+            "custom_components.pv_forecast.api.OpenMeteoClient.async_resolve_timezone",
             side_effect=[
                 "Asia/Tokyo",
                 OpenMeteoDataError("Zone fehlt"),
@@ -722,7 +722,7 @@ async def test_changed_address_discards_old_timezone_even_if_lookup_fails(hass) 
             ],
         ) as resolve_timezone,
         patch(
-            "custom_components.pv_forecast.config_flow.OpenMeteoClient.async_fetch_roofs",
+            "custom_components.pv_forecast.api.OpenMeteoClient.async_fetch_roofs",
             return_value={},
         ) as fetch,
     ):
@@ -892,7 +892,7 @@ async def test_connection_test_errors_and_retry(hass, error, expected: str) -> N
 
     result = await _advance_to_system(hass)
     with patch(
-        "custom_components.pv_forecast.config_flow.OpenMeteoClient.async_fetch_roofs",
+        "custom_components.pv_forecast.api.OpenMeteoClient.async_fetch_roofs",
         side_effect=error,
     ):
         result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
@@ -900,7 +900,7 @@ async def test_connection_test_errors_and_retry(hass, error, expected: str) -> N
     assert result["errors"] == {"base": expected}
 
     with patch(
-        "custom_components.pv_forecast.config_flow.OpenMeteoClient.async_fetch_roofs",
+        "custom_components.pv_forecast.api.OpenMeteoClient.async_fetch_roofs",
         return_value={},
     ):
         result = await hass.config_entries.flow.async_configure(result["flow_id"], {})

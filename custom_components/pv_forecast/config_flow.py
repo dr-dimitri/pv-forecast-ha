@@ -29,7 +29,7 @@ from homeassistant.helpers.selector import (
     TextSelector,
 )
 
-from .api import OpenMeteoClient, OpenMeteoConnectionError, OpenMeteoDataError
+from .api import OpenMeteoConnectionError, OpenMeteoDataError
 from .calculations import InvalidConfigurationError, validate_coordinates
 from .configuration import roof_from_dict
 from .const import (
@@ -64,6 +64,7 @@ from .geocoding import (
     GeocodingDataError,
     NominatimClient,
 )
+from .runtime import async_get_open_meteo_client
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -518,7 +519,7 @@ class PvForecastConfigFlow(ConfigFlow, domain=DOMAIN):
             except (TypeError, ValueError, InvalidConfigurationError):
                 errors["base"] = "invalid_inverter"
             else:
-                client = OpenMeteoClient(async_get_clientsession(self.hass))
+                client = async_get_open_meteo_client(self.hass)
                 try:
                     roofs = tuple(roof_from_dict(roof) for roof in self._roofs)
                     if CONF_TIME_ZONE not in self._location:
