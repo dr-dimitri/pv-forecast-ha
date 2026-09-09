@@ -130,14 +130,14 @@ async function runCase(browser, origin, test) {
     return route.fulfill({ contentType: "text/javascript", body: source });
   });
   try {
-    const params = new URLSearchParams({ theme: test.theme === "dark" ? "dark" : "light", width: String(test.cardWidth), scenario: test.scenario || "sunny" });
+    const params = new URLSearchParams({ theme: test.theme === "dark" ? "dark" : "light", width: String(test.cardWidth), scenario: test.scenario || "sunny", day: test.day || "today" });
     if (test.panel) params.set("panel", "1");
     await page.goto(`${origin}/tests/frontend/demo.html?${params}`, { waitUntil: "networkidle" });
     if (test.theme === "custom") await page.evaluate((theme) => {
       for (const [name, value] of Object.entries(theme)) document.documentElement.style.setProperty(name, value);
     }, customTheme);
     const card = page.locator("pv-forecast-card").first();
-    await card.locator(".kpis").waitFor();
+    await card.locator(".kpis").first().waitFor();
     await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
     const closed = await card.evaluate(inspectCard);
     const screenshot = `${prefix}-${test.name}.png`;
@@ -146,8 +146,74 @@ async function runCase(browser, origin, test) {
     await card.locator("details").evaluateAll((items) => { for (const item of items) item.open = true; });
     await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
     const expanded = await card.evaluate(inspectCard);
-    return { name: test.name, fixtureOnly: true, errors, closed, expanded, screenshot: path.join(output, screenshot) };
+    const navigation = Number(prefix.split("-").at(-1)) >= 112 ? await checkNavigation(page, card, test) : null;
+    return { navigation, name: test.name, fixtureOnly: true, errors, closed, expanded, screenshot: path.join(output, screenshot) };
   } finally { await page.close(); }
+}
+
+// Tageswahl, Abschnittsnavigation und lokale Aktualisierung bleiben unabhängig
+// von den nur simulierten HA-Antworten prüfbar.
+async function checkNavigation(page, card, test) {
+  const expectedDay = test.day || "today";
+  const structure = await card.evaluate((element) => {
+    const shadow = element.shadowRoot;
+    return {
+      headings: [...shadow.querySelectorAll(".section-heading")].map((item) => item.textContent),
+      chart: shadow.querySelector(".chart-heading h3").textContent,
+      today: shadow.querySelector('[aria-label="Heutiger Stand"] h3').textContent,
+      todayLabels: [...shadow.querySelectorAll('[aria-label="Heutiger Stand"] dt')].map((item) => item.textContent),
+      day: shadow.querySelector('[data-day][aria-pressed="true"]').dataset.day,
+      roof: shadow.getElementById("roof").value,
+    };
+  });
+  assert.equal(structure.day, expectedDay);
+  assert.ok(structure.chart.endsWith(expectedDay === "tomorrow" ? "Morgen" : "Heute"));
+  assert.deepEqual(structure.todayLabels, ["Rest heute", "Ist heute"]);
+  assert.match(structure.today, /Heutiger Stand.*10\. Sept/);
+  assert.deepEqual(structure.headings, test.scenario === "roof" ? ["Tagesübersicht", "Vergleichen"] : ["Tagesübersicht", "Planen", "Vergleichen"]);
+  if (test.scenario === "roof") assert.equal(structure.roof, "south");
+  for (const button of await card.locator("[data-section]").all()) {
+    const target = await button.getAttribute("data-section");
+    await button.click();
+    assert.equal(await card.evaluate((element) => element.shadowRoot.activeElement?.id), target, "Sprungziel übernimmt den Tastaturfokus");
+  }
+  if (test.scenario !== "roof") {
+    await card.locator("#report-days").selectOption("30");
+    await card.locator("#planning-duration").fill("90");
+  }
+  await card.locator(test.scenario === "roof" ? "#values-toggle" : "#planning-duration").focus();
+  const before = await card.evaluate((element) => {
+    const panel = element.getRootNode().host;
+    const scroll = panel?.localName === "pv-forecast-panel" ? panel : document.scrollingElement;
+    scroll.scrollTop = 450;
+    const snapshot = () => ({
+      scrollTop: scroll.scrollTop,
+      focus: element.shadowRoot.activeElement?.id,
+      open: [...element.shadowRoot.querySelectorAll("details[open]")].map((item) => item.id).sort(),
+      day: element.shadowRoot.querySelector('[data-day][aria-pressed="true"]').dataset.day,
+      roof: element.shadowRoot.getElementById("roof").value,
+      report: element.shadowRoot.getElementById("report-days")?.value || null,
+      duration: element.shadowRoot.getElementById("planning-duration")?.value || null,
+    });
+    const previous = snapshot();
+    element._render();
+    return { previous, current: snapshot(), scrollOwner: scroll.localName };
+  });
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  const after = await card.evaluate((element) => {
+    const panel = element.getRootNode().host;
+    const scroll = panel?.localName === "pv-forecast-panel" ? panel : document.scrollingElement;
+    return { scrollTop: scroll.scrollTop, focus: element.shadowRoot.activeElement?.id,
+      open: [...element.shadowRoot.querySelectorAll("details[open]")].map((item) => item.id).sort(),
+      day: element.shadowRoot.querySelector('[data-day][aria-pressed="true"]').dataset.day,
+      roof: element.shadowRoot.getElementById("roof").value,
+      report: element.shadowRoot.getElementById("report-days")?.value || null,
+      duration: element.shadowRoot.getElementById("planning-duration")?.value || null };
+  });
+  assert.ok(before.previous.scrollTop > 0, "Scrollprüfung benötigt tatsächlich verschobenen Inhalt");
+  assert.deepEqual(before.current, before.previous, "Neuaufbau bewahrt Auswahl, Fokus, offene Abschnitte und Scrollposition");
+  assert.deepEqual(after, before.previous, "Zustand bleibt auch nach Browser-Layout erhalten");
+  return { structure, preserved: after, scrollOwner: before.scrollOwner };
 }
 
 async function main() {
@@ -169,6 +235,10 @@ async function main() {
       { name: "1440-long-large", viewport: 1440, cardWidth: 1440, theme: "dark", stress: true },
       { name: "360-panel", viewport: 360, cardWidth: 360, theme: "light", panel: true },
       { name: "360-panel-kpi-boundaries", viewport: 360, cardWidth: 360, theme: "light", panel: true, stress: true, largeToday: 123.45, largeTomorrow: 123456 },
+    );
+    if (Number(prefix.split("-").at(-1)) >= 112) matrix.push(
+      { name: "360-tomorrow", viewport: 360, cardWidth: 360, theme: "light", day: "tomorrow" },
+      { name: "360-roof", viewport: 360, cardWidth: 360, theme: "dark", scenario: "roof" },
     );
     const results = [];
     for (const test of matrix) {

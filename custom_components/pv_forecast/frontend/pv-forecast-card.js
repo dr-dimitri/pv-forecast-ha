@@ -346,7 +346,7 @@ export function renderOutlook(state) {
     stale_forecast: "Der Wetterabruf ist für eine aktuelle Tagesaussicht zu alt.",
   }[outlook?.reason] ?? "Für eine Tagesaussicht fehlen ausreichend belegte Mess- oder Prognosedaten.";
   const metric = (label, value) => `<div><dt>${label}</dt><dd>${energyText(value)} <small>kWh</small></dd></div>`;
-  return `<details id="outlook"><summary id="outlook-toggle">Aktuelle Tagesaussicht <span>${available ? `${energyText(outlook.total_kwh)} kWh` : "Noch offen"}</span></summary>${available ? `<p class="feature-result">Heute voraussichtlich insgesamt <strong>${energyText(outlook.total_kwh)} kWh</strong></p><dl class="report-metrics">${metric("Gesichert gemessen", outlook.measured_kwh)}${metric("Geschätzt seit letzter Messung", outlook.bridge_kwh)}${metric("Rest ab jetzt", outlook.remaining_kwh)}</dl><p class="hint">Messung bis ${escapeHtml(plantStamp(outlook.measured_until, timezone))}. Die Zeit seit dieser Messung bleibt eine Schätzung. Rest ab jetzt und geschätzte Brücke überschneiden sich nicht. Kurzfristige Korrektur ist aus.</p>${outlook.quality_flags?.length ? '<p class="hint">Die Tagesaussicht enthält Qualitätsmarkierungen; sie ist keine zugesagte Erzeugung.</p>' : ""}` : `<p class="hint">${escapeHtml(reason)}</p>`}</details>`;
+  return `<details id="outlook"><summary id="outlook-toggle">Tagesaussicht für heute <span>${available ? `${energyText(outlook.total_kwh)} kWh` : "Noch offen"}</span></summary>${available ? `<p class="feature-result">Heute voraussichtlich insgesamt <strong>${energyText(outlook.total_kwh)} kWh</strong></p><dl class="report-metrics">${metric("Gesichert gemessen", outlook.measured_kwh)}${metric("Geschätzt seit letzter Messung", outlook.bridge_kwh)}${metric("Rest ab jetzt", outlook.remaining_kwh)}</dl><p class="hint">Messung bis ${escapeHtml(plantStamp(outlook.measured_until, timezone))}. Die Zeit seit dieser Messung bleibt eine Schätzung. Rest ab jetzt und geschätzte Brücke überschneiden sich nicht. Kurzfristige Korrektur ist aus.</p>${outlook.quality_flags?.length ? '<p class="hint">Die Tagesaussicht enthält Qualitätsmarkierungen; sie ist keine zugesagte Erzeugung.</p>' : ""}` : `<p class="hint">${escapeHtml(reason)}</p>`}</details>`;
 }
 
 function renderHourlyBands(uncertainty, view) {
@@ -446,13 +446,17 @@ export function renderContent(config, state, width = 600, report = null, reportD
   ].filter(Boolean);
   return `<div class="header"><div><p class="eyebrow">PV FORECAST</p><h2>${escapeHtml(title)}</h2><p class="subtitle">${escapeHtml(scope)} · ${escapeHtml(formatPlantDate(view.start, view.timezone))}</p></div><span class="badge ${view.stale ? "warning" : ""}">${view.stale ? "Veraltet" : "Prognose"}</span></div>
     <div class="controls"><div class="day-switch" role="group" aria-label="Prognosetag"><button data-day="today" aria-pressed="${config.day === "today"}">Heute</button><button data-day="tomorrow" aria-pressed="${config.day === "tomorrow"}">Morgen</button></div><label class="roof-label"><span>Fläche</span><select id="roof" aria-label="Fläche"><option value="">Gesamtanlage</option>${view.roofs.map((item) => `<option value="${escapeHtml(item.id)}" ${item.id === config.roof_id ? "selected" : ""}>${escapeHtml(item.name)}</option>`).join("")}</select></label></div>
-    <dl class="kpis">${kpi("Heute", view.summary.today_kwh, "Tagesprognose")}${kpi("Morgen", view.summary.tomorrow_kwh, "Tagesprognose")}${kpi("Rest heute", view.summary.remaining_today_kwh, "Ab jetzt erwartet")}${kpi("Ist heute", view.roof_id ? null : actual, actualHint, actualComplete ? "measured" : "incomplete")}</dl>
-    <section class="chart-section" aria-label="Tagesverlauf"><div class="chart-heading"><h3>Energie im Tagesverlauf</h3><span>kWh / Intervall</span></div><div class="legend"><span><i class="forecast-key"></i>Aktuelle Prognose</span><span><i class="history-key"></i>${ARCHIVE_LABEL}</span><span><i class="actual-key"></i>Ist</span></div>${renderChart(state, width)}<p class="chart-note">${escapeHtml(view.timezone)} · Ansicht ${escapeHtml(formatPlantTime(view.as_of, view.timezone))}<br>Wetterabruf ${escapeHtml(weatherStamp)}</p></section>
+    <nav class="section-nav" aria-label="Bereiche der PV-Karte"><button id="nav-overview" data-section="overview-heading">Übersicht</button>${view.roof_id ? "" : '<button id="nav-planning" data-section="planning-heading">Planen</button>'}<button id="nav-comparison" data-section="comparison-heading">Vergleichen</button></nav>
+    <section aria-labelledby="overview-heading"><h3 class="section-heading" id="overview-heading" tabindex="-1">Tagesübersicht</h3>
+    <div class="overview-metrics"><section aria-label="Tagesprognosen"><h3 class="metric-heading">Tagesprognosen</h3><dl class="kpis">${kpi("Heute", view.summary.today_kwh, "Tagesprognose")}${kpi("Morgen", view.summary.tomorrow_kwh, "Tagesprognose")}</dl></section><section aria-label="Heutiger Stand"><h3 class="metric-heading">Heutiger Stand · ${escapeHtml(formatPlantDate(view.today_start, view.timezone))}</h3><dl class="kpis">${kpi("Rest heute", view.summary.remaining_today_kwh, "Ab jetzt erwartet")}${kpi("Ist heute", view.roof_id ? null : actual, actualHint, actualComplete ? "measured" : "incomplete")}</dl></section></div>
+    <section class="chart-section" aria-label="Tagesverlauf"><div class="chart-heading"><h3>Energie im Tagesverlauf · ${view.day === "tomorrow" ? "Morgen" : "Heute"}</h3><span>kWh / Intervall</span></div><div class="legend"><span><i class="forecast-key"></i>Aktuelle Prognose</span><span><i class="history-key"></i>${ARCHIVE_LABEL}</span><span><i class="actual-key"></i>Ist</span></div>${renderChart(state, width)}<p class="chart-note">${escapeHtml(view.timezone)} · Ansicht ${escapeHtml(formatPlantTime(view.as_of, view.timezone))}<br>Wetterabruf ${escapeHtml(weatherStamp)}</p></section>
     ${notices.length ? `<div class="notices" role="status">${notices.map((text) => `<p>${escapeHtml(text)}</p>`).join("")}</div>` : ""}
     ${renderDailyTendencies(view)}
-    ${view.roof_id ? "" : `${renderUnderperformance(state.history?.data?.underperformance)}${renderOutlook(state)}${renderUncertainty(state)}${renderPlanning(state, planningUI)}`}
-    ${renderTable(state)}
-    ${view.roof_id ? "" : `<details id="report"><summary id="report-toggle">Prognosegüte im Archiv <span>Gesamtanlage</span></summary><label class="report-label">Zeitraum<select id="report-days"><option value="7" ${reportDays === 7 ? "selected" : ""}>7 Tage</option><option value="30" ${reportDays === 30 ? "selected" : ""}>30 Tage</option></select></label>${renderReport(report ?? (state.history?.status === "ready" && reportDays === 7 ? state.history : null), reportDays)}</details>`}`;
+    ${view.roof_id ? "" : renderUnderperformance(state.history?.data?.underperformance)}</section>
+    ${view.roof_id ? "" : `<section class="task-section" aria-labelledby="planning-heading"><h3 class="section-heading" id="planning-heading" tabindex="-1">Planen</h3><p class="hint">Heutige Tagesaussicht und ein passendes Solarzeitfenster finden.</p>${renderOutlook(state)}${renderPlanning(state, planningUI)}</section>`}
+    <section class="task-section" aria-labelledby="comparison-heading"><h3 class="section-heading" id="comparison-heading" tabindex="-1">Vergleichen</h3><p class="hint">${view.roof_id ? "Prognoseintervalle dieser Dachfläche nachlesen." : "Prognose, belegte Messung und die bisherige Prognosegüte einordnen."}</p>
+    ${view.roof_id ? "" : renderUncertainty(state)}${renderTable(state)}
+    ${view.roof_id ? "" : `<details id="report"><summary id="report-toggle">Prognosegüte im Archiv <span>Gesamtanlage</span></summary><label class="report-label">Zeitraum<select id="report-days"><option value="7" ${reportDays === 7 ? "selected" : ""}>7 Tage</option><option value="30" ${reportDays === 30 ? "selected" : ""}>30 Tage</option></select></label>${renderReport(report ?? (state.history?.status === "ready" && reportDays === 7 ? state.history : null), reportDays)}</details>`}</section>`;
 }
 
 const styles = `
@@ -469,6 +473,9 @@ const styles = `
   @container (max-width:460px){.kpis{grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--pv-space)}.kpi{padding:12px}.kpi dd{font-size:30px}.body{padding:18px 16px 6px}.controls{gap:10px;margin-top:20px}.day-switch button{padding:0 12px}h2{font-size:24px}.badge{font-size:var(--pv-text)}.legend{column-gap:12px}}
   .daily-tendencies{display:grid;gap:8px;font-size:14px}.daily-tendencies>div{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}.daily-tendencies dd{margin:0}
   #planning-input-notice:empty{display:none}#planning-form{display:grid;gap:12px;margin-bottom:8px}#planning-form label{display:grid;gap:5px;min-width:0}#planning-form select{width:100%}#planning-form input{font:inherit;font-size:14px;min-height:42px;width:100%;padding:8px 10px;border:1px solid var(--pv-muted);border-radius:var(--pv-radius);background:var(--card-background-color,#fff);color:var(--primary-text-color,#202b32)}input:focus-visible{outline:3px solid var(--primary-color,#007c91);outline-offset:3px}#planning-calculate{margin:2px 0 4px}.feature-result{font-size:14px;line-height:1.7;margin:0 0 12px;overflow-wrap:anywhere}.feature-result strong{font-size:18px}.hint strong{color:var(--primary-text-color,#202b32)}
+  .section-nav{display:flex;flex-wrap:wrap;gap:var(--pv-space);margin:0 0 24px}.section-nav button{font:inherit;font-size:var(--pv-text);min-height:44px;padding:8px 12px;border:1px solid var(--pv-muted);border-radius:var(--pv-radius);background:transparent;color:var(--primary-text-color,#202b32);cursor:pointer}.section-nav button:hover{background:var(--pv-surface)}
+  .section-heading{font-size:18px;margin:0 0 16px;scroll-margin-top:76px}.section-heading:focus-visible{outline:3px solid var(--primary-color,#007c91);outline-offset:4px}.metric-heading{font-weight:500;color:var(--pv-muted);margin:0 0 8px;line-height:1.5}.overview-metrics{display:grid;gap:var(--pv-space)}.overview-metrics>section{min-width:0}.overview-metrics .kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.task-section{border-top:1px solid var(--pv-border);padding-top:24px;margin-top:24px}.task-section>details:last-child{margin-bottom:8px}
+  @container (min-width:720px){.overview-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
   :host{container-type:inline-size}
   .header>div,.chart-section{min-width:0}.header{flex-wrap:wrap}.chart-heading{flex-wrap:wrap}.badge{color:var(--pv-muted)}.badge.warning{color:var(--primary-text-color,#202b32);border-color:currentColor}
   .kpi-wide{grid-column:span 2}.kpi dd small{display:inline-block;white-space:nowrap}.report-metrics dd{overflow-wrap:anywhere}.legend{row-gap:10px}.chart-note{line-height:1.6;text-align:left}.notices{padding:12px 16px}.hint{margin-top:8px}.day-switch{flex-shrink:0}
@@ -506,6 +513,8 @@ export class PvForecastCard extends ElementBase {
     if (!this.attachShadow) return;
     this.attachShadow({ mode: "open" });
     this.shadowRoot.addEventListener("click", (event) => {
+      const section = event.target.closest?.("[data-section]")?.dataset.section;
+      if (section) { const heading = this.shadowRoot.getElementById(section); heading?.focus({ preventScroll: true }); heading?.scrollIntoView({ block: "start" }); return; }
       if (event.target.closest?.("[data-reset-roof]")) { this._config = { ...this._config, roof_id: undefined }; this._bind(); return; }
       const day = event.target.closest?.("[data-day]")?.dataset.day;
       if (day && day !== this._config.day) { this._config = { ...this._config, day }; this._bind(); }
@@ -678,6 +687,11 @@ export class PvForecastCard extends ElementBase {
 
   _render() {
     if (!this.shadowRoot || !this._config) return;
+    // Dokument und eingebettetes Panel können jeweils den Scrollbereich besitzen.
+    const scrollPositions = [];
+    for (let node = this; node; node = node.parentNode || node.host) {
+      if (typeof node.scrollTop === "number") scrollPositions.push([node, node.scrollTop, node.scrollLeft]);
+    }
     const focused = this.shadowRoot.activeElement;
     const focusId = focused?.id;
     const focusDay = focused?.dataset?.day;
@@ -697,6 +711,7 @@ export class PvForecastCard extends ElementBase {
     }
     if (focusId) this.shadowRoot.getElementById(focusId)?.focus({ preventScroll: true });
     else if (focusDay) this.shadowRoot.querySelector(`[data-day="${focusDay}"]`)?.focus({ preventScroll: true });
+    for (const [node, top, left] of scrollPositions) { node.scrollTop = top; node.scrollLeft = left; }
   }
 }
 
