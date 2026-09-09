@@ -121,6 +121,7 @@ async def test_setup_retries_and_unload_preserve_provider_pause(
         assert not coordinator.last_update_success
         assert await hass.config_entries.async_unload(entry.entry_id)
         assert coordinator._cancel_midnight is None
+        assert coordinator._cancel_minute is None
         assert hass.data[DOMAIN] is state
         with pytest.raises(OpenMeteoRetryPendingError):
             await async_get_open_meteo_client(hass).async_resolve_timezone(52.52, 13.41)

@@ -10,7 +10,10 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers.event import async_track_point_in_utc_time
+from homeassistant.helpers.event import (
+    async_track_point_in_utc_time,
+    async_track_utc_time_change,
+)
 from homeassistant.helpers.update_coordinator import (
     TimestampDataUpdateCoordinator,
     UpdateFailed,
@@ -18,7 +21,11 @@ from homeassistant.helpers.update_coordinator import (
 from homeassistant.util import dt as dt_util
 
 from .api import OpenMeteoClient, OpenMeteoError, OpenMeteoRetryError
-from .calculations import InvalidConfigurationError, calculate_forecast
+from .calculations import (
+    InvalidConfigurationError,
+    calculate_forecast,
+    calculate_planning_values,
+)
 from .configuration import roofs_from_options
 from .const import (
     CONF_INVERTER_MAX_POWER_KW,
@@ -28,7 +35,7 @@ from .const import (
     DOMAIN,
     UPDATE_INTERVAL,
 )
-from .models import ForecastDay, ForecastResult
+from .models import ForecastDay, ForecastResult, PlanningValues
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -55,7 +62,9 @@ class PvForecastCoordinator(TimestampDataUpdateCoordinator[ForecastResult]):
         self._entry = entry
         self._client = client
         self._cancel_midnight: Callable[[], None] | None = None
+        self._cancel_minute: Callable[[], None] | None = None
         self._update_in_progress = False
+        self.planning_values: PlanningValues | None = None
 
     @callback
     def async_start_day_updates(self) -> None:
@@ -63,6 +72,38 @@ class PvForecastCoordinator(TimestampDataUpdateCoordinator[ForecastResult]):
 
         if self._cancel_midnight is None:
             self._async_schedule_midnight()
+
+    @callback
+    def async_start_planning_updates(self) -> None:
+        """Genau einen gemeinsamen Minutentakt für die Planungswerte starten."""
+
+        if self._cancel_minute is None:
+            self._cancel_minute = async_track_utc_time_change(
+                self.hass, self._async_handle_minute, second=0
+            )
+
+    @callback
+    def _async_handle_minute(self, _now: datetime) -> None:
+        """Gespeicherte Intervalle nachführen, ohne den Abrufzustand zu verändern."""
+
+        if self._cancel_minute is not None:
+            self.async_update_listeners()
+
+    @callback
+    @override
+    def async_update_listeners(self) -> None:
+        """Planungswerte einmal für alle Sensoren aus demselben Stand bestimmen."""
+
+        self.planning_values = (
+            calculate_planning_values(
+                self.data,
+                dt_util.utcnow(),
+                ZoneInfo(str(self._entry.data[CONF_TIME_ZONE])),
+            )
+            if self.data is not None
+            else None
+        )
+        super().async_update_listeners()
 
     @callback
     def _async_schedule_midnight(self) -> None:
@@ -101,11 +142,14 @@ class PvForecastCoordinator(TimestampDataUpdateCoordinator[ForecastResult]):
 
     @override
     async def async_shutdown(self) -> None:
-        """Beim Entladen auch den jeweils aktuellen Mitternachtstermin entfernen."""
+        """Beim Entladen auch die beiden lokalen Fortschreibungstermine entfernen."""
 
         if self._cancel_midnight is not None:
             self._cancel_midnight()
             self._cancel_midnight = None
+        if self._cancel_minute is not None:
+            self._cancel_minute()
+            self._cancel_minute = None
         await super().async_shutdown()
 
     @callback

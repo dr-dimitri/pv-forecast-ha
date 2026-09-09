@@ -16,6 +16,9 @@ Home-Assistant-Oberfläche. YAML wird nicht unterstützt.
 
 - Prognose für heute und morgen in kWh
 - Gesamtwerte für die Anlage und Einzelwerte je Dachfläche
+- Restertrag heute, Ertrag der nächsten 60 Minuten, geschätzte Leistung jetzt
+  und Beginn der stärksten Prognosestunde heute
+- lesende Aktion für die gemeinsame Stundenprognose in Automationen
 - mehrere Dachflächen mit eigener Leistung, Ausrichtung, Neigung und eigenem
   Systemwirkungsgrad
 - Übernahme des in Home Assistant hinterlegten Standorts oder einmalige
@@ -114,7 +117,23 @@ Die Integration erstellt folgende Sensoren:
 - `<Dachfläche> Prognose heute` und `<Dachfläche> Prognose morgen` für jede
   konfigurierte Dachfläche
 
-Alle Sensorwerte werden in kWh ausgegeben.
+Die Tageswerte werden in kWh ausgegeben. Zusätzlich erhält die Gesamtanlage:
+
+| Sensor | Bedeutung |
+| --- | --- |
+| Restertrag heute | Prognostizierte kWh von jetzt bis zur nächsten Anlagenmitternacht |
+| Ertrag nächste 60 Minuten | Prognostizierte kWh über die nächsten exakt 3.600 Sekunden, auch über Mitternacht |
+| Geschätzte Leistung jetzt | Mittlere AC-Leistung des laufenden Wetterintervalls in kW; kein Live-Messwert |
+| Beginn der stärksten Prognosestunde heute | Beginn des Intervalls mit der höchsten mittleren AC-Leistung im ganzen heutigen Tag |
+
+Die Planungssensoren werden jede Minute aus den gespeicherten Intervallen
+nachgeführt. Dadurch entstehen keine zusätzlichen Wetterabrufe und keine feinere
+Wetterauflösung. Bei gleicher Spitzenleistung zählt der früheste absolute
+Zeitpunkt; auf einem vollständig ertraglosen Tag bleibt der Zeitpunkt unbekannt.
+Bei Teilstundenzeitzonen wird der Beginn auf den heutigen Tagesanfang begrenzt.
+Ein vollständig abgedecktes Nullfenster ergibt 0, fehlende Zeitabdeckung dagegen
+keinen Zahlenwert. Die Sensoren erhalten vor der gemeinsamen Statistikentscheidung
+mit dem geplanten Prognosearchiv keine `state_class`.
 
 Die Zuordnung zu heute und morgen wechselt zur Mitternacht am Anlagenstandort.
 Bis neue Wetterdaten vorliegen, kann der bisherige Morgenwert als heutige
@@ -131,6 +150,24 @@ Frist, steigt die Pause bei weiteren Fehlschlägen auf 60, 120 und höchstens
 Aktualisierungen, Tageswechsel und erneute Einrichtungsversuche umgehen diese
 Pause nicht. Nach einem erfolgreichen Abruf gilt wieder der normale
 30-Minuten-Takt. Dauerhaft fehlerhafte Antworten werden getrennt behandelt.
+
+## Stundenprognose in Automationen
+
+Unter **Entwicklerwerkzeuge → Aktionen → PV-Prognose lesen** liefert
+`pv_forecast.get_forecast` die gespeicherte Gesamtzeitreihe der ausgewählten
+PV-Anlage. Die Aktion fragt keine Wetterdaten ab. Sie gibt Intervallgrenzen,
+kWh und mittlere AC-kW sowie Abrufzeit, Abdeckung und Eingabefallbacks zurück.
+Ältere Daten bleiben nach einem Abruffehler mit `last_update_success: false`
+lesbar; die Abdeckungsgrenzen und der Abrufzeitpunkt müssen zusätzlich beachtet
+werden. Die Ausgabezeit des Wettermodells ist unbekannt.
+
+Die [Beschreibung des Stundenvertrags](docs/stundenprognose.md) enthält das
+Antwortformat und ein Beispiel für eine HA-Aktion mit Antwortvariable. Die
+Zeitreihe wird nicht in Sensorattributen wiederholt und damit nicht pro Entity
+im Recorder vervielfacht.
+
+PV-Erzeugung allein beschreibt keinen verfügbaren Überschuss. Verbrauch,
+Speicherzustand und Tarife sind zusätzliche Daten für entsprechende Entscheidungen.
 
 ## Berechnungsmodell
 

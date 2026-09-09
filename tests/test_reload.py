@@ -110,7 +110,7 @@ async def test_options_saved_during_reload_trigger_consistent_followup(
         assert await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
         old_entity_ids = _entity_ids(hass, entry)
-        assert len(old_entity_ids) == 6
+        assert len(old_entity_ids) == 10
 
         reload_task = hass.async_create_background_task(
             hass.config_entries.async_reload(entry.entry_id),
@@ -143,24 +143,32 @@ async def test_options_saved_during_reload_trigger_consistent_followup(
         assert requested_roofs == [{"a", "b"}, {"a", "b"}, saved_ids]
         assert set(entry.runtime_data.coordinator.data.roofs) == saved_ids
         entity_ids = _entity_ids(hass, entry)
-        assert set(entity_ids) == {
+        daily_unique_ids = {
             f"{entry.entry_id}_{scope}_{day}"
             for scope in ("total", *saved_ids)
             for day in ("today", "tomorrow")
         }
-        assert len(entity_ids) == 8
+        assert set(entity_ids) == daily_unique_ids | {
+            f"{entry.entry_id}_total_{key}"
+            for key in ("remaining_today", "next_60_minutes", "power_now", "peak_today")
+        }
+        assert len(entity_ids) == 12
         assert old_entity_ids.items() <= entity_ids.items()
-        for entity_id in entity_ids.values():
+        for unique_id, entity_id in entity_ids.items():
             state = hass.states.get(entity_id)
             assert state is not None
-            assert state.state not in (STATE_UNAVAILABLE, STATE_UNKNOWN)
+            if unique_id in daily_unique_ids:
+                assert state.state not in (STATE_UNAVAILABLE, STATE_UNKNOWN)
+            else:
+                assert state.state == STATE_UNAVAILABLE
         assert len(entry.update_listeners) == 1
         assert len(created_coordinators) == 3
 
         assert await hass.config_entries.async_unload(entry.entry_id)
         assert not entry.update_listeners
         assert all(
-            coordinator._cancel_midnight is None for coordinator in created_coordinators
+            coordinator._cancel_midnight is None and coordinator._cancel_minute is None
+            for coordinator in created_coordinators
         )
         freezer.move_to("2026-08-25T12:00:00+00:00")
         async_fire_time_changed(hass)
@@ -184,19 +192,21 @@ async def test_failed_setup_cleans_listener_before_successful_retry(
         assert entry.state is ConfigEntryState.SETUP_RETRY
         assert not entry.update_listeners
         assert created_coordinators[0]._cancel_midnight is None
+        assert created_coordinators[0]._cancel_minute is None
 
         freezer.move_to("2026-08-23T12:00:06+00:00")
         async_fire_time_changed(hass)
         await hass.async_block_till_done(wait_background_tasks=True)
         assert entry.state is ConfigEntryState.LOADED
         assert len(entry.update_listeners) == 1
-        assert len(_entity_ids(hass, entry)) == 6
+        assert len(_entity_ids(hass, entry)) == 10
         assert len(created_coordinators) == 2
 
         assert await hass.config_entries.async_unload(entry.entry_id)
         assert not entry.update_listeners
         assert all(
-            coordinator._cancel_midnight is None for coordinator in created_coordinators
+            coordinator._cancel_midnight is None and coordinator._cancel_minute is None
+            for coordinator in created_coordinators
         )
         freezer.move_to("2026-08-25T12:00:00+00:00")
         async_fire_time_changed(hass)

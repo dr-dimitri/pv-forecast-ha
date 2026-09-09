@@ -36,6 +36,34 @@ Entity-Typen, Services, weitere Wetteranbieter, Verschattung, Speicher,
 Eigenverbrauch, Wallboxen, automatische Kalibrierung und komplexe
 Strahlungsmodelle.
 
+## Erweiterung nach V1: Stundenvertrag aus Issue #16
+
+Nach Abschluss der Grundlagen in #25 ergänzt #16 die Gesamtanlage um vier
+Sensoren: Restertrag heute, Ertrag der nächsten gleitenden 60 Minuten,
+geschätzte Leistung jetzt aus dem laufenden Intervallmittel und Beginn der
+stärksten Prognosestunde des ganzen heutigen Tages. Bei gleich hohen Spitzen
+gilt der früheste absolute Zeitpunkt; ein Nulltag hat kein Maximum. Alle
+Fenster verwenden UTC-Überlappungen und die gespeicherte Anlagenzeitzone.
+Fehlende Zeitabdeckung ist nicht null Ertrag. Die Sensoren erhalten vor der
+Statistikentscheidung in #4/#27 keine `state_class`.
+
+Eine gemeinsame Gesamtzeitreihe entsteht einmal je Berechnung nach Clipping,
+begrenzt auf die zwei lokalen Prognosetage. Der versionierte Lesevertrag
+enthält Intervallgrenzen, kWh, mittlere AC-kW, Abrufzeit, Abdeckung und
+Eingabefallbacks. Der Modell-Ausgabezeitpunkt ist unbekannt. Qualitätsmarkierungen
+sind keine gemessene Prognosegüte. Die rein lesende HA-Aktion
+`pv_forecast.get_forecast` mit verpflichtender Anlagenauswahl ist die einzige
+öffentliche Stunden-Schnittstelle für Automationen und die spätere Karte.
+Sie löst kein HTTP aus und dupliziert keine Stundenlisten in Sensorattributen.
+Energy und Archiv verwenden bei ihrer Umsetzung dieselbe Datenbasis.
+
+Ein gemeinsamer lokaler Minutentakt führt die Planungswerte nach; er verändert
+weder Pollingfrist noch Abrufzeit oder Fehlerstatus und wird beim Entladen
+beendet. Es entstehen keine zusätzlichen Wetterabrufe. PV-Erzeugung allein
+ersetzt keine Verbrauchs-, Speicher- oder Tarifdaten. Diese abgegrenzte
+Erweiterung ist in Issue #1 konkretisiert und ersetzt nur die entgegenstehenden
+V1-Grenzen; die übrigen Architektur- und Modellvorgaben gelten weiter.
+
 ## Konfiguration
 
 Die Einrichtung erfolgt ausschließlich über einen Config Flow; YAML ist nicht

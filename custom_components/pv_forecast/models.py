@@ -43,6 +43,7 @@ class WeatherInterval:
     end: datetime
     gti_w_m2: float
     ambient_temperature_c: float | None
+    quality_flags: tuple[str, ...] = ()
 
     @property
     def duration_hours(self) -> float:
@@ -62,6 +63,18 @@ class RoofForecastInterval:
     dc_power_kw: float
     ac_power_kw: float
     energy_kwh: float
+
+
+@dataclass(frozen=True, slots=True)
+class TotalForecastInterval:
+    """Halb offenes UTC-Gesamtintervall nach Clipping mit Eingabequalität."""
+
+    start: datetime
+    end: datetime
+    energy_kwh: float
+    ac_power_kw: float
+    quality_flags: tuple[str, ...] = ()
+    is_complete: bool = True
 
 
 @dataclass(frozen=True, slots=True)
@@ -88,6 +101,18 @@ class ForecastResult:
     local_date: date
     roofs: dict[str, RoofForecast]
     total: DailyYield
+    total_intervals: tuple[TotalForecastInterval, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class PlanningValues:
+    """Zeitabhängige Gesamtwerte; fehlende Abdeckung bleibt unbekannt."""
+
+    remaining_today_kwh: float | None
+    next_60_minutes_kwh: float | None
+    power_now_kw: float | None
+    peak_today: datetime | None
+    peak_today_complete: bool
 
 
 @dataclass(frozen=True, slots=True)

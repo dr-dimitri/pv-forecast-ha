@@ -5,14 +5,17 @@ from __future__ import annotations
 import math
 from collections.abc import Mapping
 from datetime import UTC, date, datetime, time, timedelta, tzinfo
+from itertools import pairwise
 
 from .const import DEFAULT_TEMPERATURE_COEFFICIENT, REFERENCE_TEMPERATURE_C
 from .models import (
     DailyYield,
     ForecastResult,
+    PlanningValues,
     PvRoof,
     RoofForecast,
     RoofForecastInterval,
+    TotalForecastInterval,
     WeatherInterval,
 )
 
@@ -158,6 +161,11 @@ def calculate_forecast(
     intervals_by_roof: dict[str, list[RoofForecastInterval]] = {
         roof.id: [] for roof in roofs
     }
+    total_intervals: list[TotalForecastInterval] = []
+    forecast_start = datetime.combine(local_date, time.min, timezone).astimezone(UTC)
+    forecast_end = datetime.combine(
+        local_date + timedelta(days=2), time.min, timezone
+    ).astimezone(UTC)
 
     for timestamp in timestamps:
         points = {roof.id: weather_maps[roof.id].get(timestamp) for roof in roofs}
@@ -184,6 +192,44 @@ def calculate_forecast(
                     ),
                 )
             )
+        # Die API liefert gemeinsame UTC-Stunden. Randbeschnitt und fehlende
+        # Dachbeiträge behalten ihre tatsächlichen zeitlichen Abdeckungsgrenzen.
+        boundaries = sorted(
+            {
+                max(point.start.astimezone(UTC), forecast_start)
+                for point in points.values()
+                if point is not None
+                and point.start.astimezone(UTC) < timestamp
+                and timestamp > forecast_start
+                and point.start.astimezone(UTC) < forecast_end
+            }
+            | {min(timestamp, forecast_end)}
+        )
+        for start, end in pairwise(boundaries):
+            if end <= start:
+                continue
+            covered = {
+                roof_id: point
+                for roof_id, point in points.items()
+                if point is not None and point.start.astimezone(UTC) <= start
+            }
+            if not covered:
+                continue
+            power = sum(ac_by_roof[roof_id] for roof_id in covered)
+            flags = {flag for point in covered.values() for flag in point.quality_flags}
+            is_complete = len(covered) == len(roofs)
+            if not is_complete:
+                flags.add("missing_roof_data")
+            total_intervals.append(
+                TotalForecastInterval(
+                    start=start,
+                    end=end,
+                    energy_kwh=power * (end - start).total_seconds() / 3600,
+                    ac_power_kw=power,
+                    quality_flags=tuple(sorted(flags)),
+                    is_complete=is_complete,
+                )
+            )
 
     tomorrow = local_date + timedelta(days=1)
     roof_results: dict[str, RoofForecast] = {}
@@ -198,24 +244,22 @@ def calculate_forecast(
             ),
         )
 
+    combined_intervals = tuple(total_intervals)
     return ForecastResult(
         local_date=local_date,
         roofs=roof_results,
         total=DailyYield(
-            today=_finite_result(
-                sum(result.daily.today for result in roof_results.values()),
-                "Gesamtenergie heute",
-            ),
-            tomorrow=_finite_result(
-                sum(result.daily.tomorrow for result in roof_results.values()),
-                "Gesamtenergie morgen",
-            ),
+            today=aggregate_energy_for_day(combined_intervals, local_date, timezone),
+            tomorrow=aggregate_energy_for_day(combined_intervals, tomorrow, timezone),
         ),
+        total_intervals=combined_intervals,
     )
 
 
 def aggregate_energy_for_day(
-    intervals: tuple[RoofForecastInterval, ...], day: date, timezone: tzinfo
+    intervals: tuple[RoofForecastInterval | TotalForecastInterval, ...],
+    day: date,
+    timezone: tzinfo,
 ) -> float:
     """Intervallenergie nach tatsächlicher Überlappung einem lokalen Tag zuordnen."""
 
@@ -241,3 +285,77 @@ def aggregate_energy_for_day(
             total + interval.energy_kwh * overlap_fraction, "Tagesenergie"
         )
     return total
+
+
+def _covered_window_energy(
+    intervals: tuple[TotalForecastInterval, ...], start: datetime, end: datetime
+) -> float | None:
+    """Energie eines lückenlos abgedeckten, halb offenen UTC-Fensters liefern."""
+
+    cursor = start
+    energy = 0.0
+    for interval in intervals:
+        interval_start = interval.start.astimezone(UTC)
+        interval_end = interval.end.astimezone(UTC)
+        overlap_start = max(interval_start, start)
+        overlap_end = min(interval_end, end)
+        if overlap_end <= overlap_start:
+            continue
+        if overlap_start != cursor or not interval.is_complete:
+            return None
+        energy += (
+            interval.energy_kwh
+            * (overlap_end - overlap_start).total_seconds()
+            / (interval_end - interval_start).total_seconds()
+        )
+        cursor = overlap_end
+    return energy if cursor == end else None
+
+
+def calculate_planning_values(
+    forecast: ForecastResult, now: datetime, timezone: tzinfo
+) -> PlanningValues:
+    """Planungswerte ausschließlich aus der vorhandenen Gesamtzeitreihe ableiten.
+
+    Die stärkste Prognosestunde ist das höchste mittlere AC-Leistungsniveau
+    des ganzen lokalen Tages. Teilstunden an Tagesgrenzen werden dadurch nicht
+    allein wegen ihrer kürzeren Überlappung als schwächer eingestuft.
+    """
+
+    now_utc = now.astimezone(UTC)
+    local_day = now.astimezone(timezone).date()
+    day_start = datetime.combine(local_day, time.min, timezone).astimezone(UTC)
+    day_end = datetime.combine(
+        local_day + timedelta(days=1), time.min, timezone
+    ).astimezone(UTC)
+    intervals = forecast.total_intervals
+    remaining = _covered_window_energy(intervals, now_utc, day_end)
+    next_hour = _covered_window_energy(intervals, now_utc, now_utc + timedelta(hours=1))
+    running = next(
+        (
+            interval
+            for interval in intervals
+            if interval.start.astimezone(UTC) <= now_utc < interval.end.astimezone(UTC)
+        ),
+        None,
+    )
+    power_now = (
+        running.ac_power_kw if running is not None and running.is_complete else None
+    )
+    peak_complete = _covered_window_energy(intervals, day_start, day_end) is not None
+    peak = None
+    peak_power = 0.0
+    if peak_complete:
+        for interval in intervals:
+            start = max(interval.start.astimezone(UTC), day_start)
+            end = min(interval.end.astimezone(UTC), day_end)
+            if end > start and interval.ac_power_kw > peak_power:
+                peak_power = interval.ac_power_kw
+                peak = start
+    return PlanningValues(
+        remaining_today_kwh=remaining,
+        next_60_minutes_kwh=next_hour,
+        power_now_kw=power_now,
+        peak_today=peak,
+        peak_today_complete=peak_complete,
+    )

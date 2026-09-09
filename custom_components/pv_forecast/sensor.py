@@ -1,11 +1,16 @@
-"""Ertragssensoren für heute und morgen."""
+"""Sensoren für Tagesprognosen und zeitabhängige Planungswerte."""
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import override
 
-from homeassistant.components.sensor import SensorDeviceClass, SensorEntity
-from homeassistant.const import UnitOfEnergy
+from homeassistant.components.sensor import (
+    SensorDeviceClass,
+    SensorEntity,
+    SensorEntityDescription,
+)
+from homeassistant.const import UnitOfEnergy, UnitOfPower
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -15,18 +20,51 @@ from .coordinator import PvForecastCoordinator
 from .entity import PvForecastEntity
 from .models import ForecastDay
 
+PLANNING_SENSOR_DESCRIPTIONS = (
+    SensorEntityDescription(
+        key="remaining_today",
+        translation_key="total_remaining_today",
+        device_class=SensorDeviceClass.ENERGY,
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        suggested_display_precision=2,
+    ),
+    SensorEntityDescription(
+        key="next_60_minutes",
+        translation_key="total_next_60_minutes",
+        device_class=SensorDeviceClass.ENERGY,
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        suggested_display_precision=2,
+    ),
+    SensorEntityDescription(
+        key="power_now",
+        translation_key="total_power_now",
+        device_class=SensorDeviceClass.POWER,
+        native_unit_of_measurement=UnitOfPower.KILO_WATT,
+        suggested_display_precision=2,
+    ),
+    SensorEntityDescription(
+        key="peak_today",
+        translation_key="total_peak_today",
+        device_class=SensorDeviceClass.TIMESTAMP,
+    ),
+)
+
 
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: PvForecastConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Genau zwei Gesamtsensoren und zwei Sensoren je Dachfläche anlegen."""
+    """Sechs Gesamtsensoren und zwei Sensoren je Dachfläche anlegen."""
 
     coordinator = entry.runtime_data.coordinator
     entities: list[SensorEntity] = [
         PvForecastTotalSensor(coordinator, entry, "today"),
         PvForecastTotalSensor(coordinator, entry, "tomorrow"),
+        *(
+            PvForecastPlanningSensor(coordinator, entry, description)
+            for description in PLANNING_SENSOR_DESCRIPTIONS
+        ),
     ]
     for forecast in coordinator.data.roofs.values():
         roof = forecast.roof
@@ -128,4 +166,51 @@ class PvForecastRoofSensor(PvForecastBaseSensor):
         """Aktuelle Tagesprognose der Dachfläche lesen."""
 
         value = self.coordinator.get_daily_yield(self._day, self._roof_id)
+        return round(value, 2) if value is not None else None
+
+
+class PvForecastPlanningSensor(PvForecastEntity, SensorEntity):
+    """Vorberechnete Stundenwerte der Gesamtanlage ohne eigenen Abruf abbilden."""
+
+    def __init__(
+        self,
+        coordinator: PvForecastCoordinator,
+        entry: PvForecastConfigEntry,
+        description: SensorEntityDescription,
+    ) -> None:
+        """Planungssensor mit stabiler ID und seinen fachlichen Metadaten anlegen."""
+
+        super().__init__(coordinator, entry)
+        self.entity_description = description
+        self._attr_unique_id = f"{entry.entry_id}_total_{description.key}"
+
+    @property
+    @override
+    def available(self) -> bool:
+        """Abdeckung beachten; ein vollständiger Nulltag hat keinen Spitzenwert."""
+
+        if not super().available or self.coordinator.planning_values is None:
+            return False
+        if self.entity_description.key == "peak_today":
+            return self.coordinator.planning_values.peak_today_complete
+        return self.native_value is not None
+
+    @property
+    @override
+    def native_value(self) -> float | datetime | None:
+        """Den im Coordinator vorbereiteten Planungswert lesen."""
+
+        if (values := self.coordinator.planning_values) is None:
+            return None
+        match self.entity_description.key:
+            case "remaining_today":
+                value = values.remaining_today_kwh
+            case "next_60_minutes":
+                value = values.next_60_minutes_kwh
+            case "power_now":
+                value = values.power_now_kw
+            case "peak_today":
+                return values.peak_today
+            case _:
+                return None
         return round(value, 2) if value is not None else None
