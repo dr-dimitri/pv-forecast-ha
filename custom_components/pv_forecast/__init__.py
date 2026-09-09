@@ -8,12 +8,13 @@ from dataclasses import dataclass
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.typing import ConfigType
 
 from .calibration_runtime import CalibrationManager, async_remove_calibration_store
 from .const import DOMAIN, PLATFORMS
 from .coordinator import PvForecastCoordinator
-from .dashboard import DashboardManager
+from .dashboard import DashboardManager, dashboard_issue_id
 from .frontend import async_setup_frontend
 from .history_runtime import ArchiveManager, async_remove_history_store
 from .history_services import async_setup_history_services
@@ -111,6 +112,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: PvForecastConfigEntry) 
 async def async_remove_entry(hass: HomeAssistant, entry: PvForecastConfigEntry) -> None:
     """Beim Entfernen einer Anlage ihre lokalen Messdaten und ihr Archiv löschen."""
 
+    ir.async_delete_issue(hass, DOMAIN, dashboard_issue_id(entry.entry_id))
     try:
         await async_remove_calibration_store(hass, entry.entry_id)
     finally:
@@ -128,6 +130,7 @@ async def _async_update_listener(
     runtime = getattr(entry, "runtime_data", None)
     dashboard = getattr(runtime, "dashboard", None)
     if dashboard is not None and dashboard.only_dashboard_options_changed():
-        await dashboard.async_sync()
+        if dashboard.display_options_changed():
+            await dashboard.async_sync()
         return
     await hass.config_entries.async_reload(entry.entry_id)

@@ -298,6 +298,12 @@ Seite mit festem Kartenlayout. Titeländerung und Abschalten erfolgen im selben
 Dialog und lösen keinen Wetterabruf aus. Die Integration verwaltet diese Seite;
 deine vorhandenen Dashboards bleiben erhalten.
 
+Ändert sich das gebündelte Dashboard-Modul nach einem Integrationsupdate, bietet
+**Einstellungen → System → Reparaturen → PV-Dashboard aktualisieren** die Übernahme
+und einen direkten Link zum Öffnen und Neuladen an. Die Erkennung beginnt mit
+einem erstmalig gespeicherten Vergleichsstand; unveränderte Fassungen erzeugen
+keine Meldung. [Details zur Dashboard-Aktualisierung](docs/karte.md).
+
 Das Paket enthält **PV Forecast** außerdem als einzelne Lovelace-Karte für frei
 gestaltete Dashboards. Füge dafür unter **Einstellungen → Dashboards → Ressourcen** die URL
 `/pv_forecast/pv-forecast-card.js?v=3` als **JavaScript-Modul** hinzu. Danach

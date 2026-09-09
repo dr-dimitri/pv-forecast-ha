@@ -38,6 +38,29 @@ die HA-Seitenleiste auch auf schmalen Bildschirmen. Ohne Frontend bleibt das
 Backend nutzbar; der Optionsdialog zeigt den Wartestatus. Eine bereits fremd
 belegte Panel-Adresse wird nicht überschrieben und als Konflikt angezeigt.
 
+## Änderungen über „Reparaturen“ übernehmen
+
+Wenn sich das gebündelte Dashboard-Modul nach einem Integrationsupdate geändert
+hat, erscheint nach dem erneuten Laden der Integration unter
+**Einstellungen → System → Reparaturen** die Meldung **PV-Dashboard aktualisieren**.
+Öffne sie, wähle **Dashboard aktualisieren** und anschließend
+**Dashboard öffnen und neu laden**. Der Link öffnet die PV-Seite mit einem
+vollständigen Browser-Neuaufruf, damit bereits geladene alte Karten ersetzt werden.
+Weitere Browser oder Geräte können ihre PV-Seite ebenfalls neu laden.
+
+Die Funktion gilt für die durch die Integration verwaltete PV-Seite. Sie erkennt
+Änderungen am tatsächlichen Modulinhalt. Gleicher Inhalt erzeugt keine neue
+Meldung. Bei der ersten Einrichtung dieser Erkennung wird lediglich die aktuelle
+Fassung als Ausgangsbasis übernommen; frühere unbekannte Fassungen werden nicht
+nachträglich als Änderung ausgegeben. Eine ignorierte Meldung bleibt für dieselbe
+Fassung ignoriert; eine spätere Änderung wird erneut angeboten.
+
+Die Reparatur speichert nur die übernommene Modulkennung und aktualisiert das
+eigene Panel. Prognose- und Messdaten bleiben erhalten; sie löst keinen
+Wetterabruf aus. Bei Fehlern oder einem Konflikt bleibt die Meldung bestehen.
+Abschalten beziehungsweise Entfernen der PV-Seite beseitigt ihre Meldung.
+Manuell angelegte Lovelace-Ressourcen werden über den folgenden Abschnitt gepflegt.
+
 ## Einzelne Karte im eigenen Dashboard einrichten
 
 1. Die Integration wie oben installieren beziehungsweise aktualisieren.
