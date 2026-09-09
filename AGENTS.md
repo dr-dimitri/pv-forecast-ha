@@ -114,7 +114,7 @@ menschliche Abnahme und wird durch Offline-Tests nicht ersetzt.
 ## Optionales Prognosearchiv aus #27 und Statistikentscheidung #4
 
 Das Archiv ist per UI opt-in und speichert tatsächlich rechtzeitig beobachtete
-Prognosestände in einem getrennten HA-Store (seit #22/#23 Version 3). Festgelegte Stichtage:
+Prognosestände in einem getrennten HA-Store (seit #30 Version 4). Festgelegte Stichtage:
 18 Uhr am Vortag und 06 Uhr am Zieltag für lokale Tageswerte (maximal zwei
 Stunden alte Prognose), Vorlauf eine beziehungsweise drei Stunden für
 UTC-Intervalle (maximal eine Stunde alte Prognose). Nach dem Stichtag werden
@@ -478,3 +478,11 @@ anlegen. Änderungen klein und testbar halten, alle Qualitätsprüfungen ausfüh
 committen, pushen und mit einer aussagekräftigen Pull-Request-Beschreibung
 einreichen. Keine unnötigen Abhängigkeiten oder spekulativen Erweiterungen
 einführen.
+
+## Prospektiver Beobachtungsversuch zu #30
+
+Die Archivoption „Kurzfristige Korrektur beobachten“ ist standardmäßig aus. Sie verändert keine produktiven Prognosewerte. Nur bei aktiviertem Archiv werden mit neuen Prognoseständen begrenzte Vergleichskandidaten rechtzeitig eingefroren: volle UTC-Stunden mit einer/drei Stunden Vorlauf und der lokale Resttag von 12 Uhr bis Mitternacht. Für den Resttag gilt maximal eine Stunde Datenalter. Alte Stände erhalten keine nachträglichen Kandidaten. Archiv-Store 4 migriert Versionen 1–3 verlustfrei ohne erfundene Belege; Config Entries bleiben 1.1.
+
+Versuchsregel 1 verwendet drei aufeinanderfolgende vollständig bewertete Stunden derselben Anlagen-/Quellenbasis, deren Ende höchstens 90 Minuten zurückliegt und deren Bewertung zum Beobachtungszeitpunkt bekannt war. Mindestens 0,3 kWh Basisenergie, keine Eingabefallbacks oder bekannten Abregelungs-/Wartungstage. Ein Verhältnis außerhalb 0,5–1,5 liefert einen Leerzustand. Innerhalb dieses Bereichs wird der Faktor auf 0,8–1,2 begrenzt und seine Wirkung linear innerhalb sechs Stunden bis null reduziert. Er betrifft nur zukünftige Intervalle des laufenden lokalen Tages. Die eingefrorene DC-Basis wird vor Gruppen- und Gesamtclipping skaliert; der langfristige Anlagenfaktor bleibt unverändert. Ohne Basis entsteht kein Kandidat.
+
+Kandidat, Beobachtungszeit und Inhaltsfingerprints der drei damals bekannten Mess-/Forecastbelege werden im bestehenden Archivdatensatz bewahrt. Änderungen oder fehlende Belege verhindern seine Verwendung im Vergleich. Die vorhandene berechtigungsgeprüfte Archivaktion liefert getrennt nach Vorlauf MAE, Bias, Stichprobe, Abdeckung und Ausschlüsse auf denselben späteren Messintervallen. Mindestens 30 abgeschlossene lokale Tage und mindestens fünf Prozent geringerer MAE bei positivem Basis-MAE sind das vorab festgelegte Prüfziel; große Fehler bleiben enthalten. Die jüngsten 60 Tage werden geprüft. Selbst bei erreichtem Ziel bleibt die Korrektur in dieser Stufe ausschließlich beobachtend. Freigabe produktiver Anwendung benötigt einen gesonderten belegten Auswertungsschritt. Löschung und Aufbewahrung folgen dem bestehenden Archiv; keine zusätzlichen Wetterabrufe, Stores, Entities oder Aktionen.

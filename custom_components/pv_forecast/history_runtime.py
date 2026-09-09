@@ -9,7 +9,7 @@ import io
 import json
 import logging
 from contextlib import suppress
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from math import isfinite
 from typing import TYPE_CHECKING, Any, Literal
 from zoneinfo import ZoneInfo
@@ -39,13 +39,14 @@ from .coordinator import PvForecastCoordinator
 from .history import HistoryArchive
 from .measurement_runtime import MeasurementManager
 from .measurements import SourceConfig
+from .short_term import trial_report
 from .uncertainty_data import current_experience_bands
 
 if TYPE_CHECKING:
     from .calibration_runtime import CalibrationManager
 
 _LOGGER = logging.getLogger(__name__)
-STORAGE_VERSION = 3
+STORAGE_VERSION = 4
 SAVE_DELAY = 300
 MAX_STORAGE_BYTES = 32 * 1024 * 1024
 MAX_RECORDS = 6000
@@ -58,11 +59,12 @@ class _HistoryStore(Store[dict[str, Any]]):
     async def _async_migrate_func(
         self, old_major_version: int, old_minor_version: int, old_data: dict[str, Any]
     ) -> dict[str, Any]:
-        if old_major_version not in (1, 2):
+        if old_major_version not in (1, 2, 3):
             raise NotImplementedError
         # Version 1 erhält weiterhin keine erfundene Kalibrierungsbasis.
         # Version 3 erlaubt verschiedene, je Record unverändert validierte
-        # Tageszeitzonen. Beide Vorgängerversionen bleiben verlustfrei erhalten.
+        # Tageszeitzonen. Version 4 ergänzt ausschließlich neue Versuchsdaten;
+        # keine Vorgängerversion erhält nachträgliche Kandidaten.
         HistoryArchive.from_dict(old_data["archive"], old_data["archive"]["timezone"])
         return old_data
 
@@ -386,6 +388,11 @@ class ArchiveManager:
                     CONF_INVERTER_MAX_POWER_KW
                 ),
                 **calibration,
+                short_term_enabled=self.entry.options.get("short_term_enabled") is True,
+                excluded_dates={
+                    date.fromisoformat(item["date"])
+                    for item in self.entry.options.get("calibration_exclusions", [])
+                },
             )
             self._last_fetched_at = fetched_at
             self._last_calibration_capture = calibration_signature
@@ -507,6 +514,18 @@ class ArchiveManager:
             enabled=self.enabled,
             running=self.running,
             storage_error=self._storage_error,
+        )
+        result["short_term"] = trial_report(
+            tuple(self._archive.records.values()),
+            now or dt_util.utcnow(),
+            _configuration_id(self.entry),
+            {
+                date.fromisoformat(item["date"])
+                for item in self.entry.options.get("calibration_exclusions", [])
+            },
+        )
+        result["short_term"]["enabled"] = (
+            self.enabled and self.entry.options.get("short_term_enabled") is True
         )
         if self.calibration is not None:
             result["calibration"] = self.calibration.snapshot()

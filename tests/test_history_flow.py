@@ -105,7 +105,10 @@ async def test_setup_archive_is_optional_and_persists_independent_changes(hass):
         result = await hass.config_entries.flow.async_configure(
             result["flow_id"], {"next_step_id": "history_settings"}
         )
-        assert result["data_schema"]({}) == {CONF_HISTORY_ENABLED: False}
+        assert result["data_schema"]({}) == {
+            CONF_HISTORY_ENABLED: False,
+            "short_term_enabled": False,
+        }
         result = await hass.config_entries.flow.async_configure(
             result["flow_id"], {CONF_HISTORY_ENABLED: True}
         )
@@ -407,3 +410,22 @@ async def test_delete_failure_keeps_confirmation_form_and_options(hass):
         )
     assert result["errors"] == {"base": "history_delete_failed"}
     assert entry.options[CONF_HISTORY_ENABLED] is True
+
+
+async def test_short_term_observation_persists_and_can_be_disabled(hass):
+    entry = _entry(hass, enabled=True)
+    result = await _choose(hass, await _menu(hass, entry), "history_settings")
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {CONF_HISTORY_ENABLED: True, "short_term_enabled": True}
+    )
+    result = await _choose(hass, result, "history_done")
+    assert result["data"]["short_term_enabled"] is True
+    hass.config_entries.async_update_entry(entry, options=result["data"])
+    result = await _choose(hass, await _menu(hass, entry), "history_settings")
+    assert result["data_schema"]({})["short_term_enabled"] is True
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {CONF_HISTORY_ENABLED: True, "short_term_enabled": False}
+    )
+    result = await _choose(hass, result, "history_done")
+    assert result["data"]["short_term_enabled"] is False
+    assert result["data"]["roofs"] == entry.options["roofs"]

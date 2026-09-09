@@ -16,13 +16,17 @@ from zoneinfo import ZoneInfo
 from .calculations import calibrated_energy, forecast_basis
 from .measurements import SourceConfig
 from .models import ForecastCalibrationBasis, ForecastResult, TotalForecastInterval
+from .short_term import build_trial, validate_trial
 
-type Horizon = Literal["daily_previous_18", "daily_same_06", "hourly_1h", "hourly_3h"]
+type Horizon = Literal[
+    "daily_previous_18", "daily_same_06", "hourly_1h", "hourly_3h", "daily_remaining_12"
+]
 HORIZONS: tuple[Horizon, ...] = (
     "daily_previous_18",
     "daily_same_06",
     "hourly_1h",
     "hourly_3h",
+    "daily_remaining_12",
 )
 MODEL_VERSION = "1"
 MAX_RECORDS = 6000
@@ -242,6 +246,7 @@ class ArchiveRecord:
     candidate_factor: float | None = None
     candidate_id: str | None = None
     candidate_energy_kwh: float | None = None
+    short_term: dict[str, Any] | None = None
 
     @property
     def config_fingerprint(self) -> str:
@@ -279,6 +284,7 @@ class ArchiveRecord:
             "candidate_factor": self.candidate_factor,
             "candidate_id": self.candidate_id,
             "candidate_energy_kwh": self.candidate_energy_kwh,
+            "short_term": self.short_term,
             "quality_flags": list(self.quality_flags),
             "comparison": self.comparison.to_dict() if self.comparison else None,
             "assessment": self.assessment.to_dict() if self.assessment else None,
@@ -347,6 +353,8 @@ class HistoryArchive:
         applied_candidate_id: str | None = None,
         trial_factor: float | None = None,
         trial_candidate_id: str | None = None,
+        short_term_enabled: bool = False,
+        excluded_dates: set[date] | None = None,
     ) -> bool:
         """Nur vorab definierte und rechtzeitig beobachtete Stände auswählen."""
         fetched_at, observed_at = _utc(fetched_at), _utc(observed_at)
@@ -387,21 +395,39 @@ class HistoryArchive:
         intervals = tuple(
             sorted(forecast.total_intervals, key=lambda item: _utc(item.start))
         )
+        excluded_dates = excluded_dates or set()
         for offset in (0, 1):
             day = forecast.local_date + timedelta(days=offset)
             start, end = _day_bounds(day, self.timezone)
-            energy, flags = _forecast_window(intervals, start, end)
-            if energy is None:
-                continue
-            for horizon, cutoff in (
+            checkpoints = [
                 (
                     "daily_previous_18",
                     datetime.combine(day - timedelta(days=1), time(18), self.timezone),
                 ),
                 ("daily_same_06", datetime.combine(day, time(6), self.timezone)),
-            ):
+            ]
+            if short_term_enabled:
+                checkpoints.append(
+                    (
+                        "daily_remaining_12",
+                        datetime.combine(day, time(12), self.timezone),
+                    )
+                )
+            for horizon, cutoff in checkpoints:
+                window_start = (
+                    _utc(cutoff) if horizon == "daily_remaining_12" else start
+                )
+                window_energy, window_flags = _forecast_window(
+                    intervals, window_start, end
+                )
+                if window_energy is None:
+                    continue
                 existing = None
-                if comparison and day.isoformat() in comparison:
+                if (
+                    horizon != "daily_remaining_12"
+                    and comparison
+                    and day.isoformat() in comparison
+                ):
                     try:
                         candidate = ComparisonForecast.from_dict(
                             comparison[day.isoformat()]
@@ -412,17 +438,17 @@ class HistoryArchive:
                         pass
                 changed |= self._capture_record(
                     horizon,
-                    start,
+                    window_start,
                     end,
                     day,
                     _utc(cutoff),
-                    2 * HOUR,
+                    HOUR if horizon == "daily_remaining_12" else 2 * HOUR,
                     fetched_at,
                     observed_at,
                     configuration_id,
                     sources,
-                    energy,
-                    flags,
+                    window_energy,
+                    window_flags,
                     existing,
                     forecast,
                     inverter_max_power_kw,
@@ -430,6 +456,8 @@ class HistoryArchive:
                     applied_candidate_id,
                     trial_factor,
                     trial_candidate_id,
+                    short_term_enabled,
+                    excluded_dates,
                 )
         for interval in intervals:
             start, end = _utc(interval.start), _utc(interval.end)
@@ -464,6 +492,8 @@ class HistoryArchive:
                     applied_candidate_id,
                     trial_factor,
                     trial_candidate_id,
+                    short_term_enabled,
+                    excluded_dates,
                 )
         return changed
 
@@ -488,6 +518,8 @@ class HistoryArchive:
         applied_candidate_id: str | None,
         trial_factor: float | None,
         trial_candidate_id: str | None,
+        short_term_enabled: bool,
+        excluded_dates: set[date],
     ) -> bool:
         if not cutoff - max_age <= fetched_at <= observed_at <= cutoff:
             return False
@@ -531,6 +563,17 @@ class HistoryArchive:
             candidate_id=trial_candidate_id if candidate is not None else None,
             candidate_energy_kwh=candidate,
         )
+        if short_term_enabled and horizon in (
+            "hourly_1h",
+            "hourly_3h",
+            "daily_remaining_12",
+        ):
+            record = replace(
+                record,
+                short_term=build_trial(
+                    tuple(self.records.values()), record, excluded_dates
+                ),
+            )
         if previous is not None and fetched_at == previous.fetched_at:
             # Ein lokaler Faktorwechsel benötigt keinen neuen Wetterabruf. Derselbe
             # Stand darf nur vor seinem Stichtag neue Kalibrierfelder erhalten.
@@ -548,6 +591,7 @@ class HistoryArchive:
                     "candidate_factor",
                     "candidate_id",
                     "candidate_energy_kwh",
+                    "short_term",
                 )
             ):
                 return False
@@ -562,6 +606,7 @@ class HistoryArchive:
                 candidate_factor=record.candidate_factor,
                 candidate_id=record.candidate_id,
                 candidate_energy_kwh=record.candidate_energy_kwh,
+                short_term=record.short_term,
             )
         self.records[record_id] = record
         return True
@@ -711,6 +756,7 @@ class HistoryArchive:
                     ),
                     assessment=None,
                     assessment_revisions=(),
+                    short_term=None,
                     deleted_sources=tuple(sorted({*record.deleted_sources, source_id})),
                 )
                 changed = True
@@ -1240,7 +1286,15 @@ def _record_from_dict(data: Mapping[str, Any], timezone: ZoneInfo) -> ArchiveRec
     start, end = _timestamp(data["start"]), _timestamp(data["end"])
     target_date = date.fromisoformat(data["target_date"])
     cutoff = _timestamp(data["cutoff"])
-    if horizon.startswith("daily"):
+    if horizon == "daily_remaining_12":
+        expected_cutoff = datetime.combine(target_date, time(12), timezone)
+        if (
+            start != _utc(expected_cutoff)
+            or end != _day_bounds(target_date, timezone)[1]
+        ):
+            raise ValueError("Ein Resttagsziel hat ungültige lokale Grenzen")
+        max_age = HOUR
+    elif horizon.startswith("daily"):
         if (start, end) != _day_bounds(target_date, timezone):
             raise ValueError("Ein Tagesziel hat ungültige lokale Grenzen")
         expected_cutoff = (
@@ -1290,7 +1344,8 @@ def _record_from_dict(data: Mapping[str, Any], timezone: ZoneInfo) -> ArchiveRec
         else None
     )
     if comparison and (
-        horizon.startswith("hourly") or comparison.observed_at != observed
+        horizon not in ("daily_previous_18", "daily_same_06")
+        or comparison.observed_at != observed
     ):
         raise ValueError("Fremdvergleich gehört nicht zum archivierten Stichtag")
     assessment = (
@@ -1347,4 +1402,5 @@ def _record_from_dict(data: Mapping[str, Any], timezone: ZoneInfo) -> ArchiveRec
         revisions,
         deleted_sources,
         **calibration,
+        short_term=validate_trial(data.get("short_term")),
     )

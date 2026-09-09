@@ -639,3 +639,26 @@ async def test_measurement_deletion_after_unload_removes_both_local_stores(hass)
     assert all(
         not record["measurement_sources"] for record in stored["archive"]["records"]
     )
+
+
+async def test_short_term_observation_is_local_and_ends_on_unload(hass, aioclient_mock):
+    coordinator = _Coordinator()
+    entry = _entry(hass)
+    hass.config_entries.async_update_entry(
+        entry, options={**entry.options, "short_term_enabled": True}
+    )
+    manager = ArchiveManager(hass, entry, coordinator, None)
+    try:
+        await manager.async_start()
+        assert any(
+            record.short_term is not None
+            for record in manager._archive.records.values()
+        )
+        report = manager.snapshot()["short_term"]
+        assert report["enabled"] is True
+        assert report["applied"] is False
+        assert all(group["count"] == 0 for group in report["horizons"].values())
+        assert aioclient_mock.call_count == 0
+    finally:
+        await manager.async_stop()
+    assert coordinator.listeners == []

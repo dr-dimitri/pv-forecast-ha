@@ -149,7 +149,11 @@
         "title": "Archivierung ausdrücklich aktivieren",
         "description": "Gespeichert werden tatsächlich rechtzeitig beobachtete Prognosen: Tageswerte bis 18 Uhr am Vortag und 06 Uhr am Zieltag sowie Stundenintervalle mit einer oder drei Stunden Vorlauf. Fehlende Vergangenheit wird nicht nachträglich ergänzt.\n\n**Lokale Speichergrenzen:** Stundenstände 90 Tage, Tagesbewertungen 365 Tage; höchstens 6.000 Zieldatensätze, je drei frühere Bewertungsrevisionen und insgesamt 32 MiB. Erreichte Grenzen werden im Bericht kenntlich gemacht. Reguläre Schreibungen werden auf höchstens 288 pro Tag gebündelt.\n\nPausieren beendet neue Erfassung und Bewertung. Bereits gespeicherte Daten bleiben lesbar und exportierbar. Die Prognose funktioniert unabhängig vom Archiv; es entstehen keine zusätzlichen Geräte- oder Wetterabrufe.",
         "data": {
-          "history_enabled": "Prognosen und nachvollziehbare Bewertungen lokal archivieren"
+          "history_enabled": "Prognosen und nachvollziehbare Bewertungen lokal archivieren",
+          "short_term_enabled": "Kurzfristige Korrektur beobachten"
+        },
+        "data_description": {
+          "short_term_enabled": "Optionaler Zukunftsvergleich im aktivierten Archiv. Produktive Prognosen bleiben unverändert. Benötigt bestätigte AC-Energiequellen und genügend gültige Stundenmessungen."
         }
       },
       "comparison_forecast": {
@@ -394,7 +398,11 @@
         "title": "Archivierung ausdrücklich aktivieren",
         "description": "Gespeichert werden tatsächlich rechtzeitig beobachtete Prognosen: Tageswerte bis 18 Uhr am Vortag und 06 Uhr am Zieltag sowie Stundenintervalle mit einer oder drei Stunden Vorlauf. Fehlende Vergangenheit wird nicht nachträglich ergänzt.\n\n**Lokale Speichergrenzen:** Stundenstände 90 Tage, Tagesbewertungen 365 Tage; höchstens 6.000 Zieldatensätze, je drei frühere Bewertungsrevisionen und insgesamt 32 MiB. Erreichte Grenzen werden im Bericht kenntlich gemacht. Reguläre Schreibungen werden auf höchstens 288 pro Tag gebündelt.\n\nPausieren beendet neue Erfassung und Bewertung. Bereits gespeicherte Daten bleiben lesbar und exportierbar. Die Prognose funktioniert unabhängig vom Archiv; es entstehen keine zusätzlichen Geräte- oder Wetterabrufe.",
         "data": {
-          "history_enabled": "Prognosen und nachvollziehbare Bewertungen lokal archivieren"
+          "history_enabled": "Prognosen und nachvollziehbare Bewertungen lokal archivieren",
+          "short_term_enabled": "Kurzfristige Korrektur beobachten"
+        },
+        "data_description": {
+          "short_term_enabled": "Optionaler Zukunftsvergleich im aktivierten Archiv. Produktive Prognosen bleiben unverändert. Benötigt bestätigte AC-Energiequellen und genügend gültige Stundenmessungen."
         }
       },
       "comparison_forecast": {

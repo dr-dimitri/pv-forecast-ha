@@ -225,3 +225,12 @@ Kalibrierungsbasis bei gruppierten Anlagen um die ursprüngliche DC-Aufteilung
 und die damaligen AC-Grenzen. Der eigene Basisvertrag hat dann Version 2.
 Damit gilt jeder geprüfte Faktor weiterhin vor beiden Begrenzungsstufen.
 Bestehende Basen ohne Gruppen bleiben unverändert lesbar.
+
+
+### Archivversion 4: optionaler kurzfristiger Beobachtungsversuch
+
+Seit dem Folgeschritt zu #30 ergänzt der Archiv-Store rechtzeitig eingefrorene
+Korrekturkandidaten und optionale Resttagsstände ab 12 Uhr. Die Versionen 1 bis 3
+werden verlustfrei gelesen; ältere Datensätze erhalten keine erfundenen
+Versuchsbelege. Config-Entry-Schema 1.1 und Mess-/Lern-Store bleiben unverändert.
+Details: [Kurzfristiger Vergleich](kurzfristiger-vergleich.md).
