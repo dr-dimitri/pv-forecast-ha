@@ -256,34 +256,21 @@ class MeasurementFlowMixin:
         """Optionale Quellen und gezielte Verwaltungsaktionen anzeigen."""
 
         sources = self._measurement_sources()
-        menu = {"add_measurement": "Messquelle hinzufügen"}
+        menu = ["add_measurement"]
         if sources:
-            menu.update(
-                {
-                    "edit_measurement": "Messquelle bearbeiten",
-                    "remove_measurement": "Messquelle und ihre Daten entfernen",
-                }
-            )
+            menu.extend(["edit_measurement", "remove_measurement"])
             if self._measurement_entry() is not None:
-                menu["delete_measurement_data"] = (
-                    "Gespeicherte Daten einer Quelle löschen"
-                )
-        menu["measurements_done"] = "Fertig"
+                menu.append("delete_measurement_data")
+        menu.append("measurements_done")
         automatic = await self._measurement_text("measurement_automatic_energy")
-        summary = (
-            "\n".join(
-                [
-                    f"- **{source['scope']}**: {source['entity_id']} · " f"{kind_label}"
-                    for source in sources
-                    for kind_label in (
-                        (
-                            automatic
-                            if PENDING_HELPER in source
-                            else _KIND_LABELS[source["kind"]]
-                        ),
-                    )
-                ]
+        lines = []
+        for source in sources:
+            kind = (
+                automatic if PENDING_HELPER in source else _KIND_LABELS[source["kind"]]
             )
+            lines.append(f"- **{source['scope']}**: {source['entity_id']} · {kind}")
+        summary = (
+            "\n".join(lines)
             or "Keine Messquelle gewählt. Die Prognose ist vollständig nutzbar."
         )
         return self.async_show_menu(
