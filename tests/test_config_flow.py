@@ -967,7 +967,7 @@ async def test_duplicate_setup_is_aborted(hass) -> None:
 
 @pytest.mark.asyncio
 async def test_options_flow_menu_offers_removal_of_last_roof(hass) -> None:
-    """Auch die letzte verbliebene Dachfläche lässt sich entfernen."""
+    """Der Löschdialog bleibt auch bei nur einer Dachfläche erreichbar."""
 
     entry = MockConfigEntry(
         domain=DOMAIN,
@@ -1316,8 +1316,8 @@ async def test_options_flow_removing_roof_requires_confirmation(hass) -> None:
 
 
 @pytest.mark.asyncio
-async def test_options_flow_removing_last_roof_empties_the_list(hass) -> None:
-    """Auch die letzte Dachfläche lässt sich nach Bestätigung entfernen."""
+async def test_options_flow_preserves_last_roof_and_explains_recovery(hass) -> None:
+    """Die letzte Dachfläche bleibt erhalten; der Dialog erlaubt die Rückkehr."""
 
     entry = MockConfigEntry(
         domain=DOMAIN,
@@ -1338,8 +1338,15 @@ async def test_options_flow_removing_last_roof_empties_the_list(hass) -> None:
     result = await hass.config_entries.options.async_configure(
         result["flow_id"], {CONF_CONFIRM_REMOVE: True}
     )
-    assert result["type"] is FlowResultType.CREATE_ENTRY
-    assert result["data"][CONF_ROOFS] == []
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "confirm_remove_roof"
+    assert result["errors"] == {"base": "last_roof_required"}
+    assert entry.options[CONF_ROOFS] == [persisted_roof("only")]
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {CONF_CONFIRM_REMOVE: False}
+    )
+    assert result["type"] is FlowResultType.MENU
+    assert result["step_id"] == "init"
 
 
 @pytest.mark.asyncio

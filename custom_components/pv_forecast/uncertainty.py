@@ -86,7 +86,11 @@ def _assessment_at(record: ArchiveRecord, before: datetime) -> Assessment | None
     if not known:
         return None
     latest = max(known, key=lambda item: item.assessed_at)
-    if not latest.valid or not _finite_energy(latest.actual_energy_kwh):
+    if (
+        not latest.valid
+        or latest.has_derived_gap
+        or not _finite_energy(latest.actual_energy_kwh)
+    ):
         return None
     return latest
 

@@ -194,6 +194,14 @@ class Assessment:
     reasons: tuple[str, ...]
     sources: tuple[SourceAssessment, ...]
 
+    @property
+    def has_derived_gap(self) -> bool:
+        """Auch alte Messkopien können eine unbelegte Integralmenge dokumentieren."""
+        return any(
+            {"derived_energy", "gap"} <= set(source.quality_flags)
+            for source in self.sources
+        )
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "assessed_at": self.assessed_at.isoformat(),
@@ -685,6 +693,11 @@ class HistoryArchive:
                         delta["segment_id"] for delta in actual["deltas"]
                     }
                     flags = set(actual["quality_flags"]) - {"stale", "no_valid_reading"}
+                    if "derived_measurement_gap" in flags or any(
+                        {"derived_energy", "gap"} <= set(delta["quality_flags"])
+                        for delta in actual["deltas"]
+                    ):
+                        reasons.add("derived_measurement_gap")
                     if actual["energy_complete"] is not True:
                         reasons.add("measurement_incomplete")
                     if not selected_segments:
@@ -775,6 +788,32 @@ class HistoryArchive:
             record, assessment=assessment, assessment_revisions=revisions
         )
         return True
+
+    def invalidate_derived_gaps(self, now: datetime) -> bool:
+        """Früher irrtümlich bestätigte Integral-Lücken vor dem Lernen korrigieren."""
+        now = _utc(now)
+        changed = False
+        for record_id, record in tuple(self.records.items()):
+            previous = record.assessment
+            if previous is None or not previous.valid or not previous.has_derived_gap:
+                continue
+            self.records[record_id] = replace(
+                record,
+                assessment=replace(
+                    previous,
+                    assessed_at=max(now, previous.assessed_at),
+                    actual_energy_kwh=None,
+                    valid=False,
+                    reasons=tuple(
+                        sorted(set(previous.reasons) | {"derived_measurement_gap"})
+                    ),
+                ),
+                assessment_revisions=(*record.assessment_revisions, previous)[
+                    -MAX_REVISIONS:
+                ],
+            )
+            changed = True
+        return changed
 
     def delete_measurement_source(self, source_id: str) -> bool:
         """Messkopien samt Revisionen löschen und ihre Wiedererfassung blockieren."""
