@@ -127,13 +127,13 @@ def plan_solar_window(
         previous_energy = _window_energy(
             intervals, previous_start, previous_start + duration
         )
-        if (
-            previous_energy is not None
-            and previous_energy > 0
-            and best_energy - previous_energy <= max(0.1, previous_energy * 0.05)
+        if previous_energy is not None and best_energy - previous_energy <= max(
+            0.1, previous_energy * 0.05
         ):
             result["hysteresis_applied"] = best_start != previous_start
             best_start, best_energy = previous_start, previous_energy
+    if best_energy <= 0:
+        return unavailable("no_solar_energy")
     return {
         **result,
         "status": "available",

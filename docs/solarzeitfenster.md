@@ -45,7 +45,10 @@ Ein Folgeaufruf kann `previous_start` aus der vorigen Antwort mitgeben.
 Ein noch zulässiges Fenster wird erst bei **mehr als 5 % und mehr als
 0,1 kWh** Vorteil ersetzt; andernfalls steht `hysteresis_applied: true` in
 der Antwort, wenn das bisherige Fenster gegenüber dem neuen Maximum erhalten
-bleibt. Ist das bisherige Fenster gestartet oder beendet, liefert die Aktion
+bleibt. Die absolute 0,1-kWh-Schwelle gilt auch bei einem bisherigen
+Nullfenster. Bleibt dadurch ein Fenster ohne prognostizierte Energie erhalten,
+lautet die Antwort `unavailable` mit `no_solar_energy`; sie enthält keine neue
+Startempfehlung. Ist das bisherige Fenster gestartet oder beendet, liefert die Aktion
 `started` beziehungsweise `completed` mit den ursprünglichen Grenzen und
 ohne neue Energieempfehlung. Die Karte führt diese Auswahl lokal weiter;
 eigene Automationen müssen den bisherigen Start bei Bedarf selbst bewahren.
@@ -119,6 +122,6 @@ unvollständig. Die verbleibende Basisprognose bleibt getrennt zugänglich.
 
 Es wird kein kurzfristiger Korrekturfaktor angewendet (`correction: off`).
 Die Addition bereits bekannter Messenergie belegt keine bessere Vorhersage.
-Ein gesonderter Zukunftsvergleich für kurzfristige Korrekturen aus #30 bleibt
-offen. PV-Erzeugung ist kein verfügbarer Überschuss und kein Nachweis einer
+Der [Beobachtungsversuch zu #30](kurzfristiger-vergleich.md) speichert
+rechtzeitige Zukunftskandidaten; seine reale Güteprüfung bleibt offen. PV-Erzeugung ist kein verfügbarer Überschuss und kein Nachweis einer
 Einsparung ohne passende Verbrauchs-, Speicher- und Tarifdaten.
