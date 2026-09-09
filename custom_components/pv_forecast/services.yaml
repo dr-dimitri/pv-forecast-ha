@@ -5,3 +5,20 @@ get_forecast:
       selector:
         config_entry:
           integration: pv_forecast
+get_measurements:
+  fields:
+    config_entry_id:
+      required: true
+      selector:
+        config_entry:
+          integration: pv_forecast
+    start:
+      required: true
+      example: "2026-09-09T00:00:00+00:00"
+      selector:
+        text:
+    end:
+      required: true
+      example: "2026-09-10T00:00:00+00:00"
+      selector:
+        text:

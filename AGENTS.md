@@ -81,6 +81,36 @@ des nativen Frontends bei Mehrfachzuordnung (#52) und DST-/Teilstundenanzeige (#
 werden dokumentiert; die interne UTC-Zeitreihe bleibt maßgeblich. Diese in #1
 konkretisierte Ausnahme erweitert ausschließlich den nativen Plattformumfang.
 
+## Optionale Messquellen aus Issue #26
+
+Bestehende HA-Sensoren für bestätigte AC-PV-Erzeugung können optional über die UI
+zugeordnet werden: Energie in Wh/kWh als fortlaufender oder täglicher Zähler,
+optional Leistung in W/kW ohne eigene Integration zu Energie. Messgrenze und
+Überschneidungsfreiheit werden ausdrücklich bestätigt. Netzexport, Verbrauch,
+Batterieentladung und ungeklärte Hybrid-Messgrenzen sind keine PV-Erzeugung.
+Abgeleitete Energie aus bestehenden Integral-Helfern wird gekennzeichnet.
+
+Ein gemeinsamer lokaler Messpfad normalisiert UTC-Zeitpunkte und bildet gültige
+Differenzen je Quelle vor der Aggregation. Lücken sind keine Nullwerte;
+Zählerdifferenzen über Lücken werden nicht auf Stunden verteilt. Fehlender
+Tagesabschluss bleibt unvollständig. Quellenwechsel beginnt neue Segmente,
+Entity-Umbenennung mit gleicher Registry-Identität bewahrt den Bezug.
+`measurements.py` bleibt unabhängig von HA; `measurement_runtime.py` erfasst
+lokale HA-Ereignisse und verwaltet einen getrennt versionierten Store.
+Dieser hält zunächst maximal sieben Tage, 20.000 Messpunkte und höchstens
+20.000 daraus abgeleitete Zählerdifferenzen je Quelle;
+Langzeitarchivierung gehört zu #27. Es gibt keinen Recorder-Import und keine
+zusätzlichen Geräte- oder Wetterabrufe. Listener enden beim Entladen.
+Daten sind gezielt über die Optionen löschbar und werden bei Entfernung der
+Integration gelöscht. Das Config-Entry-Schema bleibt 1.1.
+
+Die rein lesende Aktion `pv_forecast.get_measurements` liefert für eine explizite
+Anlage und ein UTC-Fenster Einzelquellen, beobachtete Energie, Abdeckung und
+Qualitätsmarkierungen. Leserechte der zugeordneten Sensoren werden mitgeprüft.
+Es entstehen keine zusätzlichen Sensoren oder Messlisten in Sensorattributen.
+Der Nutzertest mit fünf realen PV-Anwendern ist eine separate, noch offene
+menschliche Abnahme und wird durch Offline-Tests nicht ersetzt.
+
 ## Konfiguration
 
 Die Einrichtung erfolgt ausschließlich über einen Config Flow; YAML ist nicht

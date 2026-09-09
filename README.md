@@ -20,6 +20,7 @@ Home-Assistant-Oberfläche. YAML wird nicht unterstützt.
   und Beginn der stärksten Prognosestunde heute
 - lesende Aktion für die gemeinsame Stundenprognose in Automationen
 - native Solarprognose im Home-Assistant-Energie-Dashboard
+- optionale lokale Erfassung bestehender PV-Ertragszähler mit Messdatenprüfung
 - mehrere Dachflächen mit eigener Leistung, Ausrichtung, Neigung und eigenem
   Systemwirkungsgrad
 - Übernahme des in Home Assistant hinterlegten Standorts oder einmalige
@@ -109,6 +110,65 @@ gezielt einzelne Aktionen an: eine Dachfläche hinzufügen, eine bestehende
 bearbeiten (ihre technische ID bleibt dabei erhalten), eine Dachfläche nach
 ausdrücklicher Bestätigung entfernen oder das Wechselrichterlimit ändern.
 Jede Aktion wirkt für sich allein, ohne die übrigen Dachflächen anzufassen.
+
+## Echte PV-Erzeugung zuordnen (optional)
+
+Im Abschlussdialog der Einrichtung oder unter **Konfigurieren → Messquellen**
+kannst du bereits vorhandene HA-Sensoren auswählen. Die Prognose funktioniert
+auch ohne Messquelle. Pro Quelle wählst du die Messart, beschreibst die gemessene
+Anlage beziehungsweise ihren Teil und prüfst die Vorschau mit Einheit und
+letztem gültigem Messwert.
+
+Unterstützt werden fortlaufende oder täglich zurückgesetzte **Energiezähler in
+Wh/kWh** sowie optional **Leistung in W/kW**. Die Quelle muss tatsächlich
+AC-PV-Erzeugung messen: Netzexport, Hausverbrauch und Batterieentladung sind
+andere Größen. Bei Hybridwechselrichtern muss die Messgrenze eindeutig sein.
+Namen und Einheiten allein können das nicht belegen. Mehrere Energiequellen
+dürfen nur voneinander getrennte Wechselrichter erfassen; einen Gesamtzähler
+und seine Teilzähler darfst du nicht gemeinsam auswählen. Diese Angaben werden
+vor dem Speichern ausdrücklich bestätigt.
+
+Ein bestehender, passend eingerichteter HA-Integral-Helfer kann Energie liefern;
+kennzeichne ihn als abgeleitet. Seine Abtastrate und Lückenbehandlung bleiben
+relevant. Die Integration wandelt selbst keine Leistung in Energie um und
+verteilt einen Anlagenzähler nicht künstlich auf Dachflächen.
+
+Die Erfassung beginnt ab der Zuordnung und liest ausschließlich lokale
+HA-Ereignisse. Sie normalisiert nach kWh beziehungsweise kW und UTC. Es gibt
+keine Geräteabfragen, keinen Recorder-Import und keine zusätzlichen
+Wetterabrufe. Eine reguläre Wiederholung desselben Zählerstands ist ein gültiger
+Nullertrag; `unknown`, `unavailable` und ausbleibende Meldungen sind keine Null.
+Das maximal erwartete Meldeintervall wird je Quelle festgelegt (Standard
+60 Minuten). Eine großzügige Sprungprüfung mit dem Doppelten der installierten
+Anlagenleistung markiert auffällige Änderungen, ohne eine Messgenauigkeit zu
+behaupten.
+
+Jede Quelle wird vor der Summierung einzeln ausgewertet. Ein Zählerrückgang
+ist nicht automatisch ein Reset. Bei Tageszählern ohne belegten Abschluss bleibt
+der Vortag unvollständig. Über eine Lücke kann ein fortlaufender Zähler eine
+Gesamtmenge belegen, aber keine beliebige stündliche Verteilung. Abdeckung und
+Qualitätsmarkierungen bleiben deshalb getrennt von der beobachteten Menge.
+
+Eine Entity-Umbenennung bleibt über ihre Registry-ID verbunden. Der Austausch
+einer Quelle oder ihrer Messgrenze beginnt ein neues Datensegment. Bei Entities
+ohne Registry-Identität ist ein Gerätewechsel unter identischem Entitynamen
+nicht automatisch erkennbar; bestätige einen solchen Wechsel über die Optionen.
+
+Messkopien bleiben lokal, unabhängig versioniert und auf sieben Tage sowie
+20.000 Messpunkte mit höchstens 20.000 zugehörigen Zählerdifferenzen je Quelle
+begrenzt; häufige Meldungen können das verfügbare
+Zeitfenster verkürzen. Über die Quellenoptionen lassen sich ihre Daten gezielt
+löschen. Das entfernt nur die Kopie dieser Integration, weder den Originalsensor
+noch dessen HA-Historie. Beim Entfernen der Anlage wird ihr Messdatenspeicher
+mit entfernt. Langzeitarchiv und Lernen folgen separat.
+
+Die lesende Aktion `pv_forecast.get_measurements` liefert die vorhandenen Daten
+für eine explizite Anlage und ein Zeitfenster. `start` und `end` verlangen
+ISO-8601-Zeitpunkte mit Offset oder `Z`, beispielsweise
+`2026-09-09T00:00:00Z` und `2026-09-10T00:00:00Z`. Die Antwort enthält
+Einzelquellen, beobachtete Energiemengen, Abdeckung und Qualitätsmarkierungen;
+die Leserechte der ursprünglichen Sensoren gelten auch hier. Der genaue
+[Datenvertrag](docs/messdaten.md) erläutert die Grenzen für spätere Vergleiche.
 
 ## Sensoren
 

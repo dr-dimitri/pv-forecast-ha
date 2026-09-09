@@ -64,6 +64,7 @@ from .geocoding import (
     GeocodingDataError,
     NominatimClient,
 )
+from .measurement_configuration import MeasurementFlowMixin
 from .runtime import async_get_open_meteo_client
 
 _LOGGER = logging.getLogger(__name__)
@@ -84,6 +85,7 @@ _SUMMARY_MENU_LABELS: dict[str, str] = {
     "edit_location": "Standort ändern",
     "edit_roofs": "Dachflächen ändern",
     "edit_system": "Wechselrichterleistung ändern",
+    "measurements": "Echte PV-Messquellen zuordnen (optional)",
 }
 
 
@@ -326,7 +328,7 @@ def _ensure_unique_roof_name(
         raise DuplicateRoofNameError("Dachnamen müssen eindeutig sein")
 
 
-class PvForecastConfigFlow(ConfigFlow, domain=DOMAIN):
+class PvForecastConfigFlow(MeasurementFlowMixin, ConfigFlow, domain=DOMAIN):
     """Config Flow für genau eine PV-Prognose-Konfiguration."""
 
     VERSION = 1
@@ -339,6 +341,23 @@ class PvForecastConfigFlow(ConfigFlow, domain=DOMAIN):
         self._roofs: list[dict[str, Any]] = []
         self._roof_index = 0
         self._options: dict[str, Any] = {}
+
+    def _measurement_options(self) -> dict[str, Any]:
+        """Messquellen zusammen mit den übrigen Einrichtungseingaben halten."""
+
+        return self._options
+
+    def _measurement_timezone(self) -> str:
+        """Den bereits bestätigten Anlagenstandort für Messvorschauen verwenden."""
+
+        return str(self._location[CONF_TIME_ZONE])
+
+    async def async_step_measurements_done(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Nach der optionalen Zuordnung zum Abschlussdialog zurückkehren."""
+
+        return await self.async_step_summary()
 
     @staticmethod
     @callback
@@ -545,7 +564,9 @@ class PvForecastConfigFlow(ConfigFlow, domain=DOMAIN):
                     )
                     errors["base"] = "unknown"
                 else:
-                    options: dict[str, Any] = {CONF_ROOFS: self._roofs}
+                    options: dict[str, Any] = dict(self._options)
+                    options[CONF_ROOFS] = self._roofs
+                    options.pop(CONF_INVERTER_MAX_POWER_KW, None)
                     if inverter_limit is not None:
                         options[CONF_INVERTER_MAX_POWER_KW] = inverter_limit
                     self._options = options
@@ -614,7 +635,7 @@ class PvForecastConfigFlow(ConfigFlow, domain=DOMAIN):
         return await self.async_step_system()
 
 
-class PvForecastOptionsFlow(OptionsFlow):
+class PvForecastOptionsFlow(MeasurementFlowMixin, OptionsFlow):
     """Menübasierter Options Flow zum gezielten Bearbeiten einzelner Dachflächen.
 
     Jede Aktion (hinzufügen, bearbeiten, entfernen, Wechselrichterlimit) wirkt
@@ -626,6 +647,26 @@ class PvForecastOptionsFlow(OptionsFlow):
         """Options-Flow-Zwischenzustand initialisieren."""
 
         self._selected_roof_id: str | None = None
+        self._measurement_draft: dict[str, Any] | None = None
+
+    def _measurement_options(self) -> dict[str, Any]:
+        """Alle unabhängigen Optionen beim Bearbeiten der Quellen bewahren."""
+
+        if self._measurement_draft is None:
+            self._measurement_draft = dict(self.config_entry.options)
+        return self._measurement_draft
+
+    def _measurement_entry(self) -> ConfigEntry:
+        """Vorhandenen Eintrag für Vorschau und gezielte Datenlöschung liefern."""
+
+        return self.config_entry
+
+    async def async_step_measurements_done(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Die bestätigten Messquellen speichern und den Options Flow abschließen."""
+
+        return self.async_create_entry(title="", data=self._measurement_options())
 
     def _roofs(self) -> list[dict[str, Any]]:
         """Aktuell gespeicherte Dachflächen als veränderbare Kopien lesen."""
@@ -637,7 +678,9 @@ class PvForecastOptionsFlow(OptionsFlow):
     ) -> ConfigFlowResult:
         """Aktualisierte Dachflächen und Wechselrichterlimit speichern."""
 
-        options: dict[str, Any] = {CONF_ROOFS: roofs}
+        options: dict[str, Any] = dict(self.config_entry.options)
+        options[CONF_ROOFS] = roofs
+        options.pop(CONF_INVERTER_MAX_POWER_KW, None)
         if inverter_limit is not None:
             options[CONF_INVERTER_MAX_POWER_KW] = inverter_limit
         return self.async_create_entry(title="", data=options)
@@ -664,6 +707,7 @@ class PvForecastOptionsFlow(OptionsFlow):
         if roofs:
             menu_options.extend(["edit_roof", "remove_roof"])
         menu_options.append("system")
+        menu_options.append("measurements")
         return self.async_show_menu(
             step_id="init",
             menu_options=menu_options,

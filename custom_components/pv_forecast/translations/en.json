@@ -58,13 +58,75 @@
           "finish": "Einrichtung abschließen",
           "edit_location": "Standort ändern",
           "edit_roofs": "Dachflächen ändern",
-          "edit_system": "Wechselrichterleistung ändern"
+          "edit_system": "Wechselrichterleistung ändern",
+          "measurements": "Echte PV-Messquellen zuordnen (optional)"
         },
         "menu_option_descriptions": {
           "finish": "Speichert die geprüfte Konfiguration und legt die Sensoren an.",
           "edit_location": "Zurück zur Standortauswahl oder Adresseingabe.",
           "edit_roofs": "Zurück zur Erfassung der Dachflächen und ihrer Leistungen.",
           "edit_system": "Zurück zur maximalen AC-Wechselrichterleistung."
+        }
+      },
+      "measurements": {
+        "title": "Echte PV-Messquellen (optional)",
+        "description": "{sources}\n\nOrdne vorhandene Home-Assistant-Sensoren zu. Die Prognose funktioniert auch ohne Messquelle. Energie wird je Quelle ausgewertet; Leistung wird nur gelesen. Eine gemeinsame Gesamtquelle und ihre Teilzähler dürfen nicht gleichzeitig als Energiequellen verwendet werden.",
+        "menu_options": {
+          "add_measurement": "Messquelle hinzufügen",
+          "edit_measurement": "Messquelle bearbeiten",
+          "remove_measurement": "Messquelle und ihre Daten entfernen",
+          "delete_measurement_data": "Gespeicherte Daten einer Quelle löschen",
+          "measurements_done": "Fertig"
+        }
+      },
+      "measurement_details": {
+        "title": "Messquelle auswählen",
+        "description": "Wähle einen vorhandenen Sensor für AC-PV-Erzeugung. Netzexport, Verbrauch und Batterieentladung sind ungeeignet. Bei Hybridwechselrichtern muss die Messgrenze reine PV-Erzeugung ohne Batterieanteil erfassen. Ein vorhandener Integral-Helfer kann Energie liefern; diese Integration berechnet selbst keine Energie aus Leistung.",
+        "data": {
+          "entity_id": "Vorhandener PV-Sensor",
+          "kind": "Messart",
+          "scope": "Welche PV-Anlage oder welcher Wechselrichter wird gemessen?",
+          "derived_energy": "Energie stammt aus einem vorhandenen Integral-Helfer",
+          "max_interval_minutes": "Messwert gilt ohne erneute Meldung höchstens"
+        },
+        "data_description": {
+          "scope": "Zum Beispiel „Gesamtanlage, AC-Ausgang ohne Batterie“ oder „Wechselrichter Garage“. Der Name und die Einheit eines Sensors beweisen seine Messgrenze nicht.",
+          "kind": "Fortlaufende und tägliche Energiezähler benötigen Wh/kWh und total oder total_increasing. Leistung benötigt W/kW und measurement.",
+          "max_interval_minutes": "Danach gilt die Zeitabdeckung als lückenhaft. Ein Summenertrag über eine Lücke wird nicht auf Stunden verteilt.",
+          "derived_energy": "Ein Integral-Helfer wird, soweit erkennbar, automatisch markiert. Seine Ausgangsmessung und Lücken begrenzen die Aussagekraft."
+        }
+      },
+      "confirm_measurement": {
+        "title": "Quelle und Messgrenze prüfen",
+        "description": "**Quelle:** {entity} (`{entity_id}`)\n\n**Einheit:** {unit}\n\n**Messart:** {kind}\n\n**Messgrenze:** {scope}\n\n**Letzter gültiger Wert:** {reading}\n\n**Abgeleitete Energie:** {derived}\n\nEine Änderung der Quelle, Messart oder Messgrenze beginnt ein neues Datensegment. Fehlende Werte bleiben unbekannt.",
+        "data": {
+          "confirmed_pv": "Ich bestätige reine AC-PV-Erzeugung ohne Netzexport, Verbrauch oder Batterieentladung.",
+          "confirmed_disjoint": "Die Energiequellen überschneiden sich nicht: kein Gesamtzähler zusammen mit seinen Teilzählern."
+        }
+      },
+      "edit_measurement": {
+        "title": "Messquelle bearbeiten",
+        "data": {
+          "source_id": "Messquelle"
+        }
+      },
+      "remove_measurement": {
+        "title": "Messquelle entfernen",
+        "data": {
+          "source_id": "Messquelle"
+        }
+      },
+      "delete_measurement_data": {
+        "title": "Lokale Messdaten löschen",
+        "data": {
+          "source_id": "Messquelle"
+        }
+      },
+      "confirm_measurement_delete": {
+        "title": "Gezielte Löschung bestätigen",
+        "description": "**{source}**\n\n{action}\n\nGelöscht wird ausschließlich die Messkopie dieser Integration. Die ursprüngliche HA-Entity und ihre Recorder-Daten bleiben erhalten. Gelöschte Messkopien können nicht wiederhergestellt werden; die Erfassung beginnt ab dem nächsten Messwert neu.",
+        "data": {
+          "confirm_delete": "Messkopie dieser Quelle jetzt endgültig löschen"
         }
       }
     },
@@ -80,7 +142,11 @@
       "invalid_location_source": "Bitte wähle aus, wie der Standort bestimmt werden soll.",
       "invalid_response": "Open-Meteo hat eine ungültige Antwort geliefert.",
       "invalid_roof": "Die Dachkonfiguration ist ungültig.",
-      "unknown": "Ein unerwarteter Fehler ist aufgetreten."
+      "unknown": "Ein unerwarteter Fehler ist aufgetreten.",
+      "invalid_measurement_source": "Wähle einen passenden vorhandenen PV-Sensor und eine verständliche Messgrenze. Das Meldeintervall muss positiv sein.",
+      "invalid_measurement_metadata": "Einheit, Geräteklasse und Zustandsklasse passen nicht zur gewählten Messart. Energie: Wh/kWh, energy, total oder total_increasing. Leistung: W/kW, power, measurement.",
+      "duplicate_measurement_source": "Diese Entity ist bereits zugeordnet. Wähle jede Messquelle nur einmal.",
+      "measurement_confirmation_required": "Bestätige die reine AC-PV-Erzeugung und die überschneidungsfreien Energiequellen."
     },
     "abort": {
       "already_configured": "Eine PV-Ertragsprognose ist bereits eingerichtet."
@@ -95,13 +161,15 @@
           "add_roof": "Dachfläche hinzufügen",
           "edit_roof": "Dachfläche bearbeiten",
           "remove_roof": "Dachfläche entfernen",
-          "system": "Wechselrichterleistung ändern"
+          "system": "Wechselrichterleistung ändern",
+          "measurements": "Echte PV-Messquellen zuordnen (optional)"
         },
         "menu_option_descriptions": {
           "add_roof": "Erfasst eine zusätzliche Dachfläche, ohne die vorhandenen zu verändern.",
           "edit_roof": "Bearbeitet eine einzelne bestehende Dachfläche gezielt.",
           "remove_roof": "Entfernt eine Dachfläche nach ausdrücklicher Bestätigung.",
-          "system": "Ändert die maximale AC-Wechselrichterleistung der Gesamtanlage."
+          "system": "Ändert die maximale AC-Wechselrichterleistung der Gesamtanlage.",
+          "measurements": "Vorhandene PV-Zähler zuordnen und lokale Messkopien verwalten."
         }
       },
       "add_roof": {
@@ -162,12 +230,77 @@
         "data_description": {
           "inverter_max_power_kw": "Leer lassen, um die Begrenzung zu entfernen."
         }
+      },
+      "measurements": {
+        "title": "Echte PV-Messquellen (optional)",
+        "description": "{sources}\n\nOrdne vorhandene Home-Assistant-Sensoren zu. Die Prognose funktioniert auch ohne Messquelle. Energie wird je Quelle ausgewertet; Leistung wird nur gelesen. Eine gemeinsame Gesamtquelle und ihre Teilzähler dürfen nicht gleichzeitig als Energiequellen verwendet werden.",
+        "menu_options": {
+          "add_measurement": "Messquelle hinzufügen",
+          "edit_measurement": "Messquelle bearbeiten",
+          "remove_measurement": "Messquelle und ihre Daten entfernen",
+          "delete_measurement_data": "Gespeicherte Daten einer Quelle löschen",
+          "measurements_done": "Fertig"
+        }
+      },
+      "measurement_details": {
+        "title": "Messquelle auswählen",
+        "description": "Wähle einen vorhandenen Sensor für AC-PV-Erzeugung. Netzexport, Verbrauch und Batterieentladung sind ungeeignet. Bei Hybridwechselrichtern muss die Messgrenze reine PV-Erzeugung ohne Batterieanteil erfassen. Ein vorhandener Integral-Helfer kann Energie liefern; diese Integration berechnet selbst keine Energie aus Leistung.",
+        "data": {
+          "entity_id": "Vorhandener PV-Sensor",
+          "kind": "Messart",
+          "scope": "Welche PV-Anlage oder welcher Wechselrichter wird gemessen?",
+          "derived_energy": "Energie stammt aus einem vorhandenen Integral-Helfer",
+          "max_interval_minutes": "Messwert gilt ohne erneute Meldung höchstens"
+        },
+        "data_description": {
+          "scope": "Zum Beispiel „Gesamtanlage, AC-Ausgang ohne Batterie“ oder „Wechselrichter Garage“. Der Name und die Einheit eines Sensors beweisen seine Messgrenze nicht.",
+          "kind": "Fortlaufende und tägliche Energiezähler benötigen Wh/kWh und total oder total_increasing. Leistung benötigt W/kW und measurement.",
+          "max_interval_minutes": "Danach gilt die Zeitabdeckung als lückenhaft. Ein Summenertrag über eine Lücke wird nicht auf Stunden verteilt.",
+          "derived_energy": "Ein Integral-Helfer wird, soweit erkennbar, automatisch markiert. Seine Ausgangsmessung und Lücken begrenzen die Aussagekraft."
+        }
+      },
+      "confirm_measurement": {
+        "title": "Quelle und Messgrenze prüfen",
+        "description": "**Quelle:** {entity} (`{entity_id}`)\n\n**Einheit:** {unit}\n\n**Messart:** {kind}\n\n**Messgrenze:** {scope}\n\n**Letzter gültiger Wert:** {reading}\n\n**Abgeleitete Energie:** {derived}\n\nEine Änderung der Quelle, Messart oder Messgrenze beginnt ein neues Datensegment. Fehlende Werte bleiben unbekannt.",
+        "data": {
+          "confirmed_pv": "Ich bestätige reine AC-PV-Erzeugung ohne Netzexport, Verbrauch oder Batterieentladung.",
+          "confirmed_disjoint": "Die Energiequellen überschneiden sich nicht: kein Gesamtzähler zusammen mit seinen Teilzählern."
+        }
+      },
+      "edit_measurement": {
+        "title": "Messquelle bearbeiten",
+        "data": {
+          "source_id": "Messquelle"
+        }
+      },
+      "remove_measurement": {
+        "title": "Messquelle entfernen",
+        "data": {
+          "source_id": "Messquelle"
+        }
+      },
+      "delete_measurement_data": {
+        "title": "Lokale Messdaten löschen",
+        "data": {
+          "source_id": "Messquelle"
+        }
+      },
+      "confirm_measurement_delete": {
+        "title": "Gezielte Löschung bestätigen",
+        "description": "**{source}**\n\n{action}\n\nGelöscht wird ausschließlich die Messkopie dieser Integration. Die ursprüngliche HA-Entity und ihre Recorder-Daten bleiben erhalten. Gelöschte Messkopien können nicht wiederhergestellt werden; die Erfassung beginnt ab dem nächsten Messwert neu.",
+        "data": {
+          "confirm_delete": "Messkopie dieser Quelle jetzt endgültig löschen"
+        }
       }
     },
     "error": {
       "duplicate_roof_name": "Jede Dachfläche benötigt einen eindeutigen Namen.",
       "invalid_roof": "Die Dachkonfiguration ist ungültig.",
-      "invalid_inverter": "Die Wechselrichterleistung muss größer als 0 sein."
+      "invalid_inverter": "Die Wechselrichterleistung muss größer als 0 sein.",
+      "invalid_measurement_source": "Wähle einen passenden vorhandenen PV-Sensor und eine verständliche Messgrenze. Das Meldeintervall muss positiv sein.",
+      "invalid_measurement_metadata": "Einheit, Geräteklasse und Zustandsklasse passen nicht zur gewählten Messart. Energie: Wh/kWh, energy, total oder total_increasing. Leistung: W/kW, power, measurement.",
+      "duplicate_measurement_source": "Diese Entity ist bereits zugeordnet. Wähle jede Messquelle nur einmal.",
+      "measurement_confirmation_required": "Bestätige die reine AC-PV-Erzeugung und die überschneidungsfreien Energiequellen."
     }
   },
   "selector": {
@@ -200,6 +333,24 @@
           "description": "Anlage, deren gespeicherte Prognose gelesen wird."
         }
       }
+    },
+    "get_measurements": {
+      "name": "PV-Messdaten lesen",
+      "description": "Liest lokale Messkopien der ausgewählten Anlage. Der Abruf fragt weder Geräte noch den Recorder ab.",
+      "fields": {
+        "config_entry_id": {
+          "name": "PV-Anlage",
+          "description": "Anlage, deren gespeicherte Messdaten gelesen werden."
+        },
+        "start": {
+          "name": "Beginn",
+          "description": "Beginn des UTC-Auswertungsfensters als ISO-8601-Zeitpunkt mit verpflichtendem UTC-Offset oder Z."
+        },
+        "end": {
+          "name": "Ende",
+          "description": "Ende des UTC-Auswertungsfensters als ISO-8601-Zeitpunkt mit verpflichtendem UTC-Offset oder Z; muss nach dem Beginn liegen."
+        }
+      }
     }
   },
   "exceptions": {
@@ -211,18 +362,40 @@
     },
     "forecast_unavailable": {
       "message": "Für die ausgewählte PV-Anlage liegt noch keine Prognose vor."
+    },
+    "measurements_unavailable": {
+      "message": "Für die Anlage sind noch keine Messdaten verfügbar."
+    },
+    "invalid_measurement_window": {
+      "message": "Das Ende muss nach dem Beginn des Messfensters liegen."
     }
   },
   "entity": {
     "sensor": {
-      "total_today": { "name": "Prognose heute" },
-      "total_tomorrow": { "name": "Prognose morgen" },
-      "total_remaining_today": { "name": "Restertrag heute" },
-      "total_next_60_minutes": { "name": "Ertrag nächste 60 Minuten" },
-      "total_power_now": { "name": "Geschätzte Leistung jetzt" },
-      "total_peak_today": { "name": "Beginn der stärksten Prognosestunde heute" },
-      "roof_today": { "name": "{roof_name} Prognose heute" },
-      "roof_tomorrow": { "name": "{roof_name} Prognose morgen" }
+      "total_today": {
+        "name": "Prognose heute"
+      },
+      "total_tomorrow": {
+        "name": "Prognose morgen"
+      },
+      "total_remaining_today": {
+        "name": "Restertrag heute"
+      },
+      "total_next_60_minutes": {
+        "name": "Ertrag nächste 60 Minuten"
+      },
+      "total_power_now": {
+        "name": "Geschätzte Leistung jetzt"
+      },
+      "total_peak_today": {
+        "name": "Beginn der stärksten Prognosestunde heute"
+      },
+      "roof_today": {
+        "name": "{roof_name} Prognose heute"
+      },
+      "roof_tomorrow": {
+        "name": "{roof_name} Prognose morgen"
+      }
     }
   }
 }
