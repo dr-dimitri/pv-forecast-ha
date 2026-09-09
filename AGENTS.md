@@ -215,6 +215,23 @@ Die bestehende Archiv-Leseaktion ergänzt den Status unter denselben Quellenrech
 Es entstehen keine neuen Sensoren oder Aktionen. Die reale Güteerprobung bleibt
 offen; Kalibrierung ist weder Defektmeldung noch garantierte Verbesserung.
 
+## Bedienung und Diagnosedaten aus #12, #19 und #14
+
+Deutsche Formular- und Menütexte stammen aus `strings.json`. Native Menüs
+verwenden übersetzbare Schlüssel; dynamische Zusammenfassungen lesen die
+HA-Übersetzungen. `scripts/sync_translations.py` aktualisiert die deutschen
+Ressourcen und die derzeit deutsche englische Rückfallsprache. Sein
+schreibfreier Prüfmodus gehört zur CI; eine spätere freigegebene Übersetzung
+muss nicht dauerhaft mit den deutschen Texten identisch bleiben.
+
+Der native Diagnostics-Download stellt ausschließlich ausgewählte lokale
+Metadaten bereit: Versionen, Anzahlen, Datenalter, Abdeckung sowie grobe
+Fehler-, Mess-, Archiv- und Lernzustände. Die Ausgabe entsteht aus einer festen
+Allowlist und enthält keine Standorte, Koordinaten, Namen, IDs, URLs,
+Fehlermeldungen, Haushalts- oder Ertragshistorien. Sie löst keine Wetterabrufe
+oder Speicheränderungen aus und benötigt keine zusätzlichen Entities.
+Home Assistant ergänzt seinen üblichen äußeren Diagnoserahmen.
+
 ## Konfiguration
 
 Die Einrichtung erfolgt ausschließlich über einen Config Flow; YAML ist nicht
@@ -258,8 +275,11 @@ Veränderbare Daten werden über einen Options Flow bearbeitet und in
 - optional eine maximale AC-Wechselrichterleistung der Gesamtanlage in kW,
   größer als 0.
 
-Die UI bietet verständliche Himmelsrichtungen an. Eine zentrale Funktion
-übersetzt diese in die Open-Meteo-Konvention: Süd = 0°, Ost = -90°, West =
+Die UI bietet acht verständliche Himmelsrichtungen und einen frei wählbaren
+Kompasswinkel von 0° bis unter 360° an. Exakte Winkel und Nachkommastellen
+bleiben auch beim Bearbeiten ohne Rundung erhalten; IDs und das bestehende
+Config-Entry-Schema 1.1 bleiben unverändert. Eine zentrale Funktion übersetzt
+den Kompasswinkel in die Open-Meteo-Konvention: Süd = 0°, Ost = -90°, West =
 +90°, Nord = ±180°. Die Umrechnung darf nicht dupliziert werden.
 
 Vor dem Anlegen zeigt ein Abschlussdialog Standortquelle, Breiten- und
@@ -391,6 +411,7 @@ python -m pip install --requirement requirements_test.txt
 ruff check custom_components tests
 black --check custom_components tests
 pytest -v
+python scripts/sync_translations.py --check
 ```
 
 Bei Änderungen an Manifest oder Home-Assistant-Struktur zusätzlich Hassfest
