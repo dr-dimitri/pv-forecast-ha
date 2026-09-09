@@ -72,6 +72,61 @@ def test_parse_valid_response_and_missing_values() -> None:
     assert forecast.intervals[0].duration_hours == 1
 
 
+@pytest.mark.parametrize("sign", [1, -1], ids=["positiv", "negativ"])
+@pytest.mark.parametrize("field", ["global_tilted_irradiance", "temperature_2m"])
+def test_weather_integer_overflow_only_discards_affected_value(
+    field: str, sign: int
+) -> None:
+    """Überlaufende Einzelwerte lassen das übrige Intervall und die Reihe intakt."""
+
+    payload = _payload()
+    payload["hourly"]["global_tilted_irradiance"] = [500, 1000]
+    payload["hourly"]["temperature_2m"] = [20, 25]
+    payload["hourly"][field][0] = sign * 10**400
+
+    forecast = parse_open_meteo_response(payload, "Europe/Berlin")
+
+    first, second = forecast.intervals
+    assert first.gti_w_m2 == (0 if field == "global_tilted_irradiance" else 500)
+    assert first.ambient_temperature_c == (None if field == "temperature_2m" else 20)
+    assert first.duration_hours == 1
+    assert second.gti_w_m2 == 1000
+    assert second.ambient_temperature_c == 25
+
+
+@pytest.mark.parametrize(
+    ("value", "expected_gti", "expected_temperature"),
+    [
+        (0, 0, 0),
+        (1000, 1000, 1000),
+        (-3, 0, -3),
+        (12.5, 12.5, 12.5),
+        (None, 0, None),
+        (True, 0, None),
+        (False, 0, None),
+        ("20", 0, None),
+        ([], 0, None),
+        ({}, 0, None),
+        (float("nan"), 0, None),
+        (float("inf"), 0, None),
+        (float("-inf"), 0, None),
+    ],
+)
+def test_weather_number_validation_preserves_existing_value_policy(
+    value: object, expected_gti: float, expected_temperature: float | None
+) -> None:
+    """Normale Zahlen, negative Werte und ungültige Typen behalten ihre Behandlung."""
+
+    payload = _payload()
+    payload["hourly"]["global_tilted_irradiance"][0] = value
+    payload["hourly"]["temperature_2m"][0] = value
+
+    first = parse_open_meteo_response(payload, "Europe/Berlin").intervals[0]
+
+    assert first.gti_w_m2 == expected_gti
+    assert first.ambient_temperature_c == expected_temperature
+
+
 @pytest.mark.parametrize(
     "payload",
     [{}, {"error": True}, {"hourly": {}}, {"hourly": {"time": []}}],

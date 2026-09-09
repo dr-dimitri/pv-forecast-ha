@@ -435,7 +435,10 @@ def _optional_number(value: Any) -> float | None:
 
     if isinstance(value, bool) or not isinstance(value, int | float):
         return None
-    numeric = float(value)
+    try:
+        numeric = float(value)
+    except OverflowError:
+        return None
     return numeric if math.isfinite(numeric) else None
 
 
