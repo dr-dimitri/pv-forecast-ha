@@ -2,12 +2,13 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   ARCHIVE_LABEL, REFRESH_MS, PvForecastCard, SharedReadCache, connectionCache, energyText,
-  formatPlantTime, loadView, plotGeometry, renderContent, renderReport,
+  formatPlantTime, loadView, planningChoices, plotGeometry, renderContent, renderOutlook, renderPlanning, renderReport, renderUncertainty,
   selectedSeries, seriesPaths, tableRows, validateView,
 } from "../../custom_components/pv_forecast/frontend/pv-forecast-card.js";
 import { fixture, fixtureHass } from "./fixtures.mjs";
 
 const config = { config_entry_id: "demo-plant", day: "today" };
+
 test("Ist-Kennzahl verwendet nach Standortwechsel nur aktuelle Messanteile", async () => {
   const { state } = await load();
   state.measurement.data.total_energy = { energy_kwh: 99, energy_complete: true };
@@ -17,7 +18,6 @@ test("Ist-Kennzahl verwendet nach Standortwechsel nur aktuelle Messanteile", asy
   assert.match(html, /Unvollständig erfasst/);
   assert.doesNotMatch(html, /Ist heute<\/dt><dd>99 /);
 });
-
 const flush = async () => { for (let index = 0; index < 30; index++) await Promise.resolve(); };
 async function load(scenario = "sunny", options = {}) {
   const calls = [], states = [];
@@ -50,6 +50,7 @@ test("Ein Lesezyklus verwendet nur lesende HA-Aktionen und unveränderte Backend
   const view = state.forecast.data;
   assert.equal(calls[1].service_data.start, view.today_start);
   assert.equal(calls[1].service_data.end, view.as_of);
+  assert.equal(calls[1].service_data.include_outlook, true);
   assert.deepEqual(calls[1].service_data.interval_windows, view.intervals.map(({ start, end }) => ({ start, end })));
   assert.ok(states.some((item) => item.forecast.status === "ready" && item.measurement.status === "loading"));
   assert.equal(state.forecast.data.summary.today_kwh, 23.14);
@@ -76,6 +77,7 @@ test("Eine Dachauswahl liest weder Gesamtmessung noch Gesamtarchiv", async () =>
   assert.match(html, /Keine Dachmessung/);
   assert.match(html, /12,47/);
   assert.doesNotMatch(html, /id="report"/);
+  assert.doesNotMatch(html, /id="outlook"|id="uncertainty"|id="planning"/);
 });
 
 test("Genau Mitternacht wird kein leeres Messfenster abgefragt", async () => {
@@ -450,4 +452,157 @@ test("Einzeln unsichtbare Karten beenden Ansicht und Bericht, sichtbare Nachbarn
     if (previous === undefined) delete globalThis.IntersectionObserver;
     else globalThis.IntersectionObserver = previous;
   }
+});
+
+test("Tagesaussicht übernimmt getrennte Backendwerte ohne eigene Addition", async () => {
+  const { state } = await load();
+  state.measurement.data.outlook = { ...state.measurement.data.outlook, measured_kwh: 8, bridge_kwh: 0.4, remaining_kwh: 12, total_kwh: 91.23 };
+  const html = renderOutlook(state);
+  assert.match(html, /91,23 kWh/);
+  assert.match(html, /Gesichert gemessen/);
+  assert.match(html, /Geschätzt seit letzter Messung/);
+  assert.match(html, /Rest ab jetzt/);
+  assert.match(html, /0,4/);
+  assert.doesNotMatch(html, /20,4/);
+  assert.match(html, /Kurzfristige Korrektur ist aus/);
+  state.measurement.data.outlook.status = "unavailable";
+  assert.doesNotMatch(renderOutlook(state), /91,23/);
+  state.measurement.data.outlook.schema_version = 2;
+  assert.match(renderOutlook(state), /Noch offen/);
+});
+
+test("Erfahrungsband gehört sichtbar zur eigenen eingefrorenen Prognose", async () => {
+  const { state } = await load("experience");
+  const html = renderUncertainty(state);
+  assert.match(html, /17,2–28,4 kWh/);
+  assert.match(html, /22,5 kWh/);
+  assert.match(html, /06 Uhr am Zieltag/);
+  assert.match(html, /unabhängig von der aktuellen Tagesprognose/);
+  assert.match(html, /60 Lerntage, 30 Prüftage/);
+  assert.match(html, /83,3 %/);
+  assert.match(html, /Mittlere Bandbreite in der Prüfung: 11,2 kWh/);
+  assert.match(html, /66,4–92,7 %/);
+  assert.match(html, /Annahme unabhängiger Tage/);
+  assert.doesNotMatch(html, /23,14/);
+  state.history.data.uncertainty.days.today.status = "unavailable";
+  assert.match(renderUncertainty(state), /Bandbreite noch nicht belastbar/);
+  assert.doesNotMatch(renderUncertainty(state), /17,2–28,4/);
+});
+
+for (const scenario of ["fold", "kolkata"]) test(`${scenario}: Planung bietet absolute Grenzen mit Datum und Offset für beide Tage`, async () => {
+  const { state } = await load(scenario);
+  const choices = planningChoices(state);
+  assert.ok(choices.includes(state.forecast.data.as_of));
+  assert.ok(Date.parse(choices.at(-1)) > Date.parse(state.forecast.data.end));
+  assert.equal(new Set(choices).size, choices.length);
+  const html = renderPlanning(state);
+  if (scenario === "fold") {
+    assert.match(html, /02:00 UTC\+02:00/);
+    assert.match(html, /02:00 UTC\+01:00/);
+  } else assert.match(html, /UTC\+05:30/);
+  assert.match(html, /type="number"[^>]+min="1"[^>]+max="2880"/);
+  assert.match(html, /type="submit"/);
+});
+
+test("Planung zeigt nur gelieferte Ergebnisse und Fehler, ohne eigene PV-Rechnung", async () => {
+  const { state } = await load();
+  const data = { ...fixture().forecast.planning, energy_kwh: 63.21, status: "started", hysteresis_applied: true };
+  const html = renderPlanning(state, { result: { status: "ready", data } });
+  assert.match(html, /63,21/);
+  assert.match(html, /läuft bereits und wird nicht automatisch verschoben/);
+  assert.match(html, /geringfügig geänderter Prognose/);
+  assert.match(html, /Wetterabruf/);
+  assert.match(html, /gleichmäßiger mittlerer Leistung/);
+  assert.match(html, /Hausverbrauch und Speicher/);
+  data.energy_kwh = null;
+  assert.match(renderPlanning(state, { result: { data } }), /läuft bereits/);
+  assert.doesNotMatch(renderPlanning(state, { result: { data } }), /— kWh/);
+  data.status = "unavailable";
+  data.reason = "no_energy";
+  assert.doesNotMatch(renderPlanning(state, { result: { data } }), /63,21/);
+  assert.match(renderPlanning(state, { result: { data } }), /keine nutzbare PV-Energie/);
+  assert.match(renderPlanning(state, { result: { message: "<script>" } }), /&lt;script&gt;/);
+});
+
+function planningCard(hass) {
+  const card = new PvForecastCard();
+  card._config = config;
+  card._hass = hass;
+  card._connected = true;
+  card._visible = true;
+  card._planningOpen = true;
+  card._planningInputs = { duration_minutes: "120", earliest_start: "2026-09-10T11:15:00.000Z", latest_end: "2026-09-11T22:00:00.000Z" };
+  return card;
+}
+
+async function refreshPlanning(cache) {
+  cache._cancelTimer();
+  cache.requests.clear();
+  for (const entry of cache.entries.values()) entry.at = -Infinity;
+  cache._tick();
+  await flush();
+}
+
+test("Planung liest erst nach bewusster Berechnung und bewahrt previous_start auch über Fehler", async () => {
+  const calls = [], hass = fixtureHass("sunny", { calls });
+  const card = planningCard(hass), cache = connectionCache(hass);
+  const original = hass.callWS;
+  let fail = false;
+  hass.callWS = async (message) => { const response = await original(message); if (fail) throw { code: "home_assistant_error" }; return response; };
+  try {
+    card._bindPlanning(); await flush(); assert.equal(calls.length, 0);
+    card._calculatePlanning(); await flush();
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].service, "get_forecast");
+    assert.deepEqual(calls[0].service_data.planning, { duration_minutes: 120, earliest_start: card._planningInputs.earliest_start, latest_end: card._planningInputs.latest_end });
+    const previous = card._planning.data.start;
+    fail = true;
+    await refreshPlanning(cache);
+    assert.equal(calls[1].service_data.planning.previous_start, previous);
+    assert.equal(card._planning.status, "error");
+    fail = false;
+    await refreshPlanning(cache);
+    assert.equal(calls[2].service_data.planning.previous_start, previous);
+    assert.equal(card._planning.status, "ready");
+    card._planningOpen = false; card._bindPlanning();
+    assert.equal(cache.timer, null);
+    card._planningOpen = true; card._bindPlanning(); await flush();
+    assert.equal(calls.length, 3);
+  } finally { card.disconnectedCallback(); }
+});
+
+test("Mehrere Planungen teilen die Leseabfrage; unsichtbare und entfernte Karten halten keinen Timer", async () => {
+  const calls = [], hass = fixtureHass("sunny", { calls }), cache = connectionCache(hass);
+  const first = planningCard(hass), second = planningCard(hass);
+  try {
+    first._calculatePlanning(); second._calculatePlanning(); await flush();
+    assert.equal(calls.length, 1);
+    assert.equal(first._planning.data.start, second._planning.data.start);
+    first._visible = false; first._bindPlanning();
+    assert.equal(first._unsubscribePlanning, null);
+    assert.notEqual(cache.timer, null);
+    second.disconnectedCallback();
+    assert.equal(cache.timer, null);
+    first._visible = true; first._bindPlanning(); await flush();
+    assert.equal(calls.length, 1);
+  } finally { first.disconnectedCallback(); second.disconnectedCallback(); }
+});
+
+test("Ungültige Eingabe, fehlende Rechte und unbekannter Planungsvertrag bleiben kontrolliert", async () => {
+  const calls = [], hass = fixtureHass("sunny", { calls }), card = planningCard(hass);
+  try {
+    card._planningInputs.duration_minutes = "0";
+    card._calculatePlanning(); await flush();
+    assert.equal(calls.length, 0);
+    assert.match(card._planning.message, /1 bis 2880 Minuten/);
+    card._planningInputs.duration_minutes = "120";
+    const read = hass.callWS;
+    hass.callWS = async (message) => { const result = await read(message); result.response.planning.schema_version = 2; return result; };
+    card._calculatePlanning(); await flush();
+    assert.equal(card._planning.status, "error");
+    assert.match(card._planning.message, /Datenvertrag 1/);
+    hass.callWS = async () => { throw { code: "unauthorized" }; };
+    await refreshPlanning(connectionCache(hass));
+    assert.match(card._planning.message, /Keine Leseberechtigung für Planungsdaten/);
+  } finally { card.disconnectedCallback(); }
 });

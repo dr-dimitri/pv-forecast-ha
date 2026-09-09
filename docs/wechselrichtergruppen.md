@@ -73,6 +73,12 @@ keine erfundenen Gruppen. Archiv-Store 3 führt diese Basis gemeinsam mit der
 Unterstützung ursprünglicher Standortzeitzonen ein; Stores 1 und 2 werden
 verlustfrei migriert. Der getrennte Lern-Store bleibt bei Version 1.
 
+Sind sämtliche Dächer Gruppen zugeordnet, begrenzt das Tages-Erfahrungsband
+zusätzlich anhand der Summe der Gruppenlimits. Bei unzugeordneten Dächern lässt
+sich daraus keine Grenze für die ganze Anlage ableiten; dann gilt nur eine
+eventuell konfigurierte Gesamtgrenze. Abdeckung wird nach Anwendung dieser
+physikalischen Grenzen geprüft.
+
 Alle Änderungen an Faktoren und Gruppengrenzen bleiben lokale Berechnungen.
 Der reguläre gemeinsame Wetterabruf bleibt unverändert, und die Anzahl der
 Sensoren oder Gruppen erzeugt keine zusätzlichen Wetterabrufe. Die vorhandenen

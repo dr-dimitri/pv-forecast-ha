@@ -39,6 +39,7 @@ from .coordinator import PvForecastCoordinator
 from .history import HistoryArchive
 from .measurement_runtime import MeasurementManager
 from .measurements import SourceConfig
+from .uncertainty_data import current_experience_bands
 
 if TYPE_CHECKING:
     from .calibration_runtime import CalibrationManager
@@ -516,6 +517,14 @@ class ArchiveManager:
         """Aktuelle feste Prognoseintervalle ohne neue Erfassung zurückgeben."""
 
         return self._archive.current_targets(now, _configuration_id(self.entry))
+
+    @callback
+    def experience_bands(self, now: datetime) -> dict[str, Any]:
+        """Erfahrungsbänder aus demselben geschützten Archiv ohne neue Abrufe lesen."""
+
+        return current_experience_bands(
+            self._archive, now, _configuration_id(self.entry)
+        )
 
     @callback
     def export(

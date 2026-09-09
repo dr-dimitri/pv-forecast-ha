@@ -73,6 +73,7 @@ _MEASUREMENTS_SCHEMA = vol.Schema(
         vol.Required(CONF_CONFIG_ENTRY_ID): vol.All(cv.string, vol.Length(min=1)),
         vol.Required("start"): _aware_datetime,
         vol.Required("end"): _aware_datetime,
+        vol.Optional("include_outlook", default=False): cv.boolean,
         vol.Optional("interval_windows"): vol.All(
             list,
             vol.Length(max=50),
@@ -120,7 +121,19 @@ def async_setup_measurement_services(hass: HomeAssistant) -> None:
             )
         now = dt_util.utcnow()
         if "interval_windows" not in call.data:
-            return manager.snapshot(start, end, now)
+            result = manager.snapshot(start, end, now)
+            if call.data["include_outlook"]:
+                coordinator = cast(
+                    "PvForecastConfigEntry", entry
+                ).runtime_data.coordinator
+                if coordinator.data is not None:
+                    result["outlook"] = manager.day_outlook(
+                        coordinator.data,
+                        now,
+                        coordinator.last_update_success_time,
+                        coordinator.last_update_success,
+                    )
+            return result
         intervals = await manager.async_interval_windows(
             [
                 (window["start"], window["end"])
@@ -141,6 +154,15 @@ def async_setup_measurement_services(hass: HomeAssistant) -> None:
             )
         result = manager.snapshot(start, end, now)
         result["total_intervals"] = intervals
+        if call.data["include_outlook"]:
+            coordinator = cast("PvForecastConfigEntry", entry).runtime_data.coordinator
+            if coordinator.data is not None:
+                result["outlook"] = manager.day_outlook(
+                    coordinator.data,
+                    now,
+                    coordinator.last_update_success_time,
+                    coordinator.last_update_success,
+                )
         return result
 
     hass.services.async_register(

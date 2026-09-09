@@ -197,6 +197,120 @@ async def test_card_view_is_additive_and_preserves_default_forecast(
     assert client_fetch.await_count == 1
 
 
+async def test_planning_uses_shared_forecast_and_is_json_serializable(
+    hass, loaded_forecast
+) -> None:
+    """Die Automationsantwort enthält genau das reine Planungsergebnis ohne HTTP."""
+    from custom_components.pv_forecast.planning import plan_solar_window
+
+    entry, coordinator, client_fetch = loaded_forecast
+    parameters = {
+        "duration_minutes": 120,
+        "earliest_start": "2026-08-23T12:00:00+00:00",
+        "latest_end": "2026-08-23T18:00:00+00:00",
+    }
+    response = await _get_forecast(hass, entry.entry_id, planning=parameters)
+    expected = plan_solar_window(
+        coordinator.data,
+        "Europe/Berlin",
+        datetime(2026, 8, 23, 12, tzinfo=UTC),
+        coordinator.last_update_success_time,
+        coordinator.last_update_success,
+        duration_minutes=120,
+        earliest_start=datetime.fromisoformat(parameters["earliest_start"]),
+        latest_end=datetime.fromisoformat(parameters["latest_end"]),
+    )
+    assert response["planning"] == expected
+    assert response["planning"]["energy_kwh"] == 30
+    assert json.loads(json.dumps(response)) == response
+    assert client_fetch.await_count == 1
+
+
+@pytest.mark.parametrize(
+    "parameters",
+    [
+        {},
+        {"duration_minutes": True},
+        {"duration_minutes": 1.5},
+        {"earliest_start": "2026-08-23T12:00:00"},
+        {"latest_end": "kein Zeitpunkt"},
+    ],
+)
+async def test_planning_validates_explicit_bounds(hass, loaded_forecast, parameters):
+    entry, _, client_fetch = loaded_forecast
+    valid = {
+        "duration_minutes": 120,
+        "earliest_start": "2026-08-23T12:00:00+00:00",
+        "latest_end": "2026-08-23T18:00:00+00:00",
+    }
+    with pytest.raises(vol.Invalid):
+        await _get_forecast(
+            hass, entry.entry_id, planning={**valid, **parameters} if parameters else {}
+        )
+    assert client_fetch.await_count == 1
+
+
+@pytest.mark.parametrize("stale", [False, True])
+async def test_blueprint_runs_real_read_action_and_only_requested_notification(
+    hass, loaded_forecast, stale
+) -> None:
+    """Das importierbare Beispiel wird im nativen HA-Script-Runner ausgeführt."""
+    from pathlib import Path
+
+    from homeassistant.components.blueprint import Blueprint, BlueprintInputs
+    from homeassistant.components.blueprint.schemas import BLUEPRINT_SCHEMA
+    from homeassistant.components.script.config import SCRIPT_ENTITY_SCHEMA
+    from homeassistant.helpers.script import Script
+    from homeassistant.util.yaml import load_yaml
+
+    entry, coordinator, client_fetch = loaded_forecast
+    path = (
+        Path(__file__).parents[1]
+        / "blueprints/script/pv_forecast/solarzeitfenster.yaml"
+    )
+    blueprint = Blueprint(load_yaml(str(path)), schema=BLUEPRINT_SCHEMA)
+    inputs = BlueprintInputs(
+        blueprint,
+        {
+            "use_blueprint": {
+                "path": "pv_forecast/solarzeitfenster.yaml",
+                "input": {
+                    "plant": entry.entry_id,
+                    "duration": 120,
+                    "earliest": "2026-08-23T12:00:00+00:00",
+                    "latest": "2026-08-23T18:00:00+00:00",
+                },
+            }
+        },
+    )
+    inputs.validate()
+    configuration = SCRIPT_ENTITY_SCHEMA(inputs.async_substitute())
+    notifications = []
+    hass.services.async_register(
+        "persistent_notification",
+        "create",
+        lambda call: notifications.append(call.data),
+    )
+    if stale:
+        coordinator.async_set_update_error(UpdateFailed("Offline"))
+    script = Script(
+        hass,
+        configuration["sequence"],
+        "Solarzeitfenster",
+        "script",
+        variables=configuration.get("variables"),
+    )
+    await script.async_run(context=Context())
+    assert len(notifications) == 1
+    if stale:
+        assert notifications[0]["title"] == "Kein belastbares Solarzeitfenster"
+    else:
+        assert notifications[0]["title"] == "Solarzeitfenster"
+        assert "30" in notifications[0]["message"]
+        assert "12:00:00+00:00" in notifications[0]["message"]
+    assert client_fetch.await_count == 1
+
+
 async def test_card_view_rejects_unknown_roof_without_extra_fetch(
     hass, loaded_forecast
 ) -> None:

@@ -1,5 +1,5 @@
 // Ausschließlich synthetische, deterministische Testdaten; keine Modellberechnung.
-export const SCENARIOS = ["sunny", "gaps", "stale", "empty", "acl", "outage", "old", "roof", "deleted-roof", "spring", "fold", "kolkata", "midnight"];
+export const SCENARIOS = ["sunny", "gaps", "stale", "empty", "acl", "outage", "old", "roof", "deleted-roof", "spring", "fold", "kolkata", "midnight", "experience", "planning-unavailable"];
 const HOURS = [0, 0, 0, 0, 0, 0, 0.1, 0.38, 0.95, 1.7, 2.45, 3.1, 3.6, 3.4, 2.9, 2.1, 1.4, 0.7, 0.22, 0.04, 0, 0, 0, 0];
 const iso = (instant) => new Date(instant).toISOString();
 
@@ -42,9 +42,28 @@ export function fixture(scenario = "sunny", { day = "today", roof_id } = {}) {
     current_targets: { view_version: 1, as_of: iso(asOf), timezone, horizon: "hourly_1h", label: "Jeweils 1 Stunde vorher", intervals: intervals.filter((item, index) => Date.parse(item.start) - hour <= asOf && !(scenario === "gaps" && [10, 11].includes(index))).map((item, index) => ({ ...item, energy_kwh: [0, 0, 0, 0, 0, 0, 0.05, 0.28, 0.9, 1.4, 2.8, 3.3, 3.4, 3.1, 2.6][index] ?? 0, fetched_at: iso(Date.parse(item.start) - hour - 900_000), cutoff: iso(Date.parse(item.start) - hour) })) },
   };
   if (scenario === "empty" || day === "tomorrow") history.current_targets.intervals = [];
+  const available = !["gaps", "empty", "stale"].includes(scenario);
+  history.uncertainty = {
+    schema_version: 1, label: "Erfahrungsband", as_of: iso(asOf), timezone, basis: "frozen_daily_forecast", retention_truncated: false,
+    days: {
+      [day]: scenario === "experience" ? { status: "available", target_date: view.date, horizon: day === "today" ? "daily_same_06" : "daily_previous_18", cutoff: iso(todayStart + 6 * hour), forecast_observed_at: iso(todayStart + 5.75 * hour), variant: "raw_model", lower_kwh: 17.2, central_kwh: 22.5, upper_kwh: 28.4, training_count: 60, validation_count: 30, target_coverage: 0.8, evaluation: { coverage_fraction: 0.833, count: 30, mean_width_kwh: 11.2, coverage_wilson95: { lower: 0.664, upper: 0.927, indicative_only: true, assumption: "independent_days" } }, quality_flags: [] } : { status: "unavailable", reasons: ["insufficient_validation"] },
+    },
+    remaining_today: { status: "unavailable", reasons: ["unsupported_horizon"] }, next_60_minutes: { status: "unavailable", reasons: ["unsupported_horizon"] },
+  };
+  const forecastEnd = todayEnd + 24 * hour;
+  const forecastBoundaries = [todayStart];
+  for (let cursor = Math.ceil((todayStart + 1) / hour) * hour; cursor < forecastEnd; cursor += hour) forecastBoundaries.push(cursor);
+  forecastBoundaries.push(forecastEnd);
   return {
-    forecast: { schema_version: 1, fetched_at: iso(asOf - (scenario === "stale" ? 7_200_000 : 900_000)), view },
-    measurement: { schema_version: 1, total_energy: { energy_kwh: scenario === "empty" ? null : scenario === "gaps" ? 5.6 : 12.4, energy_complete: !["gaps", "empty"].includes(scenario), source_count: scenario === "empty" ? 0 : 2, quality_flags: scenario === "gaps" ? ["gap"] : [] }, total_intervals: scenario === "empty" ? [] : totalIntervals },
+    forecast: {
+      schema_version: 1, fetched_at: iso(asOf - (scenario === "stale" ? 7_200_000 : 900_000)), view,
+      intervals: forecastBoundaries.slice(0, -1).map((value, index) => ({ start: iso(value), end: iso(forecastBoundaries[index + 1]), energy_kwh: 1, ac_power_kw: 1, is_complete: true, quality_flags: [] })),
+      planning: { schema_version: 1, status: available && scenario !== "planning-unavailable" ? "available" : "unavailable", reason: scenario === "stale" ? "stale_forecast" : "no_energy", as_of: iso(asOf), fetched_at: iso(asOf - 900_000), timezone, start: iso(todayStart + 14 * hour), end: iso(todayStart + 16 * hour), energy_kwh: 5.87, basis: "current_forecast", assumption: "constant_interval_mean_power", quality_flags: [], hysteresis_applied: false, uncertainty: { status: "unavailable", reason: "unsupported_horizon" } },
+    },
+    measurement: {
+      schema_version: 1, total_energy: { energy_kwh: scenario === "empty" ? null : scenario === "gaps" ? 5.6 : 12.4, energy_complete: !["gaps", "empty"].includes(scenario), source_count: scenario === "empty" ? 0 : 2, quality_flags: scenario === "gaps" ? ["gap"] : [] }, total_intervals: scenario === "empty" ? [] : totalIntervals,
+      outlook: { schema_version: 1, status: available ? "available" : "unavailable", reason: available ? null : "incomplete_measurements", as_of: iso(asOf), timezone, measured_until: iso(asOf - 900_000), measured_kwh: 12.1, bridge_kwh: 0.31, remaining_kwh: 10.76, total_kwh: 23.17, quality_flags: [], correction: "off" },
+    },
     history,
   };
 }

@@ -1,6 +1,7 @@
 """Reale AC-Gruppen, unveränderte Altdaten und Faktoren vor beiden Begrenzungen."""
 
 from copy import deepcopy
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
@@ -30,6 +31,7 @@ from custom_components.pv_forecast.models import (
 from .helpers import persisted_roof, roof, weather
 from .test_coordinator import _entry
 from .test_history import SOURCE
+from .test_uncertainty import day_record, evaluate, records
 
 END = datetime(2026, 9, 9, 13, tzinfo=UTC)
 SHARED = AcInverterGroup("shared", "Gemeinsamer Wechselrichter", 6, ("a", "b"))
@@ -310,6 +312,18 @@ def test_archived_group_basis_preserves_raw_applied_and_candidate_energy():
     assert record.candidate_energy_kwh == pytest.approx(8.4)
     restored = HistoryArchive.from_dict(archive.to_dict(), "UTC")
     assert restored.records[record.record_id].to_dict() == record.to_dict()
+
+
+def test_experience_band_uses_sum_of_group_limits_only_for_fully_assigned_plants():
+    target = day_record(92, prediction=23)
+    for has_ungrouped, expected_maximum in ((False, 24), (True, None)):
+        basis = ForecastCalibrationBasis(
+            (), None, (("one", 0.4), ("two", 0.6)), has_ungrouped
+        )
+        result = evaluate(records(), replace(target, basis=basis))
+        assert result["status"] == "available"
+        assert result["physical_maximum_kwh"] == expected_maximum
+        assert result["upper_kwh"] == (24 if not has_ungrouped else 25)
 
 
 async def test_coordinator_groups_and_local_factor_change_need_no_extra_http(hass):
