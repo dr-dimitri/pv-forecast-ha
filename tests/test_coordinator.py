@@ -1,6 +1,7 @@
 """Tests der Coordinator-Orchestrierung."""
 
 import asyncio
+import json
 from datetime import UTC, date, datetime, timedelta
 from unittest.mock import AsyncMock, Mock, patch
 from zoneinfo import ZoneInfo
@@ -14,6 +15,7 @@ from pytest_homeassistant_custom_component.common import (
 )
 
 from custom_components.pv_forecast.api import (
+    OpenMeteoClient,
     OpenMeteoConnectionError,
     OpenMeteoDataError,
     OpenMeteoError,
@@ -37,7 +39,7 @@ from custom_components.pv_forecast.models import (
 from custom_components.pv_forecast.runtime import async_get_open_meteo_client
 
 from .helpers import TIMEZONE, persisted_roof, roof, weather
-from .test_api import _hourly_payload
+from .test_api import _hourly_payload, _Response, _Session
 
 
 def _entry(
@@ -92,6 +94,41 @@ async def test_coordinator_converts_api_error_to_update_failed(hass) -> None:
     coordinator = PvForecastCoordinator(hass, _entry(hass), client)
     with pytest.raises(UpdateFailed):
         await coordinator._async_update_data()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("sign", [1, -1], ids=["positiv", "negativ"])
+@pytest.mark.parametrize(
+    ("field", "expected_daily"),
+    [("global_tilted_irradiance", 0), ("temperature_2m", 480)],
+)
+async def test_extreme_json_weather_numbers_follow_single_value_fallback(
+    hass, sign: int, field: str, expected_daily: float
+) -> None:
+    """Auch gültige JSON-Integer jenseits von float bleiben kontrollierte Werte."""
+
+    payload = _hourly_payload("2026-08-22T23:00", "2026-08-24T22:00")
+    payload["hourly"][field] = [sign * 10**1000] * 48
+    # aiohttp verwendet standardmäßig json.loads. Der HA-Testhelper nutzt
+    # dagegen orjson und kann solche gültigen JSON-Integer nicht serialisieren.
+    session = _Session(_Response(json.loads(json.dumps(payload))))
+    entry = _entry(hass)
+    hass.config_entries.async_update_entry(
+        entry, options={**entry.options, CONF_INVERTER_MAX_POWER_KW: None}
+    )
+    coordinator = PvForecastCoordinator(hass, entry, OpenMeteoClient(session))
+
+    with freeze_time("2026-08-23T12:00:00+02:00"):
+        await coordinator.async_refresh()
+
+    assert coordinator.last_update_success
+    assert coordinator.last_exception is None
+    assert session.calls == 1
+    assert coordinator.data.total.today == pytest.approx(expected_daily)
+    assert coordinator.data.total.tomorrow == pytest.approx(expected_daily)
+    for forecast in coordinator.data.roofs.values():
+        assert forecast.daily.today == pytest.approx(expected_daily / 2)
+    await coordinator.async_shutdown()
 
 
 @pytest.mark.asyncio
