@@ -78,13 +78,15 @@ async def loaded_forecast(hass):
         await hass.async_block_till_done()
 
 
-async def _get_forecast(hass, entry_id: str, *, user_id: str | None = None):
+async def _get_forecast(
+    hass, entry_id: str, *, user_id: str | None = None, **parameters
+):
     """Den öffentlichen HA-Aktionsweg einschließlich Antwortvalidierung verwenden."""
 
     return await hass.services.async_call(
         DOMAIN,
         SERVICE_GET_FORECAST,
-        {"config_entry_id": entry_id},
+        {"config_entry_id": entry_id, **parameters},
         blocking=True,
         return_response=True,
         context=Context(user_id=user_id),
@@ -166,6 +168,66 @@ async def test_action_returns_shared_clipped_forecast_without_fetch(
     assert coordinator.data is original_data
     assert coordinator.last_update_success_time == original_time
     assert client_fetch.await_count == 1
+
+
+async def test_card_view_is_additive_and_preserves_default_forecast(
+    hass, loaded_forecast
+) -> None:
+    """Eine Dachansicht erhält den bisherigen Gesamtvertrag und Abrufstand."""
+    entry, coordinator, client_fetch = loaded_forecast
+    default = await _get_forecast(hass, entry.entry_id)
+    assert "view" not in default
+    result = await _get_forecast(
+        hass, entry.entry_id, include_view=True, day="tomorrow", roof_id="b"
+    )
+    selected = result.pop("view")
+    assert result == default
+    assert selected["view_version"] == 1
+    assert selected["day"] == "tomorrow"
+    assert selected["date"] == "2026-08-24"
+    assert selected["plant_name"] == entry.title
+    assert selected["roof_id"] == "b"
+    assert selected["summary"] == {
+        "today_kwh": 180,
+        "tomorrow_kwh": 180,
+        "remaining_today_kwh": 75,
+    }
+    assert all(item["energy_kwh"] == 7.5 for item in selected["intervals"])
+    assert coordinator.data.total.today == 360
+    assert client_fetch.await_count == 1
+
+
+async def test_card_view_rejects_unknown_roof_without_extra_fetch(
+    hass, loaded_forecast
+) -> None:
+    """Eine entfernte Dachfläche liefert einen verständlichen Auswahlfehler."""
+    entry, _, client_fetch = loaded_forecast
+    with pytest.raises(ServiceValidationError) as error:
+        await _get_forecast(hass, entry.entry_id, include_view=True, roof_id="removed")
+    assert error.value.translation_key == "roof_not_found"
+    assert client_fetch.await_count == 1
+
+
+async def test_card_view_uses_existing_read_permission_without_control_rights(
+    hass, loaded_forecast
+) -> None:
+    """Die Kartenansicht verwendet die vorhandenen Anlagen-Leserechte."""
+    entry, _, _ = loaded_forecast
+    user = MockUser().add_to_hass(hass)
+    user.mock_policy({"entities": {"all": {"read": True}}})
+    assert (
+        await _get_forecast(hass, entry.entry_id, user_id=user.id, include_view=True)
+    )["view"]
+    user.mock_policy({"entities": {"all": {"control": True}}})
+    with pytest.raises(Unauthorized):
+        await _get_forecast(hass, entry.entry_id, user_id=user.id, include_view=True)
+
+
+async def test_card_parameters_reject_unsupported_day(hass, loaded_forecast) -> None:
+    """Die optionale Darstellung erweitert den fachlichen Prognosezeitraum nicht."""
+    entry, _, _ = loaded_forecast
+    with pytest.raises(vol.Invalid):
+        await _get_forecast(hass, entry.entry_id, include_view=True, day="yesterday")
 
 
 async def test_action_keeps_old_snapshot_date_fetch_time_and_failure(

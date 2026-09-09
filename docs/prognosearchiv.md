@@ -181,3 +181,20 @@ Die Offline-Tests ersetzen weder die fünf realen Nutzer aus #26 noch die
 geplanten mindestens 30 gültigen Erprobungstage und mehrere freiwillige Anlagen
 für allgemeine Güteaussagen. Solche Ergebnisse werden erst nach tatsächlicher
 Erfassung ausgewiesen, einschließlich Misserfolgen, Stichprobe und Abdeckung.
+
+## Aktuelle feste Stundenstände für die Karte
+
+Mit `current_targets: true` ergänzt `get_history` die separate Struktur
+`current_targets` (Darstellungsversion 1). Sie enthält nur bereits eingefrorene
+`hourly_1h`-Prognosen, deren UTC-Ziele heute oder morgen in der Anlagenzeitzone
+überlappen. Noch ersetzbare Kandidaten vor ihrem Stichtag bleiben verborgen.
+Die Linie heißt **„Jeweils 1 Stunde vorher“**, weil sie verschiedene
+Erfassungszeitpunkte enthält. Die regulären 7-/30-/90-Tage-Metriken und
+`records` bleiben auf abgeschlossene Tage begrenzt. Das Lesen ändert weder
+Prognosen noch Bewertungen und gibt hier keine Messkopien aus.
+
+An lokalen Teilstunden-Tagesgrenzen werden ausschließlich die zusätzlichen
+Darstellungsintervalle anteilig geteilt. `source_start`, `source_end` und
+`raw_energy_kwh` erhalten den vollständigen ursprünglichen Stundenbezug; die
+Archivdatensätze bleiben identisch. So zeigt konstante Leistung am Tagesrand
+keinen künstlichen Unterschied zwischen aktueller und historischer Energie.

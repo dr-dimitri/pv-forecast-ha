@@ -12,6 +12,7 @@ from homeassistant.helpers.typing import ConfigType
 
 from .const import DOMAIN, PLATFORMS
 from .coordinator import PvForecastCoordinator
+from .frontend import async_setup_frontend
 from .history_runtime import ArchiveManager, async_remove_history_store
 from .history_services import async_setup_history_services
 from .measurement_runtime import MeasurementManager, async_remove_measurement_store
@@ -40,6 +41,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     async_setup_services(hass)
     async_setup_measurement_services(hass)
     async_setup_history_services(hass)
+    async_setup_frontend(hass)
     return True
 
 

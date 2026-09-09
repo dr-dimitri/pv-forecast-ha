@@ -146,6 +146,30 @@ Archiv-Messkopien. Entladen beendet Listener. Config-Entry-Schema bleibt 1.1.
 Prognosesensoren behalten dauerhaft keine `state_class`; die Langzeitauswertung
 verwendet dieses Archiv statt einer irreführenden Erzeugungszählerstatistik.
 
+## Freiwillige Lovelace-Karte aus #28
+
+Ein kleines, mit der Integration gebündeltes JavaScript-Modul stellt eine
+native Karte mit visuellem Editor bereit. Die Ressource wird bewusst über die
+HA-Oberfläche hinzugefügt; das Backend funktioniert auch ohne Karte. Die erste
+Lieferung zeigt Energie in kWh je tatsächlichem Intervall, vier Tageskennzahlen,
+Heute/Morgen und Gesamt-/Dachauswahl sowie optionale 7-/30-Tage-Berichte.
+
+Die vorhandenen Leseaktionen erhalten kompatible Darstellungsdaten: `get_forecast`
+eine versionierte `view` mit fertigen Tages-/Dachwerten, `get_measurements` genaue
+Gesamtwerte für höchstens 50 explizite UTC-Intervalle und `get_history` bereits
+eingefrorene aktuelle Stundenstände. Die Archivlinie heißt „Jeweils 1 Stunde
+vorher“; sie behauptet keine gemeinsame ursprüngliche Tagesausgabe. Fehlende
+Messwerte, unvollständige Erfassung und nicht zugeordnete Dachmessungen bleiben
+erkennbar. Es entstehen keine neue öffentliche Stundenaktion, Wetter- oder
+Recorderabrufe und keine PV-/Lernberechnung im Browser.
+
+Die Grafik positioniert nach absoluten UTC-Grenzen und beschriftet in der
+gespeicherten Anlagenzeitzone. Wiederholte DST-Stunden und Teilstunden bleiben
+unterscheidbar. Mehrere sichtbare Karten teilen Leseaufrufe; entfernte oder
+ausgeblendete Karten halten keine Abrufschleifen aktiv. Tests und Screenshots
+prüfen 360 px, Hell/Dunkel, Tastatur, Datenlücken und Fehlerzustände. Die reale
+Nutzererprobung wird davon getrennt ausgewiesen.
+
 ## Konfiguration
 
 Die Einrichtung erfolgt ausschließlich über einen Config Flow; YAML ist nicht

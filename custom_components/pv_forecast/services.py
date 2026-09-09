@@ -20,7 +20,9 @@ from homeassistant.core import (
 from homeassistant.exceptions import ServiceValidationError, Unauthorized, UnknownUser
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import entity_registry as er
+from homeassistant.util import dt as dt_util
 
+from .card_data import UnknownRoofError, build_forecast_view
 from .const import CONF_TIME_ZONE, DOMAIN
 from .models import ForecastResult
 
@@ -31,7 +33,12 @@ SERVICE_GET_FORECAST = "get_forecast"
 CONF_CONFIG_ENTRY_ID = "config_entry_id"
 
 _GET_FORECAST_SCHEMA = vol.Schema(
-    {vol.Required(CONF_CONFIG_ENTRY_ID): vol.All(cv.string, vol.Length(min=1))}
+    {
+        vol.Required(CONF_CONFIG_ENTRY_ID): vol.All(cv.string, vol.Length(min=1)),
+        vol.Optional("include_view", default=False): cv.boolean,
+        vol.Optional("day", default="today"): vol.In(("today", "tomorrow")),
+        vol.Optional("roof_id"): vol.All(cv.string, vol.Length(min=1)),
+    }
 )
 
 
@@ -67,12 +74,31 @@ def async_setup_services(hass: HomeAssistant) -> None:
                 translation_key="forecast_unavailable",
             )
 
-        return _serialize_forecast(
+        result = _serialize_forecast(
             coordinator.data,
             str(entry.data[CONF_TIME_ZONE]),
             coordinator.last_update_success_time,
             coordinator.last_update_success,
         )
+        if call.data["include_view"]:
+            try:
+                result["view"] = build_forecast_view(
+                    coordinator.data,
+                    str(entry.data[CONF_TIME_ZONE]),
+                    entry.title,
+                    dt_util.utcnow(),
+                    coordinator.last_update_success_time,
+                    coordinator.last_update_success,
+                    day=call.data["day"],
+                    roof_id=call.data.get("roof_id"),
+                )
+            except UnknownRoofError as err:
+                raise ServiceValidationError(
+                    str(err),
+                    translation_domain=DOMAIN,
+                    translation_key="roof_not_found",
+                ) from err
+        return result
 
     hass.services.async_register(
         DOMAIN,

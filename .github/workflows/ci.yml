@@ -10,6 +10,20 @@ permissions:
   contents: read
 
 jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Repository auschecken
+        uses: actions/checkout@v7
+
+      - name: Node.js einrichten
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+
+      - name: Kartenlogik offline prüfen
+        run: node --test tests/frontend/*.test.mjs
+
   hassfest:
     runs-on: ubuntu-latest
     steps:

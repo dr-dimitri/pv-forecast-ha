@@ -611,6 +611,56 @@ class HistoryArchive:
             for entity, registry in sorted(sources, key=str)
         )
 
+    def current_targets(self, now: datetime) -> dict[str, Any]:
+        """Bereits feste Stundenprognosen für die zwei aktuellen lokalen Tage lesen."""
+
+        now = _utc(now)
+        today = now.astimezone(self.timezone).date()
+        start, _ = _day_bounds(today, self.timezone)
+        _, end = _day_bounds(today + timedelta(days=1), self.timezone)
+        days = (
+            _day_bounds(today, self.timezone),
+            _day_bounds(today + timedelta(days=1), self.timezone),
+        )
+        records = sorted(
+            (
+                record
+                for record in self.records.values()
+                if record.horizon == "hourly_1h"
+                and record.cutoff <= now
+                and record.start < end
+                and record.end > start
+            ),
+            key=lambda record: record.start,
+        )
+        return {
+            "view_version": 1,
+            "as_of": now.isoformat(),
+            "timezone": self.timezone.key,
+            "horizon": "hourly_1h",
+            "label": "Jeweils 1 Stunde vorher",
+            "intervals": [
+                {
+                    "start": left.isoformat(),
+                    "end": right.isoformat(),
+                    "energy_kwh": record.raw_energy_kwh
+                    * ((right - left) / (record.end - record.start)),
+                    "ac_power_kw": record.raw_energy_kwh
+                    / ((record.end - record.start).total_seconds() / 3600),
+                    "source_start": record.start.isoformat(),
+                    "source_end": record.end.isoformat(),
+                    "raw_energy_kwh": record.raw_energy_kwh,
+                    "quality_flags": list(record.quality_flags),
+                    "fetched_at": record.fetched_at.isoformat(),
+                    "cutoff": record.cutoff.isoformat(),
+                }
+                for record in records
+                for day_start, day_end in days
+                if (right := min(record.end, day_end))
+                > (left := max(record.start, day_start))
+            ],
+        }
+
     def snapshot(
         self, now: datetime, days: int, include_records: bool = False
     ) -> dict[str, Any]:
