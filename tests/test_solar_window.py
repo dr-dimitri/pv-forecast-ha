@@ -184,3 +184,36 @@ def test_invalid_duration(duration):
 def test_ambiguous_time_is_rejected():
     with pytest.raises(ValueError):
         plan(forecast([1, 1]), earliest_start=START.replace(tzinfo=None))
+
+
+@pytest.mark.parametrize("improvement", [0.05, 0.1, 0.100001])
+def test_previous_zero_window_still_requires_absolute_improvement(improvement):
+    """Ein zulässiges Nullfenster umgeht nicht die 0,1-kWh-Wechselschwelle."""
+
+    result = plan(
+        forecast([0, 0, improvement]),
+        duration_minutes=60,
+        previous_start=START + timedelta(hours=1),
+    )
+    if improvement <= 0.1:
+        assert result["status"] == "unavailable"
+        assert result["reason"] == "no_solar_energy"
+        assert result["hysteresis_applied"] is True
+        assert result["start"] is result["energy_kwh"] is None
+    else:
+        assert result["status"] == "available"
+        assert result["start"] == (START + timedelta(hours=2)).isoformat()
+        assert result["energy_kwh"] == improvement
+
+
+def test_no_longer_permitted_zero_window_does_not_block_new_planning():
+    """Hysterese bewahrt nur innerhalb der aktuellen Grenzen zulässige Fenster."""
+
+    result = plan(
+        forecast([0, 0, 0.05]),
+        duration_minutes=60,
+        earliest_start=START + timedelta(hours=2),
+        previous_start=START + timedelta(hours=1),
+    )
+    assert result["status"] == "available"
+    assert result["energy_kwh"] == 0.05
