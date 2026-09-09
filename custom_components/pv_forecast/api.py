@@ -192,6 +192,14 @@ class OpenMeteoClient:
                         open_meteo_azimuth_deg=geometry[1],
                         local_date=local_date,
                         forecast_days=forecast_days,
+                        **(
+                            {"include_horizon": True}
+                            if any(
+                                any(roof.horizon_profile)
+                                for roof in roofs_by_geometry[geometry]
+                            )
+                            else {}
+                        ),
                     )
                 )
                 for geometry in roofs_by_geometry
@@ -257,6 +265,7 @@ class OpenMeteoClient:
         open_meteo_azimuth_deg: float,
         local_date: date | None = None,
         forecast_days: int = 2,
+        include_horizon: bool = False,
     ) -> OpenMeteoForecast:
         """Eine Geometrie innerhalb der bereits laufenden Operation validieren."""
 
@@ -281,7 +290,10 @@ class OpenMeteoClient:
         params: Mapping[str, str | int | float] = {
             "latitude": latitude,
             "longitude": longitude,
-            "hourly": "global_tilted_irradiance,temperature_2m",
+            "hourly": "global_tilted_irradiance,temperature_2m"
+            + (
+                ",direct_normal_irradiance,diffuse_radiation" if include_horizon else ""
+            ),
             "timezone": "UTC",
             "start_hour": first_end.strftime("%Y-%m-%dT%H:%M"),
             "end_hour": last_end.strftime("%Y-%m-%dT%H:%M"),
@@ -290,7 +302,9 @@ class OpenMeteoClient:
             "azimuth": open_meteo_azimuth_deg,
         }
         payload = await self._async_request(params)
-        forecast = parse_open_meteo_response(payload, timezone)
+        forecast = parse_open_meteo_response(
+            payload, timezone, include_horizon=include_horizon
+        )
         expected_count = int((last_end - first_end).total_seconds() / 3600) + 1
         if len(forecast.intervals) != expected_count or any(
             interval.end.astimezone(UTC) != first_end + timedelta(hours=index)
@@ -392,7 +406,7 @@ def _timezone(name: str) -> ZoneInfo:
 
 
 def parse_open_meteo_response(
-    payload: Any, requested_timezone: str
+    payload: Any, requested_timezone: str, *, include_horizon: bool = False
 ) -> OpenMeteoForecast:
     """Eine rohe API-Antwort in typisierte Stundenintervalle umwandeln."""
 
@@ -409,6 +423,15 @@ def parse_open_meteo_response(
     if not isinstance(gti_values, list) or not isinstance(temperature_values, list):
         raise OpenMeteoDataError("Benötigte Wetterreihen fehlen")
 
+    extra = [
+        hourly.get(key) for key in ("direct_normal_irradiance", "diffuse_radiation")
+    ]
+    if include_horizon and any(
+        not isinstance(values, list) or len(values) != len(times) for values in extra
+    ):
+        raise OpenMeteoDataError(
+            "Benötigte Direkt-/Diffusstrahlungsreihen fehlen oder sind unvollständig"
+        )
     timezone = _timezone(requested_timezone)
 
     intervals: list[WeatherInterval] = []
@@ -439,6 +462,12 @@ def parse_open_meteo_response(
                 gti_w_m2=gti,
                 ambient_temperature_c=ambient_temperature,
                 quality_flags=tuple(quality_flags),
+                direct_normal_irradiance_w_m2=(
+                    _optional_number(extra[0][index]) if include_horizon else None
+                ),
+                diffuse_radiation_w_m2=(
+                    _optional_number(extra[1][index]) if include_horizon else None
+                ),
             )
         )
     return OpenMeteoForecast(intervals=tuple(intervals))

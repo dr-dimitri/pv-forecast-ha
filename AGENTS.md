@@ -514,3 +514,33 @@ Die Optionen erlauben zwei bis sieben lokale Tage, Standard zwei. Die gemeinsame
 ## Mehrere unabhängige Anlagen aus #24
 
 Je logischer Anlage wird ein eigener Config Entry unterstützt. Neue Einträge erhalten eine stabile zufällige Unique-ID; bestehende Domain-Unique-IDs, Entry-/Entity-/Dach-IDs und Stores bleiben unverändert. Schema 1.1 bleibt erhalten. Weitere Einträge benötigen einen unterscheidbaren Namen, an ähnlichen Koordinaten zusätzlich eine ausdrückliche Bestätigung der unabhängigen Anlage. Gerundete Koordinaten sind nur Duplikatheuristik, keine Identität. Gleichörtliche laufende Setups werden gesperrt; der Abschluss prüft neue Nachbarn erneut. Standortänderungen verwerfen alte Bestätigungen. Coordinator, Sensoren, Limits, Mess-/Archiv-/Lernzustände und Karten bleiben je Entry getrennt. HA-weit geteilt sind ausschließlich die flüchtige Anbieterpause und HTTP-Slots. Entfernen einer Anlage berührt andere Anlagen nicht. Diese Ausnahme ersetzt die frühere Beschränkung auf genau einen Entry.
+
+## Experimentelles Horizontprofil aus #20
+
+Die ausdrücklich freigegebene P3-Erweiterung ergänzt optional je stabiler Dach-ID
+12 oder 24 gleichmäßig verteilte Höhenwinkel von 0 bis 90 Grad, Nord zuerst im
+Uhrzeigersinn und zyklisch linear interpoliert. Die Options-UI verlangt eine
+Bestätigung für einen entfernten Horizont der gesamten Dachfläche. Leere und
+Nullprofile sind deaktiviert. Dachlöschung entfernt nur das eigene Profil.
+Beliebige PVGIS-Exporte sind kein unterstütztes Importformat; nur die geprüfte
+Richtungs-/Höhenkonvention der manuellen Uploadlisten stimmt überein.
+
+Ausschließlich betroffene Geometrieabrufe ergänzen DNI und DHI im vorhandenen
+Open-Meteo-Request. Regelversion 1 berechnet mit der veröffentlichten geometrischen
+NOAA-Näherung ohne Refraktion zwölf absolute UTC-Mittelpunktproben je Wetterintervall.
+Konstantes stündliches DNI wird auf die Dachfläche projiziert. Der abziehbare
+Direktanteil ist durch seinen Probenmittelwert und GTI oberhalb des konservativ
+erhaltenen isotropen diffusen Anteils begrenzt. Nur sein blockierter Anteil wird
+abgezogen; das Ergebnis bleibt nichtnegativ. Fehlende einzelne Zusatzwerte erhalten
+GTI mit `horizon_input_fallback`, fehlerhafte Zusatzreihen erzeugen Updatefehler.
+`shading.py` bleibt rein und wird vor Temperatur, Verlusten, Kalibrierung sowie
+Gruppen-/Gesamtclipping in `calculations.py` eingebunden.
+
+Effektive Profile samt Regelversion erweitern ausschließlich bei Aktivierung die
+physische Konfigurationskennung und entziehen inkompatiblen Lernfaktoren ihre
+Freigabe. Alte archivierte DC-Basen bleiben unverändert. Speicherverträge und
+Config-Entry-Schema 1.1 bleiben bestehen. Forecast-Antwort und Karte kennzeichnen
+die experimentelle Anwendung. Ein synthetischer Winter-/Sommervergleich belegt
+nur den zeitabhängigen Mechanismus; der reale Zusatznutzen gegenüber konstanten
+Verlusten oder Kalibrierung bleibt offen. Nahverschattung, elektrische Stringeffekte,
+diffuse Himmelsverdeckung und 3D-Modelle sind ausdrücklich nicht enthalten.

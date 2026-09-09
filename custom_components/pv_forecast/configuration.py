@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 from collections.abc import Mapping, Sequence
+from dataclasses import replace
 from typing import Any
 
 from .calculations import (
@@ -29,6 +30,7 @@ from .const import (
     CONF_TIME_ZONE,
 )
 from .models import AcInverterGroup, PvRoof
+from .shading import CONF_HORIZON_PROFILES, validate_profile
 
 
 def location_fingerprint(data: Mapping[str, Any]) -> str:
@@ -76,7 +78,16 @@ def roofs_from_options(options: Mapping[str, Any]) -> tuple[PvRoof, ...]:
         )
     if len({roof.id for roof in roofs}) != len(roofs):
         raise InvalidConfigurationError("Dach-IDs müssen eindeutig sein")
-    return roofs
+    profiles = options.get(CONF_HORIZON_PROFILES, {})
+    if not isinstance(profiles, Mapping) or set(profiles) - {roof.id for roof in roofs}:
+        raise InvalidConfigurationError("Horizontprofile benötigen vorhandene Dach-IDs")
+    try:
+        return tuple(
+            replace(roof, horizon_profile=validate_profile(profiles.get(roof.id, ())))
+            for roof in roofs
+        )
+    except ValueError as err:
+        raise InvalidConfigurationError(str(err)) from err
 
 
 def inverter_groups_from_options(

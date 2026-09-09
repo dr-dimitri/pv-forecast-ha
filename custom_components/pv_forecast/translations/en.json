@@ -297,7 +297,8 @@
           "history": "Prognosearchiv und Soll-Ist-Vergleich (optional)",
           "calibration": "Selbstkalibrierung (optional)",
           "inverter_groups": "AC-Wechselrichtergruppen zuordnen",
-          "forecast_horizon": "Prognosehorizont"
+          "forecast_horizon": "Prognosehorizont",
+          "horizon_profile": "Horizontprofil je Dach (experimentell)"
         },
         "menu_option_descriptions": {
           "add_roof": "Erfasst eine zusätzliche Dachfläche, ohne die vorhandenen zu verändern.",
@@ -628,6 +629,21 @@
         "data": {
           "forecast_days": "Anzahl lokaler Prognosetage"
         }
+      },
+      "horizon_profile": {
+        "title": "Horizontprofil: Dach auswählen",
+        "description": "Optionales, experimentelles Modell für entfernte Hindernisse am Horizont. Ohne Profil bleibt die Berechnung unverändert.",
+        "data": {
+          "id": "Dachfläche"
+        }
+      },
+      "horizon_details": {
+        "title": "Horizontprofil für {roof}",
+        "description": "12 oder 24 gleichmäßig verteilte Höhenwinkel von 0 bis 90°. Beginn bei Nord (0°), dann im Uhrzeigersinn: bei 12 Werten jeweils 30°, bei 24 jeweils 15°. Dezimalpunkt verwenden; Werte mit Komma, Semikolon, Leerzeichen oder Zeilenumbruch trennen. Keine Azimutspalte einfügen. Beispiel für einen rundum 10° hohen Horizont: `10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10`.\n\nLeer oder nur Nullen entfernt das Profil. Experimentell: schätzt nur blockiertes Direktlicht bei erhaltener diffuser Strahlung. Keine Nahverschattung einzelner Module, Baum-/String- oder Bypassdiodenmodellierung. Eine Verbesserung gegenüber pauschalen Verlusten oder Kalibrierung ist noch nicht gemessen. Aktivierung ergänzt zwei Strahlungsvariablen im bestehenden Wetterabruf und beginnt eine neue Vergleichsgrundlage.",
+        "data": {
+          "profile": "Höhenwinkel in Grad",
+          "confirm_horizon": "Ich bestätige: entfernter Horizont für die gesamte Dachfläche; die Modellgrenzen sind mir bekannt."
+        }
       }
     },
     "error": {
@@ -654,7 +670,10 @@
       "temperature_roof_invalid": "Wähle eine vorhandene Dachfläche und eine angebotene Vergleichsannahme.",
       "underperformance_confirmation_required": "Bitte die Änderung ausdrücklich bestätigen.",
       "underperformance_unavailable": "Das lokale Archiv ist derzeit nicht verfügbar. Bitte Einrichtung und Archivspeicher prüfen.",
-      "invalid_forecast_days": "Bitte zwei bis sieben ganze Prognosetage wählen."
+      "invalid_forecast_days": "Bitte zwei bis sieben ganze Prognosetage wählen.",
+      "invalid_horizon_profile": "Bitte genau 12 oder 24 endliche Höhenwinkel zwischen 0 und 90° eingeben; Dezimalpunkt verwenden. Leer entfernt das Profil.",
+      "confirm_horizon_required": "Bitte die Eignung des Profils für den entfernten Horizont der gesamten Dachfläche bestätigen.",
+      "invalid_horizon_roof": "Bitte eine vorhandene Dachfläche auswählen."
     },
     "abort": {
       "reconfigure_entry_changed": "Die Anlage wurde während der Bearbeitung anderweitig geändert. Bitte starte die Bearbeitung erneut."

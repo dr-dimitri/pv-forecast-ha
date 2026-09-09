@@ -36,7 +36,7 @@ from homeassistant.helpers.translation import async_get_translations
 from .api import OpenMeteoConnectionError, OpenMeteoDataError
 from .calculations import InvalidConfigurationError, validate_coordinates
 from .calibration_configuration import CalibrationFlowMixin
-from .configuration import location_fingerprint, roof_from_dict
+from .configuration import location_fingerprint, roof_from_dict, roofs_from_options
 from .const import (
     CONF_ADD_ANOTHER,
     CONF_AZIMUTH,
@@ -83,6 +83,8 @@ from .inverter_configuration import InverterGroupFlowMixin, groups_for_remaining
 from .measurement_configuration import MeasurementFlowMixin
 from .reconfiguration import ReconfigurationChangedError, async_prepare_location_change
 from .runtime import async_get_open_meteo_client
+from .shading import CONF_HORIZON_PROFILES
+from .shading_configuration import ShadingFlowMixin
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -673,7 +675,7 @@ class PvForecastConfigFlow(
                     self._location[CONF_LATITUDE],
                     self._location[CONF_LONGITUDE],
                     self._location[CONF_TIME_ZONE],
-                    tuple(roof_from_dict(roof) for roof in self._roofs),
+                    roofs_from_options(dict(self._options) | {CONF_ROOFS: self._roofs}),
                 )
                 self._reconfigure_tested = True
             except OpenMeteoConnectionError:
@@ -811,7 +813,9 @@ class PvForecastConfigFlow(
             else:
                 client = async_get_open_meteo_client(self.hass)
                 try:
-                    roofs = tuple(roof_from_dict(roof) for roof in self._roofs)
+                    roofs = roofs_from_options(
+                        dict(self._options) | {CONF_ROOFS: self._roofs}
+                    )
                     if CONF_TIME_ZONE not in self._location:
                         self._location[CONF_TIME_ZONE] = (
                             await client.async_resolve_timezone(
@@ -922,6 +926,7 @@ class PvForecastConfigFlow(
 
 
 class PvForecastOptionsFlow(
+    ShadingFlowMixin,
     InverterGroupFlowMixin,
     CalibrationFlowMixin,
     HistoryFlowMixin,
@@ -980,6 +985,12 @@ class PvForecastOptionsFlow(
 
         options: dict[str, Any] = dict(self.config_entry.options)
         options[CONF_ROOFS] = roofs
+        if CONF_HORIZON_PROFILES in options:
+            options[CONF_HORIZON_PROFILES] = {
+                key: value
+                for key, value in options[CONF_HORIZON_PROFILES].items()
+                if key in {roof[CONF_ROOF_ID] for roof in roofs}
+            }
         if CONF_INVERTER_GROUPS in options:
             options[CONF_INVERTER_GROUPS] = groups_for_remaining_roofs(
                 options[CONF_INVERTER_GROUPS],
@@ -1010,7 +1021,7 @@ class PvForecastOptionsFlow(
         inverter_limit = self.config_entry.options.get(CONF_INVERTER_MAX_POWER_KW)
         menu_options = ["add_roof"]
         if roofs:
-            menu_options.extend(["edit_roof", "remove_roof"])
+            menu_options.extend(["edit_roof", "remove_roof", "horizon_profile"])
         menu_options.append("system")
         menu_options.append("forecast_horizon")
         menu_options.append("inverter_groups")

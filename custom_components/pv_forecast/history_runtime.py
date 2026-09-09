@@ -40,6 +40,7 @@ from .coordinator import PvForecastCoordinator
 from .history import HistoryArchive
 from .measurement_runtime import MeasurementManager
 from .measurements import SourceConfig
+from .shading import CONF_HORIZON_PROFILES, HORIZON_RULE_VERSION
 from .short_term import trial_report
 from .temperature_comparison import comparison_report, mountings_from_options
 from .uncertainty_data import current_experience_bands
@@ -181,6 +182,20 @@ def _configuration_id(entry: ConfigEntry) -> str:
             ],
             key=lambda group: group["id"],
         )
+    profiles = (
+        {
+            roof.id: list(roof.horizon_profile)
+            for roof in roofs_from_options(entry.options)
+            if roof.horizon_profile
+        }
+        if entry.options.get(CONF_HORIZON_PROFILES)
+        else {}
+    )
+    if profiles:
+        physical["horizon_shading"] = {
+            "rule_version": HORIZON_RULE_VERSION,
+            "profiles": profiles,
+        }
     encoded = json.dumps(
         physical, sort_keys=True, separators=(",", ":"), allow_nan=False
     )

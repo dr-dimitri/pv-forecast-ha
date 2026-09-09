@@ -85,16 +85,27 @@ async def test_restart_preserves_learning_segment(hass, freezer):
     assert coordinator.listeners == []
 
 
-async def test_location_change_revokes_old_learning_segment_with_paused_archive(hass):
-    """Eine neue Lage übernimmt auch ohne aktive Lernvoraussetzungen keinen Altstand."""
+@pytest.mark.parametrize("change", ["location", "horizon"])
+async def test_physical_change_revokes_old_learning_segment_with_paused_archive(
+    hass, change
+):
+    """Physische Änderungen übernehmen auch bei pausiertem Lernen keinen Altstand."""
 
     entry, coordinator, history, manager = _managers(hass, mode="off")
     state = CalibrationState(_configuration_id(entry), NOW - timedelta(days=12), "UTC")
     await manager._store.async_save({"state": state.to_dict()})
     hass.config_entries.async_update_entry(
         entry,
-        data={**entry.data, "latitude": 35.6},
-        options={**entry.options, "history_enabled": False},
+        data={**entry.data, **({"latitude": 35.6} if change == "location" else {})},
+        options={
+            **entry.options,
+            "history_enabled": False,
+            **(
+                {"horizon_profiles": {entry.options["roofs"][0]["id"]: [30] * 12}}
+                if change == "horizon"
+                else {}
+            ),
+        },
     )
     await history.async_start()
     try:

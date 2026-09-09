@@ -26,6 +26,7 @@ from .card_data import UnknownRoofError, build_forecast_view
 from .const import CONF_TIME_ZONE, DOMAIN
 from .models import ForecastResult
 from .planning import plan_solar_window
+from .shading import shading_metadata
 
 if TYPE_CHECKING:
     from . import PvForecastConfigEntry
@@ -213,6 +214,7 @@ def _serialize_forecast(
         "timezone": timezone_name,
         "forecast_start_date": forecast.local_date.isoformat(),
         "forecast_days": forecast.forecast_days,
+        "horizon_shading": shading_metadata(forecast.horizon_shading),
         "fetched_at": fetched_at.astimezone(UTC).isoformat() if fetched_at else None,
         "model_issued_at": None,
         "coverage": {

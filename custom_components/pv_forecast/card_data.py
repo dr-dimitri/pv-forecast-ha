@@ -9,6 +9,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from .models import ForecastDay, ForecastResult, TotalForecastInterval
+from .shading import shading_metadata
 
 
 class UnknownRoofError(ValueError):
@@ -173,6 +174,7 @@ def build_forecast_view(
         "today_start": today_start.isoformat(),
         "today_end": today_end.isoformat(),
         "forecast_days": forecast.forecast_days,
+        "horizon_shading": shading_metadata(forecast.horizon_shading),
         "daily_forecasts": [
             {
                 "date": (forecast.local_date + timedelta(days=offset)).isoformat(),

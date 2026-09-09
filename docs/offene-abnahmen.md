@@ -18,6 +18,9 @@ und die konkretisierten Verträge in
 | #17 | Ross-Zelltemperatur als reine Beobachtungsvariante | Explizite Montageannahme je Dach, Referenzgleichung, gleichzeitige Rohmodellpaare und unveränderter Standard |
 | #31 | Zusammenhängendes Solarzeitfenster in Leseaktion und Karte | UTC/DST, Teilstunden, Hysterese, laufende Fenster, nativer HA-Script-Blueprint und EMHASS-Datenadapter |
 | #29 | Tages- und Stunden-Erfahrungsband für eingefrorene Stände | Je Horizont 60 frühere Trainingstage und 30 spätere Prüftage, gemeinsame Prüfung von Abdeckung und Breite; Stunden nach lokaler Startzeit getrennt |
+| #21 | Optional zwei bis sieben Prognosetage | UTC-Zeiträume, unveränderte Abrufzahl, Tageswerte und mehrtägige Planung; spätere Tage als Tendenz |
+| #24 | Mehrere unabhängige logische Anlagen | Eigene IDs, Sensoren, Messwerte und Stores; explizite Bestätigung am selben Ort; getrenntes Entladen |
+| #20 | Experimentelles Horizontprofil je Dach | Sonnengeometrie, diffuse Reste, Winter/Sommer, Clipping und unveränderter Standard |
 | #30 | Tagesaussicht und optional eingefrorene Zukunftskandidaten | Keine Doppelzählung, Messlücken und Quellenrechte; produktiv keine kurzfristige Korrektur |
 
 Die neuen Darstellungen der Karte wurden bei 360 px in Hell/Dunkel und mit
@@ -54,13 +57,13 @@ kein Nachweis tatsächlicher Erträge oder einer erreichten Prognosegüte.
   umgesetzt und hinter einer historischen Qualitätsprüfung gesperrt. Ein
   Vergleich mit der Wetterprognose allein begründet keine Defektmeldung.
 
-P3 ist zur Umsetzung in der Reihenfolge **#21, #24, #20** freigegeben.
-#21 liefert optionale zwei bis sieben Tage als gekennzeichnete Tendenz.
-Reale Güte und praktischer Nutzen späterer Tage bleiben gesondert zu prüfen.
-Die folgenden Schritte betreffen Verschattung, weitere Prognosetage und mehrere
-Standorte erweitern den aktuellen Produktumfang. Die nativen HA-Frontendfehler
-**#52 und #53** liegen außerhalb dieses Integrationscodes. Ihre dokumentierten
-Grenzen und die eindeutige interne UTC-Zeitreihe bleiben bestehen.
+P3 wurde in der freigegebenen Reihenfolge **#21, #24, #20** technisch umgesetzt.
+Reale Güte und praktischer Nutzen späterer Prognosetage sowie des experimentellen
+[Horizontprofils](horizontprofil.md) bleiben gesondert zu prüfen. Ein synthetischer
+Mechanismusvergleich ersetzt den späteren Vergleich mit Messdaten nicht.
+Die nativen HA-Frontendfehler **#52 und #53** liegen außerhalb dieses
+Integrationscodes. Ihre dokumentierten Grenzen und die eindeutige interne
+UTC-Zeitreihe bleiben bestehen.
 
 Die genannten Issues und die Roadmap bleiben offen, soweit ihre menschlichen
 Abnahmen oder beschriebenen Folgeschritte noch fehlen.

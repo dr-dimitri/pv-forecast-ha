@@ -30,6 +30,7 @@ class PvRoof:
     compass_azimuth_deg: float
     tilt_deg: float
     loss_fraction: float
+    horizon_profile: tuple[float, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -56,6 +57,8 @@ class WeatherInterval:
     gti_w_m2: float
     ambient_temperature_c: float | None
     quality_flags: tuple[str, ...] = ()
+    direct_normal_irradiance_w_m2: float | None = None
+    diffuse_radiation_w_m2: float | None = None
 
     @property
     def duration_hours(self) -> float:
@@ -116,6 +119,7 @@ class ForecastResult:
     total_intervals: tuple[TotalForecastInterval, ...] = ()
     inverter_groups: tuple[AcInverterGroup, ...] = ()
     forecast_days: int = 2
+    horizon_shading: bool = False
 
 
 @dataclass(frozen=True, slots=True)

@@ -682,3 +682,15 @@ test("Mehrtagesaussicht verwendet Backendwerte und kennzeichnet Tendenz und Lüc
   assert.match(html, /Prognosegüte späterer Tage ist noch nicht gemessen/);
   assert.doesNotMatch(renderContent(config, (await load("sunny")).state), /Mehrtagesaussicht/);
 });
+
+
+test("Horizontprofil bleibt ausdrücklich experimentell und verändert keine Backendwerte", async () => {
+  const { state, calls } = await load("shading");
+  const html = renderContent(config, state);
+  assert.match(html, /Experimentelles Horizontprofil aktiv/);
+  assert.match(html, /Eine bessere Prognosegüte ist noch nicht belegt/);
+  assert.equal(state.forecast.data.summary.today_kwh, 23.14);
+  assert.equal(calls.length, 3);
+  const normal = await load();
+  assert.doesNotMatch(renderContent(config, normal.state), /Experimentelles Horizontprofil/);
+});

@@ -23,6 +23,7 @@ from .models import (
     TotalForecastInterval,
     WeatherInterval,
 )
+from .shading import adjusted_weather, validate_profile
 
 
 class InvalidConfigurationError(ValueError):
@@ -51,6 +52,7 @@ def validate_coordinates(latitude: float, longitude: float) -> None:
 def validate_roof(roof: PvRoof) -> None:
     """Eine Dachflächenkonfiguration validieren."""
 
+    validate_profile(roof.horizon_profile)
     if not roof.id or not roof.name.strip():
         raise InvalidConfigurationError("Dach-ID und Dachname dürfen nicht leer sein")
     if not math.isfinite(roof.installed_power_kwp) or roof.installed_power_kwp <= 0:
@@ -237,6 +239,8 @@ def calculate_forecast(
     inverter_groups: tuple[AcInverterGroup, ...] = (),
     temperature_coefficients: Mapping[str, float] | None = None,
     forecast_days: int = 2,
+    latitude: float | None = None,
+    longitude: float | None = None,
 ) -> ForecastResult:
     """Dachzeitreihen für den gewählten lokalen Horizont gemeinsam clippen."""
 
@@ -251,6 +255,21 @@ def calculate_forecast(
         roof.id for roof in roofs
     }:
         raise InvalidConfigurationError("Der Temperaturvergleich benötigt alle Dächer")
+
+    horizon_shading = any(any(roof.horizon_profile) for roof in roofs)
+    if horizon_shading:
+        if latitude is None or longitude is None:
+            raise InvalidConfigurationError(
+                "Horizontprofile benötigen Standortkoordinaten"
+            )
+        validate_coordinates(latitude, longitude)
+        weather_by_roof = {
+            roof.id: tuple(
+                adjusted_weather(roof, point, latitude, longitude)
+                for point in weather_by_roof.get(roof.id, ())
+            )
+            for roof in roofs
+        }
 
     # Wiederholte Ortsstunden beim DST-Rücksprung sind nur in UTC eindeutig.
     weather_maps = {
@@ -381,6 +400,7 @@ def calculate_forecast(
         total_intervals=combined_intervals,
         inverter_groups=inverter_groups,
         forecast_days=forecast_days,
+        horizon_shading=horizon_shading,
     )
     return apply_calibration(
         result, calibration_factor, inverter_max_power_kw, timezone
