@@ -644,11 +644,13 @@ async def test_roofs_share_requests_for_equal_geometry() -> None:
             "tilt_deg": 35,
             "open_meteo_azimuth_deg": 0,
             "local_date": date(2026, 9, 9),
+            "forecast_days": 2,
         },
         {
             "tilt_deg": 35,
             "open_meteo_azimuth_deg": -90,
             "local_date": date(2026, 9, 9),
+            "forecast_days": 2,
         },
     ]
 

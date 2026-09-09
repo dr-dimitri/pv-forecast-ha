@@ -60,6 +60,11 @@ def plan_solar_window(
         "energy_kwh": None,
         "quality_flags": [],
         "basis": "effective_forecast",
+        "forecast_days": forecast.forecast_days,
+        "includes_tendency": latest_end
+        > datetime.combine(
+            forecast.local_date + timedelta(days=2), time.min, ZoneInfo(timezone_name)
+        ).astimezone(UTC),
         "assumption": "constant_interval_mean_power",
         "hysteresis_applied": False,
         "uncertainty": {"status": "unavailable", "reason": "unsupported_horizon"},
@@ -72,7 +77,7 @@ def plan_solar_window(
     today = now.astimezone(timezone).date()
     day_start = datetime.combine(today, time.min, timezone).astimezone(UTC)
     forecast_end = datetime.combine(
-        today + timedelta(days=2), time.min, timezone
+        forecast.local_date + timedelta(days=forecast.forecast_days), time.min, timezone
     ).astimezone(UTC)
     if previous_start is not None and previous_start <= now:
         return {

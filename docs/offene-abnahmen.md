@@ -54,8 +54,10 @@ kein Nachweis tatsächlicher Erträge oder einer erreichten Prognosegüte.
   umgesetzt und hinter einer historischen Qualitätsprüfung gesperrt. Ein
   Vergleich mit der Wetterprognose allein begründet keine Defektmeldung.
 
-Die P3-Erweiterungen **#20, #21 und #24** bleiben gemäß Roadmap bis zu einem
-belegten Bedarf zurückgestellt: Verschattung, weitere Prognosetage und mehrere
+P3 ist zur Umsetzung in der Reihenfolge **#21, #24, #20** freigegeben.
+#21 liefert optionale zwei bis sieben Tage als gekennzeichnete Tendenz.
+Reale Güte und praktischer Nutzen späterer Tage bleiben gesondert zu prüfen.
+Die folgenden Schritte betreffen Verschattung, weitere Prognosetage und mehrere
 Standorte erweitern den aktuellen Produktumfang. Die nativen HA-Frontendfehler
 **#52 und #53** liegen außerhalb dieses Integrationscodes. Ihre dokumentierten
 Grenzen und die eindeutige interne UTC-Zeitreihe bleiben bestehen.

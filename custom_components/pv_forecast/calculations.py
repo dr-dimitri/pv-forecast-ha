@@ -9,6 +9,7 @@ from datetime import UTC, date, datetime, time, timedelta, tzinfo
 from itertools import pairwise
 
 from .const import DEFAULT_TEMPERATURE_COEFFICIENT, REFERENCE_TEMPERATURE_C
+from .horizon import validate_forecast_days
 from .models import (
     AcInverterGroup,
     DailyYield,
@@ -235,8 +236,11 @@ def calculate_forecast(
     calibration_factor: float = 1.0,
     inverter_groups: tuple[AcInverterGroup, ...] = (),
     temperature_coefficients: Mapping[str, float] | None = None,
+    forecast_days: int = 2,
 ) -> ForecastResult:
-    """Zeitreihen aller Dächer berechnen, clippen und für zwei Tage summieren."""
+    """Dachzeitreihen für den gewählten lokalen Horizont gemeinsam clippen."""
+
+    forecast_days = validate_forecast_days(forecast_days)
 
     if not roofs:
         raise InvalidConfigurationError("Mindestens eine Dachfläche ist erforderlich")
@@ -265,7 +269,7 @@ def calculate_forecast(
     total_intervals: list[TotalForecastInterval] = []
     forecast_start = datetime.combine(local_date, time.min, timezone).astimezone(UTC)
     forecast_end = datetime.combine(
-        local_date + timedelta(days=2), time.min, timezone
+        local_date + timedelta(days=forecast_days), time.min, timezone
     ).astimezone(UTC)
 
     for timestamp in timestamps:
@@ -376,6 +380,7 @@ def calculate_forecast(
         ),
         total_intervals=combined_intervals,
         inverter_groups=inverter_groups,
+        forecast_days=forecast_days,
     )
     return apply_calibration(
         result, calibration_factor, inverter_max_power_kw, timezone

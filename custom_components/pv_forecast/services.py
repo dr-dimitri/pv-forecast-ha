@@ -192,7 +192,7 @@ def _serialize_forecast(
         forecast.local_date, time.min, timezone
     ).astimezone(UTC)
     expected_end = datetime.combine(
-        forecast.local_date + timedelta(days=2), time.min, timezone
+        forecast.local_date + timedelta(days=forecast.forecast_days), time.min, timezone
     ).astimezone(UTC)
     complete = (
         bool(intervals)
@@ -212,6 +212,7 @@ def _serialize_forecast(
         "schema_version": 1,
         "timezone": timezone_name,
         "forecast_start_date": forecast.local_date.isoformat(),
+        "forecast_days": forecast.forecast_days,
         "fetched_at": fetched_at.astimezone(UTC).isoformat() if fetched_at else None,
         "model_issued_at": None,
         "coverage": {
