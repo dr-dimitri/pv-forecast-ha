@@ -776,3 +776,41 @@ async def test_very_large_provider_pause_is_scheduled_without_overflow(
         assert coordinator._unsub_refresh is not None
         remove_listener()
         await coordinator.async_shutdown()
+
+
+@pytest.mark.parametrize("inverter_limit", [None, 15.0])
+async def test_arithmetic_overflow_keeps_previous_forecast(
+    hass, aioclient_mock, inverter_limit: float | None
+) -> None:
+    """Endliche API-Werte mit Rechenüberlauf ersetzen keinen gültigen Snapshot."""
+
+    with freeze_time("2026-08-23T12:00:00+02:00"):
+        entry = _entry(hass)
+        hass.config_entries.async_update_entry(
+            entry, options={**entry.options, CONF_INVERTER_MAX_POWER_KW: inverter_limit}
+        )
+        aioclient_mock.get(
+            OPEN_METEO_FORECAST_URL,
+            json=_hourly_payload("2026-08-22T23:00", "2026-08-24T22:00"),
+        )
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+        coordinator = entry.runtime_data.coordinator
+        previous = coordinator.data
+        previous_success_time = coordinator.last_update_success_time
+        aioclient_mock.clear_requests()
+        payload = _hourly_payload("2026-08-22T23:00", "2026-08-24T22:00")
+        payload["hourly"]["global_tilted_irradiance"] = [1e308] * 48
+        aioclient_mock.get(OPEN_METEO_FORECAST_URL, json=payload)
+
+        await coordinator.async_refresh()
+
+        assert not coordinator.last_update_success
+        assert isinstance(coordinator.last_exception, UpdateFailed)
+        assert coordinator.data is previous
+        assert coordinator.last_update_success_time == previous_success_time
+        assert aioclient_mock.call_count == 1
+        assert all(
+            state.state == "unavailable" for state in hass.states.async_all("sensor")
+        )
+        assert await hass.config_entries.async_unload(entry.entry_id)

@@ -18,7 +18,17 @@ from .models import (
 
 
 class InvalidConfigurationError(ValueError):
-    """Eine PV-Konfiguration ist fachlich ungültig."""
+    """Eine PV-Konfiguration oder ihr Berechnungsergebnis ist fachlich ungültig."""
+
+
+def _finite_result(value: float, quantity: str) -> float:
+    """Nicht endliche Ergebnisse vor Begrenzung und Veröffentlichung stoppen."""
+
+    if not math.isfinite(value):
+        raise InvalidConfigurationError(
+            f"PV-Berechnung liefert keinen endlichen Wert für {quantity}"
+        )
+    return value
 
 
 def validate_coordinates(latitude: float, longitude: float) -> None:
@@ -76,10 +86,13 @@ def temperature_factor(
         return 1.0
     if not math.isfinite(ambient_temperature_c):
         return 1.0
-    return max(
-        0.0,
-        1 + coefficient_per_c * (ambient_temperature_c - reference_temperature_c),
+    temperature_difference = _finite_result(
+        ambient_temperature_c - reference_temperature_c, "Temperaturdifferenz"
     )
+    factor = _finite_result(
+        1 + coefficient_per_c * temperature_difference, "Temperaturfaktor"
+    )
+    return max(0.0, factor)
 
 
 def calculate_dc_power_kw(roof: PvRoof, weather: WeatherInterval) -> float:
@@ -87,13 +100,14 @@ def calculate_dc_power_kw(roof: PvRoof, weather: WeatherInterval) -> float:
 
     validate_roof(roof)
     gti_w_m2 = max(0.0, weather.gti_w_m2) if math.isfinite(weather.gti_w_m2) else 0.0
-    raw_power_kw = roof.installed_power_kwp * gti_w_m2 / 1000
-    return max(
-        0.0,
-        raw_power_kw
-        * temperature_factor(weather.ambient_temperature_c)
-        * (1 - roof.loss_fraction),
+    raw_power_kw = _finite_result(
+        roof.installed_power_kwp * gti_w_m2 / 1000, "Rohleistung"
     )
+    corrected_power_kw = _finite_result(
+        raw_power_kw * temperature_factor(weather.ambient_temperature_c),
+        "temperaturkorrigierte Leistung",
+    )
+    return max(0.0, corrected_power_kw * (1 - roof.loss_fraction))
 
 
 def proportional_clipping(
@@ -102,13 +116,14 @@ def proportional_clipping(
     """Ein globales Wechselrichterlimit proportional auf Dachflächen verteilen."""
 
     sanitized = {
-        roof_id: max(0.0, power) for roof_id, power in dc_power_by_roof.items()
+        roof_id: max(0.0, _finite_result(power, "Dachleistung"))
+        for roof_id, power in dc_power_by_roof.items()
     }
+    total_dc = _finite_result(sum(sanitized.values()), "Gesamtleistung")
     if inverter_max_power_kw is None:
         return sanitized
     if not math.isfinite(inverter_max_power_kw) or inverter_max_power_kw <= 0:
         raise InvalidConfigurationError("Wechselrichterleistung muss größer als 0 sein")
-    total_dc = sum(sanitized.values())
     if total_dc <= inverter_max_power_kw or total_dc == 0:
         return sanitized
     factor = inverter_max_power_kw / total_dc
@@ -164,7 +179,9 @@ def calculate_forecast(
                     end=point.end,
                     dc_power_kw=dc_by_roof[roof.id],
                     ac_power_kw=ac_by_roof[roof.id],
-                    energy_kwh=ac_by_roof[roof.id] * duration_hours,
+                    energy_kwh=_finite_result(
+                        ac_by_roof[roof.id] * duration_hours, "Intervallenergie"
+                    ),
                 )
             )
 
@@ -185,8 +202,14 @@ def calculate_forecast(
         local_date=local_date,
         roofs=roof_results,
         total=DailyYield(
-            today=sum(result.daily.today for result in roof_results.values()),
-            tomorrow=sum(result.daily.tomorrow for result in roof_results.values()),
+            today=_finite_result(
+                sum(result.daily.today for result in roof_results.values()),
+                "Gesamtenergie heute",
+            ),
+            tomorrow=_finite_result(
+                sum(result.daily.tomorrow for result in roof_results.values()),
+                "Gesamtenergie morgen",
+            ),
         ),
     )
 
@@ -214,5 +237,7 @@ def aggregate_energy_for_day(
         overlap_fraction = (
             overlap_end - overlap_start
         ).total_seconds() / interval_seconds
-        total += interval.energy_kwh * overlap_fraction
+        total = _finite_result(
+            total + interval.energy_kwh * overlap_fraction, "Tagesenergie"
+        )
     return total
