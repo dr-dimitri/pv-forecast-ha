@@ -34,8 +34,14 @@ from homeassistant.util import dt as dt_util
 
 from .configuration import location_fingerprint
 from .const import CONF_INSTALLED_POWER_KWP, CONF_ROOFS, CONF_TIME_ZONE, DOMAIN
+from .measurement_helpers import helper_matches
 from .measurement_windows import MeasurementWindow, async_interval_windows
-from .measurements import SourceConfig, SourceHistory, aggregate_energy
+from .measurements import (
+    SourceConfig,
+    SourceHistory,
+    aggregate_energy,
+    normalize_reading_value,
+)
 from .models import ForecastResult
 from .outlook import build_day_outlook
 
@@ -174,9 +180,10 @@ class MeasurementManager:
 
         return tuple(
             dict.fromkeys(
-                self._resolved_entity_id(source)
+                entity_id
                 for history in self._histories.values()
                 for source in history.segment_sources.values()
+                for entity_id in self._source_entity_ids(source)
             )
         )
 
@@ -420,10 +427,64 @@ class MeasurementManager:
         }
 
     @callback
+    def _source_entity_ids(self, source: SourceConfig) -> tuple[str, ...]:
+        """Auch die ursprüngliche Leistungsmessung benötigt Leserechte."""
+        ids = (self._resolved_entity_id(source),)
+        if source.upstream_registry_id is not None:
+            registered = er.async_get(self.hass).async_get(source.upstream_registry_id)
+            ids += (registered.entity_id if registered else source.upstream_entity_id,)
+        return ids
+
+    @callback
+    def _upstream_valid(self, source: SourceConfig, timestamp: datetime) -> bool:
+        """Fehlende, ungültige oder stehengebliebene Leistungsdaten nicht bestätigen."""
+        if source.upstream_registry_id is None:
+            return True
+        registry = er.async_get(self.hass).async_get(source.upstream_registry_id)
+        state = self.hass.states.get(registry.entity_id) if registry else None
+        return bool(
+            state is not None
+            and not state.attributes.get("restored")
+            and state.attributes.get("device_class") == "power"
+            and state.attributes.get("state_class") == "measurement"
+            and normalize_reading_value(
+                state.state, state.attributes.get("unit_of_measurement"), "power"
+            )[0]
+            is not None
+            and abs(timestamp - state.last_reported)
+            <= timedelta(minutes=source.max_interval_minutes)
+        )
+
+    @callback
+    def _upstream_event(
+        self, entity_id: str, timestamp: datetime, previous: datetime | None
+    ) -> None:
+        """Lücken vor dem nachfolgenden Helferereignis in der Messhistorie vermerken."""
+        for history in self._histories.values():
+            source = history.source
+            if (
+                source.upstream_registry_id is None
+                or self._source_entity_ids(source)[1] != entity_id
+            ):
+                continue
+            if (
+                not self._upstream_valid(source, timestamp)
+                or previous is None
+                or timestamp - previous > timedelta(minutes=source.max_interval_minutes)
+            ):
+                history.mark_gap("upstream_gap")
+
+    @callback
     def _identity_matches(self, source: SourceConfig) -> bool:
         """Austausch unter gleichem Entitynamen nicht stillschweigend übernehmen."""
 
         registered = er.async_get(self.hass).async_get(source.entity_id)
+        if source.upstream_registry_id is not None:
+            helper = self.hass.config_entries.async_get_entry(source.helper_entry_id)
+            if helper is None or not helper_matches(
+                self.hass, helper, source.upstream_registry_id
+            ):
+                return False
         if source.registry_id is None:
             return (
                 registered is None
@@ -454,7 +515,11 @@ class MeasurementManager:
     @callback
     def _subscribe(self) -> None:
         entity_ids = tuple(
-            history.source.entity_id for history in self._histories.values()
+            dict.fromkeys(
+                entity_id
+                for history in self._histories.values()
+                for entity_id in self._source_entity_ids(history.source)
+            )
         )
         self._listeners = [
             async_track_state_change_event(self.hass, entity_ids, self._state_changed),
@@ -473,6 +538,12 @@ class MeasurementManager:
     @callback
     def _state_changed(self, event: Event[EventStateChangedData]) -> None:
         state = event.data["new_state"]
+        old = event.data["old_state"]
+        self._upstream_event(
+            event.data["entity_id"],
+            event.time_fired,
+            old.last_reported if old else None,
+        )
         self._receive(
             event.data["entity_id"],
             state,
@@ -483,6 +554,11 @@ class MeasurementManager:
     def _state_reported(self, event: Event[EventStateReportedData]) -> None:
         # State.last_reported wird bei unverändertem Zustand mutiert. Das Datum
         # des konkreten Ereignisses schützt vor später eingetroffenen Berichten.
+        self._upstream_event(
+            event.data["entity_id"],
+            event.data["last_reported"],
+            event.data["old_last_reported"],
+        )
         self._receive(
             event.data["entity_id"],
             event.data["new_state"],
@@ -514,6 +590,9 @@ class MeasurementManager:
         if not isinstance(last_reset, datetime) or last_reset.tzinfo is None:
             last_reset = None
         flags: set[str] = set()
+        if not self._upstream_valid(history.source, timestamp):
+            history.mark_gap("upstream_gap")
+            return
         if attributes.get("restored"):
             flags.add("restored_state")
             value = "unavailable"

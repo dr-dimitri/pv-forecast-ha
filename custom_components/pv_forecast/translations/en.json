@@ -62,7 +62,7 @@
           "edit_location": "Standort ändern",
           "edit_roofs": "Dachflächen ändern",
           "edit_system": "Wechselrichterleistung ändern",
-          "measurements": "Echte PV-Messquellen zuordnen (optional)",
+          "measurements": "PV-Erzeugung einrichten (optional)",
           "history": "Prognosearchiv und Soll-Ist-Vergleich (optional)",
           "dashboard": "PV-Dashboard einrichten"
         },
@@ -77,7 +77,7 @@
         "title": "Echte PV-Messquellen (optional)",
         "description": "{sources}\n\nOrdne vorhandene Home-Assistant-Sensoren zu. Die Prognose funktioniert auch ohne Messquelle. Energie wird je Quelle ausgewertet; Leistung wird nur gelesen. Eine gemeinsame Gesamtquelle und ihre Teilzähler dürfen nicht gleichzeitig als Energiequellen verwendet werden.",
         "menu_options": {
-          "add_measurement": "Messquelle hinzufügen",
+          "add_measurement": "PV-Erzeugung hinzufügen",
           "edit_measurement": "Messquelle bearbeiten",
           "remove_measurement": "Messquelle und ihre Daten entfernen",
           "delete_measurement_data": "Gespeicherte Daten einer Quelle löschen",
@@ -253,6 +253,26 @@
           "dashboard_enabled": "PV-Dashboard in der Seitenleiste anzeigen",
           "dashboard_title": "Titel in der Seitenleiste"
         }
+      },
+      "add_measurement": {
+        "title": "PV-Erzeugung hinzufügen",
+        "description": "Wähle ein bereits eingerichtetes Gerät. Den passenden Messwert ordnen wir automatisch zu. Fehlt dein Gerät, richte zuerst seine Integration ein und prüfe, ob sie aktuelle Leistungswerte liefert. Andere Sensoren kannst du selbst auswählen.",
+        "data": {
+          "device": "Gerät oder Messquelle"
+        }
+      },
+      "measurement_device": {
+        "title": "PV-Erzeugung zuordnen",
+        "description": "**{device}** liefert aktuell **{reading}**.\n\nWir verwenden die gesamte AC-PV-Erzeugung. Aus Leistungswerten richtet Home Assistant beim Speichern automatisch einen Energiezähler in kWh ein; ein passender vorhandener Helfer wird wiederverwendet. Du musst keinen Sensor suchen und keine Einheiten einstellen.\n\nDer Ertrag wird aus Messwerten angenähert. Während Ausfällen fehlt Erfassung. Ein angelegter Energiehelfer bleibt auch nach dem Entfernen dieser Zuordnung unter „Helfer“ erhalten und kann dort bewusst gelöscht werden.",
+        "data": {
+          "confirmed_no_battery": "An den erfassten Wechselrichtern ist keine Batterie angeschlossen",
+          "confirmed_pv": "Das Gerät erfasst die PV-Erzeugung aller Dächer dieser Anlage",
+          "confirmed_disjoint": "Diese Erzeugung wird nicht bereits durch eine andere Energiequelle dieser Anlage gezählt"
+        }
+      },
+      "measurement_save": {
+        "title": "Energiezähler noch nicht eingerichtet",
+        "description": "Die Messquelle oder ihr Energiehelfer konnte nicht bereitgestellt werden. Prüfe, ob das Gerät aktuelle Werte liefert und die Integral-Integration verfügbar ist. Deine Eingaben bleiben erhalten. Mit „Absenden“ versuchst du das Speichern erneut; du kannst die Einrichtung auch abbrechen."
       }
     },
     "error": {
@@ -284,7 +304,9 @@
       "underperformance_unavailable": "Das lokale Archiv ist derzeit nicht verfügbar. Bitte Einrichtung und Archivspeicher prüfen.",
       "invalid_plant_name": "Bitte einen Anlagennamen mit 1 bis 100 Zeichen eingeben.",
       "duplicate_plant_name": "Dieser Anlagenname ist bereits vergeben. Bitte einen unterscheidbaren Namen wählen.",
-      "invalid_dashboard": "Bei aktivem Dashboard bitte einen Titel mit 1 bis 80 Zeichen angeben."
+      "invalid_dashboard": "Bei aktivem Dashboard bitte einen Titel mit 1 bis 80 Zeichen angeben.",
+      "measurement_device_unavailable": "Das Gerät ist nicht mehr verfügbar. Prüfe seine Integration und wähle es erneut aus.",
+      "measurement_helper_failed": "Der Energiezähler konnte nicht eingerichtet werden. Bitte prüfe die Messquelle und versuche es erneut."
     },
     "abort": {
       "already_configured": "An diesem Standort ist bereits eine PV-Anlage eingerichtet. Für dieselbe Anlage bitte den vorhandenen Eintrag bearbeiten.",
@@ -303,7 +325,7 @@
           "edit_roof": "Dachfläche bearbeiten",
           "remove_roof": "Dachfläche entfernen",
           "system": "Wechselrichterleistung ändern",
-          "measurements": "Echte PV-Messquellen zuordnen (optional)",
+          "measurements": "PV-Erzeugung und Messquellen",
           "history": "Prognosearchiv und Soll-Ist-Vergleich (optional)",
           "calibration": "Selbstkalibrierung (optional)",
           "inverter_groups": "AC-Wechselrichtergruppen zuordnen",
@@ -391,7 +413,7 @@
         "title": "Echte PV-Messquellen (optional)",
         "description": "{sources}\n\nOrdne vorhandene Home-Assistant-Sensoren zu. Die Prognose funktioniert auch ohne Messquelle. Energie wird je Quelle ausgewertet; Leistung wird nur gelesen. Eine gemeinsame Gesamtquelle und ihre Teilzähler dürfen nicht gleichzeitig als Energiequellen verwendet werden.",
         "menu_options": {
-          "add_measurement": "Messquelle hinzufügen",
+          "add_measurement": "PV-Erzeugung hinzufügen",
           "edit_measurement": "Messquelle bearbeiten",
           "remove_measurement": "Messquelle und ihre Daten entfernen",
           "delete_measurement_data": "Gespeicherte Daten einer Quelle löschen",
@@ -663,6 +685,26 @@
           "dashboard_enabled": "PV-Dashboard in der Seitenleiste anzeigen",
           "dashboard_title": "Titel in der Seitenleiste"
         }
+      },
+      "add_measurement": {
+        "title": "PV-Erzeugung hinzufügen",
+        "description": "Wähle ein bereits eingerichtetes Gerät. Den passenden Messwert ordnen wir automatisch zu. Fehlt dein Gerät, richte zuerst seine Integration ein und prüfe, ob sie aktuelle Leistungswerte liefert. Andere Sensoren kannst du selbst auswählen.",
+        "data": {
+          "device": "Gerät oder Messquelle"
+        }
+      },
+      "measurement_device": {
+        "title": "PV-Erzeugung zuordnen",
+        "description": "**{device}** liefert aktuell **{reading}**.\n\nWir verwenden die gesamte AC-PV-Erzeugung. Aus Leistungswerten richtet Home Assistant beim Speichern automatisch einen Energiezähler in kWh ein; ein passender vorhandener Helfer wird wiederverwendet. Du musst keinen Sensor suchen und keine Einheiten einstellen.\n\nDer Ertrag wird aus Messwerten angenähert. Während Ausfällen fehlt Erfassung. Ein angelegter Energiehelfer bleibt auch nach dem Entfernen dieser Zuordnung unter „Helfer“ erhalten und kann dort bewusst gelöscht werden.",
+        "data": {
+          "confirmed_no_battery": "An den erfassten Wechselrichtern ist keine Batterie angeschlossen",
+          "confirmed_pv": "Das Gerät erfasst die PV-Erzeugung aller Dächer dieser Anlage",
+          "confirmed_disjoint": "Diese Erzeugung wird nicht bereits durch eine andere Energiequelle dieser Anlage gezählt"
+        }
+      },
+      "measurement_save": {
+        "title": "Energiezähler noch nicht eingerichtet",
+        "description": "Die Messquelle oder ihr Energiehelfer konnte nicht bereitgestellt werden. Prüfe, ob das Gerät aktuelle Werte liefert und die Integral-Integration verfügbar ist. Deine Eingaben bleiben erhalten. Mit „Absenden“ versuchst du das Speichern erneut; du kannst die Einrichtung auch abbrechen."
       }
     },
     "error": {
@@ -693,7 +735,9 @@
       "invalid_horizon_profile": "Bitte genau 12 oder 24 endliche Höhenwinkel zwischen 0 und 90° eingeben; Dezimalpunkt verwenden. Leer entfernt das Profil.",
       "confirm_horizon_required": "Bitte die Eignung des Profils für den entfernten Horizont der gesamten Dachfläche bestätigen.",
       "invalid_horizon_roof": "Bitte eine vorhandene Dachfläche auswählen.",
-      "invalid_dashboard": "Bei aktivem Dashboard bitte einen Titel mit 1 bis 80 Zeichen angeben."
+      "invalid_dashboard": "Bei aktivem Dashboard bitte einen Titel mit 1 bis 80 Zeichen angeben.",
+      "measurement_device_unavailable": "Das Gerät ist nicht mehr verfügbar. Prüfe seine Integration und wähle es erneut aus.",
+      "measurement_helper_failed": "Der Energiezähler konnte nicht eingerichtet werden. Bitte prüfe die Messquelle und versuche es erneut."
     },
     "abort": {
       "reconfigure_entry_changed": "Die Anlage wurde während der Bearbeitung anderweitig geändert. Bitte starte die Bearbeitung erneut."
@@ -900,7 +944,11 @@
     "dashboard_ready": "Die Seite ist in der Seitenleiste verfügbar.",
     "dashboard_conflict": "Die Seitenadresse ist bereits anderweitig belegt. Der bestehende Inhalt wurde nicht verändert.",
     "dashboard_error": "Die Seite konnte nicht eingerichtet werden. Bitte die HA-Protokolle prüfen und erneut speichern.",
-    "dashboard_menu": "Menü öffnen"
+    "dashboard_menu": "Menü öffnen",
+    "measurement_manual": "Anderen Sensor selbst auswählen",
+    "measurement_whole_plant": "Gesamte PV-Anlage (AC, ohne Batterie)",
+    "measurement_automatic_energy": "Energiezähler wird beim Speichern eingerichtet",
+    "measurement_helper_name": "PV-Ertrag · {device}"
   },
   "issues": {
     "dashboard_update": {

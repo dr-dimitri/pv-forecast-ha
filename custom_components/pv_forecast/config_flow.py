@@ -921,6 +921,11 @@ class PvForecastConfigFlow(
         translations = await _async_ui_translations(self.hass)
         if self._needs_plant_confirmation():
             return await self.async_step_plant()
+        if (
+            self._options.get("measurement_sources")
+            and not await self._async_save_measurement_helpers()
+        ):
+            return await self.async_step_measurement_save()
         name = self._location.get("plant_name", self._location[CONF_LOCATION_NAME])
         return self.async_create_entry(
             title=f"{translations['title']} · {name}",
@@ -1007,6 +1012,8 @@ class PvForecastOptionsFlow(
     ) -> ConfigFlowResult:
         """Die bestätigten Messquellen speichern und den Options Flow abschließen."""
 
+        if not await self._async_save_measurement_helpers():
+            return await self.async_step_measurement_save()
         return self.async_create_entry(title="", data=self._measurement_options())
 
     async def async_step_history_done(

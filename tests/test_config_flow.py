@@ -249,7 +249,7 @@ async def test_summary_is_german_for_english_profile(hass) -> None:
         "edit_location": "Standort ändern",
         "edit_roofs": "Dachflächen ändern",
         "edit_system": "Wechselrichterleistung ändern",
-        "measurements": "Echte PV-Messquellen zuordnen (optional)",
+        "measurements": "PV-Erzeugung einrichten (optional)",
         "history": "Prognosearchiv und Soll-Ist-Vergleich (optional)",
         "dashboard": "PV-Dashboard einrichten",
     }
@@ -409,7 +409,7 @@ async def test_successful_setup_with_multiple_roofs(hass) -> None:
         "edit_location": "Standort ändern",
         "edit_roofs": "Dachflächen ändern",
         "edit_system": "Wechselrichterleistung ändern",
-        "measurements": "Echte PV-Messquellen zuordnen (optional)",
+        "measurements": "PV-Erzeugung einrichten (optional)",
         "history": "Prognosearchiv und Soll-Ist-Vergleich (optional)",
         "dashboard": "PV-Dashboard einrichten",
     }

@@ -8,6 +8,7 @@ from uuid import uuid4
 import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry, ConfigFlowResult
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.selector import (
     BooleanSelector,
@@ -25,6 +26,12 @@ from homeassistant.helpers.selector import (
 from homeassistant.util import dt as dt_util
 
 from .const import CONF_TIME_ZONE, DOMAIN
+from .measurement_adapters import available_measurement_devices
+from .measurement_helpers import (
+    PENDING_HELPER,
+    async_resolve_measurement_helpers,
+    source_power_registry_id,
+)
 from .measurements import SourceConfig, normalize_reading_value
 
 CONF_MEASUREMENT_SOURCES = "measurement_sources"
@@ -114,6 +121,23 @@ def _validated_source(
         for source in sources
     ):
         raise ValueError("duplicate_measurement_source")
+    upstream = source_power_registry_id(
+        hass, {"entity_id": entity_id, "registry_id": registry_id}
+    )
+    if (
+        not is_power
+        and upstream is not None
+        and any(
+            source["source_id"] != source_id
+            and (source.get("kind") != "power" or PENDING_HELPER in source)
+            and (
+                source_power_registry_id(hass, source) == upstream
+                or source.get("registry_id") == upstream
+            )
+            for source in sources
+        )
+    ):
+        raise ValueError("duplicate_measurement_source")
     derived = bool(values.get("derived_energy"))
     if registry_entry is not None and registry_entry.platform == "integration":
         derived = True
@@ -141,6 +165,39 @@ class MeasurementFlowMixin:
     _selected_measurement_source: str | None = None
     _pending_measurement_source: dict[str, Any] | None = None
     _measurement_remove: bool = False
+    _pending_device: str | None = None
+    _measurement_save_error = "measurement_helper_failed"
+
+    async def _async_save_measurement_helpers(self) -> bool:
+        """Erst beim Abschluss aus bestätigten Geräteentwürfen native Helfer machen."""
+        try:
+            sources = await async_resolve_measurement_helpers(
+                self.hass, self._measurement_sources()
+            )
+        except (ValueError, TimeoutError, HomeAssistantError) as err:
+            self._measurement_save_error = (
+                str(err)
+                if str(err)
+                in ("duplicate_measurement_source", "measurement_device_unavailable")
+                else "measurement_helper_failed"
+            )
+            return False
+        self._measurement_options()[CONF_MEASUREMENT_SOURCES] = sources
+        return True
+
+    async def async_step_measurement_save(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Einen fehlgeschlagenen Abschluss erklären und erneut versuchen lassen."""
+        if user_input is not None:
+            if self._measurement_entry() is None:
+                return await self.async_step_finish()
+            return await self.async_step_measurements_done()
+        return self.async_show_form(
+            step_id="measurement_save",
+            data_schema=vol.Schema({}),
+            errors={"base": self._measurement_save_error},
+        )
 
     def _measurement_options(self) -> dict[str, Any]:
         """Veränderbare Optionen des jeweiligen Ablaufs bereitstellen."""
@@ -212,11 +269,20 @@ class MeasurementFlowMixin:
                     "Gespeicherte Daten einer Quelle löschen"
                 )
         menu["measurements_done"] = "Fertig"
+        automatic = await self._measurement_text("measurement_automatic_energy")
         summary = (
             "\n".join(
-                f"- **{source['scope']}**: {source['entity_id']} · "
-                f"{_KIND_LABELS[source['kind']]}"
-                for source in sources
+                [
+                    f"- **{source['scope']}**: {source['entity_id']} · " f"{kind_label}"
+                    for source in sources
+                    for kind_label in (
+                        (
+                            automatic
+                            if PENDING_HELPER in source
+                            else _KIND_LABELS[source["kind"]]
+                        ),
+                    )
+                ]
             )
             or "Keine Messquelle gewählt. Die Prognose ist vollständig nutzbar."
         )
@@ -232,7 +298,127 @@ class MeasurementFlowMixin:
         """Eine weitere, zunächst unbestätigte Messquelle auswählen."""
 
         self._selected_measurement_source = None
-        return await self.async_step_measurement_details(user_input)
+        self._pending_device = None
+        devices = available_measurement_devices(self.hass)
+        errors = {}
+        if user_input is not None:
+            selected = user_input.get("device")
+            if selected == "manual":
+                return await self.async_step_measurement_details()
+            device = devices.get(selected)
+            if device is None:
+                errors["base"] = "measurement_device_unavailable"
+            elif any(
+                source.get("registry_id") == device.registry_id
+                or source_power_registry_id(self.hass, source) == device.registry_id
+                for source in self._measurement_sources()
+            ):
+                errors["base"] = "duplicate_measurement_source"
+            else:
+                self._pending_device = selected
+                return await self.async_step_measurement_device()
+        return self.async_show_form(
+            step_id="add_measurement",
+            errors=errors,
+            data_schema=vol.Schema(
+                {
+                    vol.Required("device"): SelectSelector(
+                        SelectSelectorConfig(
+                            options=[
+                                SelectOptionDict(value=device.value, label=device.name)
+                                for device in devices.values()
+                            ]
+                            + [
+                                SelectOptionDict(
+                                    value="manual",
+                                    label=await self._measurement_text(
+                                        "measurement_manual"
+                                    ),
+                                )
+                            ],
+                            mode=SelectSelectorMode.DROPDOWN,
+                        )
+                    ),
+                }
+            ),
+        )
+
+    async def _measurement_text(self, key: str) -> str:
+        """Dynamische Bezeichnungen aus den HA-Sprachressourcen lesen."""
+        from .config_flow import _async_ui_translations
+
+        return (await _async_ui_translations(self.hass))[f"common.{key}"]
+
+    async def async_step_measurement_device(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Die fachliche Messgrenze mit wenigen verständlichen Angaben bestätigen."""
+        device = available_measurement_devices(self.hass).get(self._pending_device)
+        if device is None:
+            return await self.async_step_add_measurement(
+                {"device": self._pending_device}
+            )
+        errors = {}
+        if user_input is not None:
+            if not all(
+                user_input.get(key) is True
+                for key in (
+                    "confirmed_no_battery",
+                    "confirmed_pv",
+                    "confirmed_disjoint",
+                )
+            ):
+                errors["base"] = "measurement_confirmation_required"
+            else:
+                sources = self._measurement_sources()
+                if any(
+                    source.get("registry_id") == device.registry_id
+                    or source_power_registry_id(self.hass, source) == device.registry_id
+                    for source in sources
+                ):
+                    errors["base"] = "duplicate_measurement_source"
+                else:
+                    source = _validated_source(
+                        self.hass,
+                        {
+                            "entity_id": device.entity_id,
+                            "kind": device.adapter.kind,
+                            "scope": await self._measurement_text(
+                                "measurement_whole_plant"
+                            ),
+                            "max_interval_minutes": 5,
+                            "derived_energy": False,
+                        },
+                        uuid4().hex,
+                        sources,
+                    )
+                    if device.adapter.kind == "power":
+                        source[PENDING_HELPER] = device.value
+                    self._measurement_options()[CONF_MEASUREMENT_SOURCES] = [
+                        *sources,
+                        source,
+                    ]
+                    return await self.async_step_measurements()
+        state = self.hass.states.get(device.entity_id)
+        return self.async_show_form(
+            step_id="measurement_device",
+            errors=errors,
+            data_schema=vol.Schema(
+                {
+                    vol.Required(
+                        "confirmed_no_battery", default=False
+                    ): BooleanSelector(),
+                    vol.Required("confirmed_pv", default=False): BooleanSelector(),
+                    vol.Required(
+                        "confirmed_disjoint", default=False
+                    ): BooleanSelector(),
+                }
+            ),
+            description_placeholders={
+                "device": device.name,
+                "reading": f"{state.state} {state.attributes['unit_of_measurement']}",
+            },
+        )
 
     async def async_step_edit_measurement(
         self, user_input: dict[str, Any] | None = None
@@ -263,15 +449,36 @@ class MeasurementFlowMixin:
         errors: dict[str, str] = {}
         if user_input is not None:
             try:
+                provenance = (
+                    {
+                        key: existing[key]
+                        for key in (
+                            "upstream_entity_id",
+                            "upstream_registry_id",
+                            "helper_entry_id",
+                        )
+                        if key in existing
+                    }
+                    if user_input.get("entity_id") == existing.get("entity_id")
+                    else {}
+                )
                 self._pending_measurement_source = _validated_source(
                     self.hass,
-                    user_input,
+                    {**user_input, **provenance},
                     existing.get("source_id", uuid4().hex),
                     sources,
                 )
             except ValueError as err:
                 errors["base"] = str(err)
             else:
+                if (
+                    PENDING_HELPER in existing
+                    and user_input.get("entity_id") == existing.get("entity_id")
+                    and user_input.get("kind") == "power"
+                ):
+                    self._pending_measurement_source[PENDING_HELPER] = existing[
+                        PENDING_HELPER
+                    ]
                 return await self.async_step_confirm_measurement()
         return self.async_show_form(
             step_id="measurement_details",
