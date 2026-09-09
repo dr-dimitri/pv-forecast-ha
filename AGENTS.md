@@ -44,8 +44,8 @@ geschätzte Leistung jetzt aus dem laufenden Intervallmittel und Beginn der
 stärksten Prognosestunde des ganzen heutigen Tages. Bei gleich hohen Spitzen
 gilt der früheste absolute Zeitpunkt; ein Nulltag hat kein Maximum. Alle
 Fenster verwenden UTC-Überlappungen und die gespeicherte Anlagenzeitzone.
-Fehlende Zeitabdeckung ist nicht null Ertrag. Die Sensoren erhalten vor der
-Statistikentscheidung in #4/#27 keine `state_class`.
+Fehlende Zeitabdeckung ist nicht null Ertrag. Die Sensoren erhalten gemäß der
+Statistikentscheidung in #4/#27 dauerhaft keine `state_class`.
 
 Eine gemeinsame Gesamtzeitreihe entsteht einmal je Berechnung nach Clipping,
 begrenzt auf die zwei lokalen Prognosetage. Der versionierte Lesevertrag
@@ -110,6 +110,41 @@ Qualitätsmarkierungen. Leserechte der zugeordneten Sensoren werden mitgeprüft.
 Es entstehen keine zusätzlichen Sensoren oder Messlisten in Sensorattributen.
 Der Nutzertest mit fünf realen PV-Anwendern ist eine separate, noch offene
 menschliche Abnahme und wird durch Offline-Tests nicht ersetzt.
+
+## Optionales Prognosearchiv aus #27 und Statistikentscheidung #4
+
+Das Archiv ist per UI opt-in und speichert tatsächlich rechtzeitig beobachtete
+Prognosestände in einem getrennten HA-Store Version 1. Festgelegte Stichtage:
+18 Uhr am Vortag und 06 Uhr am Zieltag für lokale Tageswerte (maximal zwei
+Stunden alte Prognose), Vorlauf eine beziehungsweise drei Stunden für
+UTC-Intervalle (maximal eine Stunde alte Prognose). Nach dem Stichtag werden
+diese Prognosewerte nicht geändert. Fehlende rechtzeitige Daten bleiben fehlend.
+Abruf-/Beobachtungszeit, Zielintervall, Zeitzone, Konfigurations-, Messgrenzen-
+und Modellversion werden gespeichert; die Wettermodell-Ausgabezeit bleibt null.
+
+`history.py` enthält die reine Auswahl und Bewertung, `history_runtime.py` die
+HA-Anbindung und Speicherung. Sie verwenden die gemeinsame Gesamtzeitreihe und
+die Messsegmente aus #26. Messkorrekturen werden revisioniert; Quellenwechsel
+übertragen keine Messung still auf andere Grenzen. MAE und Bias in kWh sowie
+Stichprobe und Abdeckung werden für 7/30/90 abgeschlossene lokale Tage nach
+Horizont getrennt ausgewiesen. Große Prognosefehler sind kein Ausschlussgrund.
+Vergleichsvarianten verwenden dieselben gültigen Testintervalle; ohne reale
+Kalibrierung werden keine korrigierten Ergebnisse behauptet.
+
+Optional werden vorhandene HA-Tagesprognosesensoren für heute/morgen rein lokal
+mitgelesen, nach bestätigter gleicher AC-Messgrenze und Tageszeitzone. Es gibt
+keinen zusätzlichen Anbieter- oder Recorder-Zugriff. Reguläre Archivschreibungen
+haben feste Fünfminutentermine, höchstens 288 pro Tag. Aufbewahrung:
+Stundenstände 90 Tage, Tagesbewertungen 365 Tage, maximal 6.000 Zieldatensätze,
+je drei frühere Bewertungsrevisionen und zusätzlich eine Grenze von 32 MiB.
+Kürzungen bleiben sichtbar. Unbekannte Speicherversionen werden nicht überschrieben.
+
+`get_history` und `export_history` lesen mit expliziter Anlagenauswahl und
+Quellen-Leserechten, ohne HTTP oder automatisch veröffentlichte Dateien.
+Löschung erfolgt bewusst in den Optionen; Quellenlöschung entfernt auch deren
+Archiv-Messkopien. Entladen beendet Listener. Config-Entry-Schema bleibt 1.1.
+Prognosesensoren behalten dauerhaft keine `state_class`; die Langzeitauswertung
+verwendet dieses Archiv statt einer irreführenden Erzeugungszählerstatistik.
 
 ## Konfiguration
 

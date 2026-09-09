@@ -22,3 +22,50 @@ get_measurements:
       example: "2026-09-10T00:00:00+00:00"
       selector:
         text:
+get_history:
+  fields:
+    config_entry_id:
+      required: true
+      selector:
+        config_entry:
+          integration: pv_forecast
+    days:
+      default: 30
+      selector:
+        select:
+          options:
+            - label: "7 Tage"
+              value: "7"
+            - label: "30 Tage"
+              value: "30"
+            - label: "90 Tage"
+              value: "90"
+    include_records:
+      default: false
+      selector:
+        boolean:
+export_history:
+  fields:
+    config_entry_id:
+      required: true
+      selector:
+        config_entry:
+          integration: pv_forecast
+    days:
+      default: 30
+      selector:
+        select:
+          options:
+            - label: "7 Tage"
+              value: "7"
+            - label: "30 Tage"
+              value: "30"
+            - label: "90 Tage"
+              value: "90"
+    format:
+      required: true
+      selector:
+        select:
+          options:
+            - json
+            - csv
