@@ -17,6 +17,13 @@ from .calculations import calibrated_energy, forecast_basis
 from .measurements import SourceConfig
 from .models import ForecastCalibrationBasis, ForecastResult, TotalForecastInterval
 from .short_term import build_trial, validate_trial
+from .temperature_comparison import (
+    MODEL as TEMPERATURE_MODEL,
+)
+from .temperature_comparison import (
+    parameter_id,
+    validate_comparison,
+)
 
 type Horizon = Literal[
     "daily_previous_18", "daily_same_06", "hourly_1h", "hourly_3h", "daily_remaining_12"
@@ -247,6 +254,7 @@ class ArchiveRecord:
     candidate_id: str | None = None
     candidate_energy_kwh: float | None = None
     short_term: dict[str, Any] | None = None
+    temperature_comparison: dict[str, Any] | None = None
 
     @property
     def config_fingerprint(self) -> str:
@@ -285,6 +293,7 @@ class ArchiveRecord:
             "candidate_id": self.candidate_id,
             "candidate_energy_kwh": self.candidate_energy_kwh,
             "short_term": self.short_term,
+            "temperature_comparison": self.temperature_comparison,
             "quality_flags": list(self.quality_flags),
             "comparison": self.comparison.to_dict() if self.comparison else None,
             "assessment": self.assessment.to_dict() if self.assessment else None,
@@ -355,6 +364,8 @@ class HistoryArchive:
         trial_candidate_id: str | None = None,
         short_term_enabled: bool = False,
         excluded_dates: set[date] | None = None,
+        temperature_forecast: ForecastResult | None = None,
+        temperature_mountings: dict[str, str] | None = None,
     ) -> bool:
         """Nur vorab definierte und rechtzeitig beobachtete Stände auswählen."""
         fetched_at, observed_at = _utc(fetched_at), _utc(observed_at)
@@ -458,6 +469,8 @@ class HistoryArchive:
                     trial_candidate_id,
                     short_term_enabled,
                     excluded_dates,
+                    temperature_forecast,
+                    temperature_mountings,
                 )
         for interval in intervals:
             start, end = _utc(interval.start), _utc(interval.end)
@@ -494,6 +507,8 @@ class HistoryArchive:
                     trial_candidate_id,
                     short_term_enabled,
                     excluded_dates,
+                    temperature_forecast,
+                    temperature_mountings,
                 )
         return changed
 
@@ -520,6 +535,8 @@ class HistoryArchive:
         trial_candidate_id: str | None,
         short_term_enabled: bool,
         excluded_dates: set[date],
+        temperature_forecast: ForecastResult | None,
+        temperature_mountings: dict[str, str] | None,
     ) -> bool:
         if not cutoff - max_age <= fetched_at <= observed_at <= cutoff:
             return False
@@ -574,6 +591,21 @@ class HistoryArchive:
                     tuple(self.records.values()), record, excluded_dates
                 ),
             )
+        if temperature_forecast is not None and temperature_mountings:
+            alternative_energy, alternative_flags = _forecast_window(
+                temperature_forecast.total_intervals, start, end
+            )
+            if alternative_energy is not None and not alternative_flags and not flags:
+                record = replace(
+                    record,
+                    temperature_comparison={
+                        "schema_version": 1,
+                        "model": TEMPERATURE_MODEL,
+                        "parameter_id": parameter_id(temperature_mountings),
+                        "mountings": dict(temperature_mountings),
+                        "energy_kwh": alternative_energy,
+                    },
+                )
         if previous is not None and fetched_at == previous.fetched_at:
             # Ein lokaler Faktorwechsel benötigt keinen neuen Wetterabruf. Derselbe
             # Stand darf nur vor seinem Stichtag neue Kalibrierfelder erhalten.
@@ -592,6 +624,7 @@ class HistoryArchive:
                     "candidate_id",
                     "candidate_energy_kwh",
                     "short_term",
+                    "temperature_comparison",
                 )
             ):
                 return False
@@ -607,6 +640,7 @@ class HistoryArchive:
                 candidate_id=record.candidate_id,
                 candidate_energy_kwh=record.candidate_energy_kwh,
                 short_term=record.short_term,
+                temperature_comparison=record.temperature_comparison,
             )
         self.records[record_id] = record
         return True
@@ -1403,4 +1437,5 @@ def _record_from_dict(data: Mapping[str, Any], timezone: ZoneInfo) -> ArchiveRec
         deleted_sources,
         **calibration,
         short_term=validate_trial(data.get("short_term")),
+        temperature_comparison=validate_comparison(data.get("temperature_comparison")),
     )

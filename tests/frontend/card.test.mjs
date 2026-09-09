@@ -642,3 +642,14 @@ test("Kurzfristiger Vergleich bleibt eine Beobachtung mit eigenem Prüffenster",
   assert.match(renderReport({data}, 7), /unbekannte Datenversion/);
   assert.doesNotMatch(renderReport({data}, 7), /Kandidat 0,3/);
 });
+
+
+test("Temperaturvergleich zeigt Rohmodelle derselben Messpaare ohne Modellfreigabe", () => {
+  const data = { horizons: { hourly_1h: {} }, temperature_comparison: { schema_version: 1, model: "ross_comparison_v1", enabled: true, parameter_id: "example", window_days: 90, horizons: { hourly_1h: { days: 20, count: 100, raw_mae_kwh: 0.4, alternative_mae_kwh: 0.38, raw_bias_kwh: 0.2, alternative_bias_kwh: 0.1 } } } };
+  const html = renderReport({data}, 7);
+  assert.match(html, /Rohmodelle ohne übertragene Kalibrierung/);
+  assert.match(html, /MAE Rohmodell 0,4 kWh; Ross 0,38 kWh/);
+  assert.match(html, /Produktive Prognose unverändert/);
+  data.temperature_comparison.model = "unknown";
+  assert.match(renderReport({data}, 7), /unbekannte Datenversion/);
+});

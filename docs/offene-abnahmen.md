@@ -14,6 +14,7 @@ und die konkretisierten Verträge in
 | #10 | Importbefund ohne erforderlichen Umbau | [Unabhängige Modulimporte](issue-pruefung.md) |
 | #22 | Reale AC-Wechselrichtergruppen mit nachgelagerter Gesamtgrenze | Rechenbeispiele, bitgleicher alter Pfad, UI, unveränderliche Kalibrierungsbasis |
 | #23 | Standortkorrektur bei erhaltenen IDs und alten Datenkontexten | Beide Standortquellen, Fehlerversuche, Migrationen, ursprüngliche Tagesgrenzen und neue Segmente |
+| #17 | Ross-Zelltemperatur als reine Beobachtungsvariante | Explizite Montageannahme je Dach, Referenzgleichung, gleichzeitige Rohmodellpaare und unveränderter Standard |
 | #31 | Zusammenhängendes Solarzeitfenster in Leseaktion und Karte | UTC/DST, Teilstunden, Hysterese, laufende Fenster, nativer HA-Script-Blueprint und EMHASS-Datenadapter |
 | #29 | Tages- und Stunden-Erfahrungsband für eingefrorene Stände | Je Horizont 60 frühere Trainingstage und 30 spätere Prüftage, gemeinsame Prüfung von Abdeckung und Breite; Stunden nach lokaler Startzeit getrennt |
 | #30 | Getrennte Tagesaussicht aus Messpräfix, geschätzter Brücke und Zukunft | Keine Doppelzählung, Messlücken und Quellenrechte; keine kurzfristige Korrektur |
@@ -42,7 +43,8 @@ kein Nachweis tatsächlicher Erträge oder einer erreichten Prognosegüte.
   kein behauptetes Resultat. Die jetzige Tagesaussicht wendet keinen Faktor an.
 - **#17:** Ein anderes Temperaturmodell benötigt zuerst einen dokumentierten
   Vergleich mit Parameterherkunft auf gleichen späteren Messintervallen.
-  Diese Vergleichsvariante und ihr Gütenachweis stehen aus. Die bestehende
+  Der [separate Ross-Vergleich](temperaturvergleich.md) friert alternative
+  Rohmodellstände rechtzeitig ein. Sein realer Gütenachweis steht aus. Die bestehende
   Außentemperaturnäherung bleibt deshalb unverändert; Montage oder Wind am
   Modul werden nicht aus unbelegten Standardwerten als bekannt ausgegeben.
 - **#32:** Hinweise auf wiederkehrende Mindererträge benötigen die geforderte

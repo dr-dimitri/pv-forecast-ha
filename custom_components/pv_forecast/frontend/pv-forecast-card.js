@@ -287,13 +287,23 @@ function renderShortTerm(report) {
   }).join("")}`;
 }
 
+function renderTemperatureComparison(report) {
+  if (!report) return "";
+  if (report.schema_version !== 1 || report.model !== "ross_comparison_v1") return '<p class="hint">Temperaturvergleich: unbekannte Datenversion.</p>';
+  const labels = { daily_previous_18: "Tagesstand vom Vortag, 18 Uhr", daily_same_06: "Tagesstand von 06 Uhr", hourly_1h: "Eine Stunde Vorlauf", hourly_3h: "Drei Stunden Vorlauf" };
+  return `<h3>Temperaturvergleich</h3><p class="hint">${report.enabled ? "Beobachtung aktiviert" : "Beobachtung ausgeschaltet"}. Ross-Näherung mit gewählten Literaturannahmen; keine gemessene Zelltemperatur. Rohmodelle ohne übertragene Kalibrierung, gleiche Messpaare aus ${escapeHtml(report.window_days)} abgeschlossenen Tagen. Produktive Prognose unverändert.</p>${report.parameter_id ? Object.entries(labels).map(([key, label]) => {
+    const value = report.horizons?.[key];
+    return value ? `<p class="hint"><strong>${label}</strong>: ${escapeHtml(value.days)} Tage, ${escapeHtml(value.count)} Messpaare.<br>MAE Rohmodell ${energyText(value.raw_mae_kwh)} kWh; Ross ${energyText(value.alternative_mae_kwh)} kWh. Bias Rohmodell ${energyText(value.raw_bias_kwh)} kWh; Ross ${energyText(value.alternative_bias_kwh)} kWh.</p>` : "";
+  }).join("") : '<p class="hint">Zuerst eine Vergleichsannahme für jede Dachfläche wählen.</p>'}`;
+}
+
 export function renderReport(report, days) {
   if (!report) return `<p class="hint" role="status">Bericht wird geladen …</p>`;
   if (report.message) return `<p class="hint" role="status">${escapeHtml(report.message)}</p>`;
   const data = report.data;
   const metrics = data?.horizons?.hourly_1h;
   if (!metrics) return `<p class="hint">Noch keine abgeschlossenen Zielintervalle im Archiv.</p>`;
-  return `<p class="hint">${days} abgeschlossene lokale Tage · ${ARCHIVE_LABEL}. Nur vollständig belegte, vergleichbare Intervalle gehen in die Fehlermaße ein.</p><dl class="report-metrics"><div><dt>MAE</dt><dd>${energyText(metrics.mae_kwh)} <small>kWh</small></dd></div><div><dt>Bias</dt><dd>${energyText(metrics.bias_kwh)} <small>kWh</small></dd></div><div><dt>Stichprobe</dt><dd>${escapeHtml(metrics.count_valid ?? 0)} <small>Intervalle</small></dd></div><div><dt>Abdeckung</dt><dd>${finite(metrics.coverage) ? energyText(metrics.coverage * 100) : "—"} <small>%</small></dd></div></dl><p class="hint">MAE: mittlerer absoluter Fehler. Bias: Prognose minus Messung; positive Werte bedeuten Überschätzung.${data.retention_truncated ? " Die Aufbewahrungsgrenze hat ältere Daten gekürzt." : ""}${data.enabled === false ? " Die Erfassung ist pausiert." : ""}</p>${renderShortTerm(data.short_term)}`;
+  return `<p class="hint">${days} abgeschlossene lokale Tage · ${ARCHIVE_LABEL}. Nur vollständig belegte, vergleichbare Intervalle gehen in die Fehlermaße ein.</p><dl class="report-metrics"><div><dt>MAE</dt><dd>${energyText(metrics.mae_kwh)} <small>kWh</small></dd></div><div><dt>Bias</dt><dd>${energyText(metrics.bias_kwh)} <small>kWh</small></dd></div><div><dt>Stichprobe</dt><dd>${escapeHtml(metrics.count_valid ?? 0)} <small>Intervalle</small></dd></div><div><dt>Abdeckung</dt><dd>${finite(metrics.coverage) ? energyText(metrics.coverage * 100) : "—"} <small>%</small></dd></div></dl><p class="hint">MAE: mittlerer absoluter Fehler. Bias: Prognose minus Messung; positive Werte bedeuten Überschätzung.${data.retention_truncated ? " Die Aufbewahrungsgrenze hat ältere Daten gekürzt." : ""}${data.enabled === false ? " Die Erfassung ist pausiert." : ""}</p>${renderShortTerm(data.short_term)}${renderTemperatureComparison(data.temperature_comparison)}`;
 }
 
 const plantStamp = (value, timezone) => finite(millis(value)) ? `${formatPlantDate(value, timezone)}, ${formatPlantTime(value, timezone)}` : "unbekannt";

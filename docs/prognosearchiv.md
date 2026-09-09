@@ -234,3 +234,12 @@ Korrekturkandidaten und optionale Resttagsstände ab 12 Uhr. Die Versionen 1 bis
 werden verlustfrei gelesen; ältere Datensätze erhalten keine erfundenen
 Versuchsbelege. Config-Entry-Schema 1.1 und Mess-/Lern-Store bleiben unverändert.
 Details: [Kurzfristiger Vergleich](kurzfristiger-vergleich.md).
+
+
+### Archivversion 5: rechtzeitiger Temperaturvergleich
+
+Der Folgeschritt zu #17 ergänzt optional gleichzeitig berechnete Ross-
+Vergleichsstände mit ihrer ursprünglichen Parameterwahl. Versionen 1–4 werden
+verlustfrei migriert; bestehende Datensätze erhalten keine erfundenen
+Alternativprognosen. Config Entries bleiben 1.1.
+Siehe [Temperaturvergleich](temperaturvergleich.md).

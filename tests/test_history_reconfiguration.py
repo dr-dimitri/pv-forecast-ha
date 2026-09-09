@@ -163,8 +163,8 @@ def test_retention_counts_days_in_each_records_original_timezone():
     assert original.record_id in restored.records
 
 
-@pytest.mark.parametrize("old_version", [1, 2, 3])
-async def test_store_four_migrates_previous_versions_without_changing_old_records(
+@pytest.mark.parametrize("old_version", [1, 2, 3, 4])
+async def test_store_five_migrates_previous_versions_without_changing_old_records(
     hass, old_version
 ):
     archive = HistoryArchive("Europe/Berlin")
@@ -184,11 +184,12 @@ async def test_store_four_migrates_previous_versions_without_changing_old_record
                 record.pop(key)
     for record in payload["archive"]["records"]:
         record.pop("short_term", None)
+        record.pop("temperature_comparison", None)
     before = deepcopy(payload)
     store = _history_store(hass, f"migration-{old_version}")
     assert await store._async_migrate_func(old_version, 1, payload) == before
     assert payload == before
-    assert STORAGE_VERSION == 4
+    assert STORAGE_VERSION == 5
 
 
 async def test_runtime_loads_paused_archive_under_new_zone_without_rewriting_old_data(
