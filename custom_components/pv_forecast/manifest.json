@@ -1,7 +1,7 @@
 {
   "domain": "pv_forecast",
   "name": "PV Ertragsprognose",
-  "after_dependencies": ["http"],
+  "after_dependencies": ["frontend", "http", "panel_custom"],
   "codeowners": ["@dr-dimitri"],
   "config_flow": true,
   "documentation": "https://github.com/dr-dimitri/pv-forecast-ha",

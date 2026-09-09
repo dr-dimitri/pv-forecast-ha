@@ -21,6 +21,7 @@ und die konkretisierten Verträge in
 | #21 | Optional zwei bis sieben Prognosetage | UTC-Zeiträume, unveränderte Abrufzahl, Tageswerte und mehrtägige Planung; spätere Tage als Tendenz |
 | #24 | Mehrere unabhängige logische Anlagen | Eigene IDs, Sensoren, Messwerte und Stores; explizite Bestätigung am selben Ort; getrenntes Entladen |
 | #20 | Experimentelles Horizontprofil je Dach | Sonnengeometrie, diffuse Reste, Winter/Sommer, Clipping und unveränderter Standard |
+| #96 | Freiwilliges PV-Dashboard direkt im Config-/Options-Flow | Native Panelregistrierung, mehrere Anlagen, Entladen, Konflikte; 360 px in Hell/Dunkel, Tastatur und Ende der Kartenabfragen |
 | #30 | Tagesaussicht und optional eingefrorene Zukunftskandidaten | Keine Doppelzählung, Messlücken und Quellenrechte; produktiv keine kurzfristige Korrektur |
 
 Die neuen Darstellungen der Karte wurden bei 360 px in Hell/Dunkel und mit

@@ -251,6 +251,7 @@ async def test_summary_is_german_for_english_profile(hass) -> None:
         "edit_system": "Wechselrichterleistung ändern",
         "measurements": "Echte PV-Messquellen zuordnen (optional)",
         "history": "Prognosearchiv und Soll-Ist-Vergleich (optional)",
+        "dashboard": "PV-Dashboard einrichten",
     }
 
 
@@ -410,6 +411,7 @@ async def test_successful_setup_with_multiple_roofs(hass) -> None:
         "edit_system": "Wechselrichterleistung ändern",
         "measurements": "Echte PV-Messquellen zuordnen (optional)",
         "history": "Prognosearchiv und Soll-Ist-Vergleich (optional)",
+        "dashboard": "PV-Dashboard einrichten",
     }
     with patch(
         "custom_components.pv_forecast.api.OpenMeteoClient.async_fetch_roofs",
@@ -988,6 +990,7 @@ async def test_options_flow_menu_offers_removal_of_last_roof(hass) -> None:
         "measurements",
         "history",
         "calibration",
+        "dashboard",
     }
     assert "Süddach" in result["description_placeholders"]["roofs"]
 
@@ -1014,6 +1017,7 @@ async def test_options_flow_menu_hides_edit_and_remove_without_roofs(hass) -> No
         "measurements",
         "history",
         "calibration",
+        "dashboard",
     }
     assert result["description_placeholders"]["roofs"] == ""
 
@@ -1045,6 +1049,7 @@ async def test_options_flow_add_roof_does_not_touch_existing_roofs(hass) -> None
         "measurements",
         "history",
         "calibration",
+        "dashboard",
     }
     result = await hass.config_entries.options.async_configure(
         result["flow_id"], {"next_step_id": "add_roof"}
@@ -1279,6 +1284,7 @@ async def test_options_flow_removing_roof_requires_confirmation(hass) -> None:
         "measurements",
         "history",
         "calibration",
+        "dashboard",
     }
     result = await hass.config_entries.options.async_configure(
         result["flow_id"], {"next_step_id": "remove_roof"}

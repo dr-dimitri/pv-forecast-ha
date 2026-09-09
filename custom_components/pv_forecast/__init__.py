@@ -13,6 +13,7 @@ from homeassistant.helpers.typing import ConfigType
 from .calibration_runtime import CalibrationManager, async_remove_calibration_store
 from .const import DOMAIN, PLATFORMS
 from .coordinator import PvForecastCoordinator
+from .dashboard import DashboardManager
 from .frontend import async_setup_frontend
 from .history_runtime import ArchiveManager, async_remove_history_store
 from .history_services import async_setup_history_services
@@ -32,6 +33,7 @@ class PvForecastRuntimeData:
     measurements: MeasurementManager | None = None
     history: ArchiveManager | None = None
     calibration: CalibrationManager | None = None
+    dashboard: DashboardManager | None = None
 
 
 type PvForecastConfigEntry = ConfigEntry[PvForecastRuntimeData]
@@ -68,7 +70,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: PvForecastConfigEntry) -
         await history.async_start()
         await calibration.async_start()
         await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+        dashboard = DashboardManager(hass, entry)
+        entry.runtime_data.dashboard = dashboard
+        entry.async_on_unload(dashboard.async_stop)
+        await dashboard.async_sync()
     except (Exception, CancelledError):
+        if entry.runtime_data.dashboard is not None:
+            entry.runtime_data.dashboard.async_stop()
         try:
             await calibration.async_stop()
         finally:
@@ -85,6 +93,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: PvForecastConfigEntry) 
 
     unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unloaded:
+        if entry.runtime_data.dashboard is not None:
+            entry.runtime_data.dashboard.async_stop()
         try:
             if entry.runtime_data.calibration is not None:
                 await entry.runtime_data.calibration.async_stop()
@@ -113,6 +123,11 @@ async def async_remove_entry(hass: HomeAssistant, entry: PvForecastConfigEntry) 
 async def _async_update_listener(
     hass: HomeAssistant, entry: PvForecastConfigEntry
 ) -> None:
-    """Geänderte Optionen durch vollständiges Reload übernehmen."""
+    """Dashboard lokal aktualisieren, fachliche Änderungen durch Reload übernehmen."""
 
+    runtime = getattr(entry, "runtime_data", None)
+    dashboard = getattr(runtime, "dashboard", None)
+    if dashboard is not None and dashboard.only_dashboard_options_changed():
+        await dashboard.async_sync()
+        return
     await hass.config_entries.async_reload(entry.entry_id)

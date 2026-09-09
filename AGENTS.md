@@ -170,6 +170,29 @@ ausgeblendete Karten halten keine Abrufschleifen aktiv. Tests und Screenshots
 prüfen 360 px, Hell/Dunkel, Tastatur, Datenlücken und Fehlerzustände. Die reale
 Nutzererprobung wird davon getrennt ausgewiesen.
 
+## Freiwillige Dashboard-Einrichtung aus #96
+
+Config-Flow-Abschluss und Options Flow bieten einen standardmäßig ausgeschalteten
+Schalter für eine eigene PV-Seite in der HA-Seitenleiste sowie deren Titel.
+Ein nativer HA-Custom-Panelvertrag lädt dafür das gebündelte Kartenmodul ohne
+manuelle Ressourcenregistrierung oder YAML. Die Seite hat ein festes Layout;
+die einzelne Lovelace-Karte bleibt für frei gestaltete Dashboards verfügbar.
+Bestehende Dashboards, Ressourcen und Benutzer-Standardansichten bleiben erhalten.
+
+Je Config Entry wird ausschließlich das eigene Panel mit einer stabilen,
+namensunabhängigen URL verwaltet. Reload und Neustart erzeugen keine Duplikate;
+Abschalten und Entladen entfernen nur das eigene Panel. Fremde URL-Belegungen
+werden als Konflikt gemeldet. Ein später startendes Frontend wird abgewartet;
+Entladen und Abbruch beenden auch wartende Listener. Das Backend bleibt ohne
+Frontend oder Dashboard nutzbar.
+
+Reine Dashboardänderungen werden ohne Config-Entry-Reload oder Wetterabruf
+übernommen. Es gibt keine weiteren Stores, Sensoren, Aktionen oder Berechnungen;
+Schema 1.1 und alle Daten-/Quellenrechte bleiben bestehen. Die eingebettete Karte
+teilt weiter ihre Leseaufrufe und beendet sie beim Ausblenden oder Entfernen.
+Tests prüfen beide Flows und den Panel-Lebenszyklus; Browserprüfungen sichern
+360 px, Hell/Dunkel, Tastatur und die mobile HA-Menünavigation ab.
+
 ## Optionale Selbstkalibrierung aus #18
 
 Ein begrenzter Anlagenfaktor wird ausschließlich in den Optionen aktiviert:

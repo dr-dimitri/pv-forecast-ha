@@ -688,3 +688,51 @@ if (globalThis.window) {
   window.customCards = window.customCards ?? [];
   if (!window.customCards.some((item) => item.type === "pv-forecast-card")) window.customCards.push({ type: "pv-forecast-card", name: "PV Forecast", preview: true, description: "PV-Prognose, lokale Messungen und ehrliches Prognosearchiv.", documentationURL: "https://github.com/dr-dimitri/pv-forecast-ha" });
 }
+
+// Die verwaltete Dashboard-Seite bettet dieselbe Karte ein. Sie besitzt keinen
+// eigenen Datenabruf, keine Berechnung und keine globale Ressourcenregistrierung.
+export class PvForecastPanel extends ElementBase {
+  constructor() {
+    super();
+    if (!this.attachShadow) return;
+    this.attachShadow({ mode: "open" });
+    this.shadowRoot.innerHTML = `<style>
+      :host{display:block;height:100%;overflow:auto;background:var(--primary-background-color,#f4f6f8);color:var(--primary-text-color,#20313c)}
+      *{box-sizing:border-box}header{display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:2;padding:8px 16px;background:var(--app-header-background-color,var(--card-background-color,#fff));color:var(--app-header-text-color,var(--primary-text-color,#20313c));border-bottom:1px solid var(--divider-color,#dce3e8)}
+      h1{font:500 20px/1.4 var(--paper-font-body1_-_font-family,Roboto,sans-serif);margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+      button{display:grid;place-items:center;flex:0 0 44px;width:44px;height:44px;border:0;border-radius:50%;background:transparent;color:inherit;cursor:pointer}button:focus-visible{outline:3px solid var(--primary-color,#008999);outline-offset:2px}button:hover{background:var(--secondary-background-color,#eef3f5)}svg{width:24px;height:24px;fill:currentColor}
+      main{max-width:1000px;margin:0 auto;padding:24px}pv-forecast-card{display:block}#message{font:14px/1.5 sans-serif}
+      @media(max-width:460px){header{padding:6px 8px}main{padding:12px 8px}}
+    </style><header><button id="menu" type="button" aria-label="Menü öffnen"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg></button><h1>PV Forecast</h1></header><main><p id="message" role="status">Dashboard wird geladen …</p></main>`;
+    this.shadowRoot.getElementById("menu").addEventListener("click", () => this.dispatchEvent(new CustomEvent("hass-toggle-menu", { bubbles: true, composed: true })));
+  }
+
+  set panel(value) { this._panel = value; this._updateCard(); }
+  set hass(value) { this._hass = value; this._updateCard(); }
+  connectedCallback() { this._updateCard(); }
+
+  _updateCard() {
+    if (!this.shadowRoot) return;
+    this.shadowRoot.querySelector("h1").textContent = this._panel?.title || "PV Forecast";
+    this.shadowRoot.getElementById("menu").setAttribute("aria-label", this._panel?.config?.menu_label || "Menü öffnen");
+    const entryId = this._panel?.config?.config_entry_id;
+    if (typeof entryId !== "string" || !entryId) {
+      this._card?.remove();
+      this._card = null;
+      this._entryId = null;
+      this.shadowRoot.getElementById("message").hidden = false;
+      this.shadowRoot.getElementById("message").textContent = "Keine PV-Anlage für dieses Dashboard ausgewählt.";
+      return;
+    }
+    if (!this._card) this._card = document.createElement("pv-forecast-card");
+    if (entryId !== this._entryId) {
+      this._card.setConfig({ type: "custom:pv-forecast-card", config_entry_id: entryId, day: "today" });
+      this._entryId = entryId;
+    }
+    if (this._hass) this._card.hass = this._hass;
+    if (this._card.parentNode !== this.shadowRoot.querySelector("main")) this.shadowRoot.querySelector("main").append(this._card);
+    this.shadowRoot.getElementById("message").hidden = true;
+  }
+}
+
+if (globalThis.customElements && !customElements.get("pv-forecast-panel")) customElements.define("pv-forecast-panel", PvForecastPanel);
