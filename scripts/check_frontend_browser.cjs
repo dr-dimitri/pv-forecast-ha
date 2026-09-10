@@ -396,6 +396,51 @@ async function checkDataStates(browser, origin) {
   } finally { await page.close(); }
 }
 
+async function checkDelayedRoofFocus(browser, origin) {
+  for (const target of ["#values-toggle", ".table-scroll", "#nav-comparison"]) {
+    const page = await browser.newPage({ viewport: { width: 360, height: 900 } });
+    try {
+      await page.goto(`${origin}/tests/frontend/demo.html?width=360`);
+      const card = page.locator("pv-forecast-card");
+      await page.waitForFunction(() => document.querySelector("pv-forecast-card")._state?.loading === false);
+      await card.locator("#values-toggle").click();
+      await card.evaluate((element) => {
+        const callWS = element._hass.callWS.bind(element._hass);
+        element._hass = { ...element._hass, async callWS(message) {
+          if (message.service === "get_forecast" && message.service_data.roof_id) {
+            await new Promise((resolve) => { element._releaseRoofResponse = resolve; });
+          }
+          return callWS(message);
+        } };
+      });
+      await card.locator("#roof").selectOption("south");
+      await page.waitForFunction(() => document.querySelector("pv-forecast-card")._releaseRoofResponse);
+      // Während die Antwort aussteht, navigiert der Anwender bereits weiter.
+      await card.locator(target).focus();
+      const before = await card.evaluate((element) => {
+        element._focusedBeforeRoof = element.shadowRoot.activeElement;
+        const result = { scroll: window.scrollY, open: element.shadowRoot.getElementById("values").open };
+        element._releaseRoofResponse();
+        return result;
+      });
+      await page.waitForFunction(() => document.querySelector("pv-forecast-card")._state?.forecast?.data?.roof_id === "south");
+      const after = await card.evaluate((element) => ({
+        same: element._focusedBeforeRoof === element.shadowRoot.activeElement,
+        connected: element._focusedBeforeRoof.isConnected,
+        scroll: window.scrollY, open: element.shadowRoot.getElementById("values").open,
+      }));
+      assert.equal(after.same, true, `${target}: Tatsächlicher Fokus bleibt nach dem Verschieben erhaltener Knoten bestehen`);
+      assert.equal(after.connected, true);
+      assert.equal(after.open, before.open);
+      // Bei kürzerer Dachansicht begrenzt der Browser die Dokumentposition nativ.
+      const maxScroll = await page.evaluate(() => document.scrollingElement.scrollHeight - innerHeight);
+      assert.equal(after.scroll, Math.min(before.scroll, maxScroll));
+      assert.equal(await page.evaluate(() => window.demo.calls.length), 4, "Fokuskorrektur erzeugt keine weiteren Leseaufrufe");
+    } finally { await page.close(); }
+  }
+  console.log("Verzögerter Dachwechsel: Summary, Tabellenregion und Bereichsnavigation behalten den Fokus");
+}
+
 async function checkAccessibility(browser, origin) {
   const results = [];
   for (const theme of ["light", "dark"]) {
@@ -522,7 +567,10 @@ async function main() {
     browser = await chromium.launch({ headless: true, ...(executablePath ? { executablePath } : {}) });
     const origin = `http://127.0.0.1:${server.address().port}`;
     if (Number(prefix.split("-").at(-1)) >= 114) await checkDataStates(browser, origin);
-    if (Number(prefix.split("-").at(-1)) >= 116) await checkAccessibility(browser, origin);
+    if (Number(prefix.split("-").at(-1)) >= 116) {
+      await checkDelayedRoofFocus(browser, origin);
+      await checkAccessibility(browser, origin);
+    }
     const matrix = [360, 768, 1440].flatMap((viewport) => ["light", "dark", "custom"].map((theme) => ({
       name: `${viewport}-${theme}`, viewport, cardWidth: viewport, theme,
       representative: (viewport === 360 && theme === "light") || (viewport === 768 && theme === "custom") || (viewport === 1440 && theme === "dark"),
