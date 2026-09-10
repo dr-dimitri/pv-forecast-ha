@@ -572,3 +572,7 @@ Wetterabfrage, kein Storezugriff und keine automatische Änderung. Ausgeschaltet
 Funktionen und fehlende Lerntage sind keine Defektmeldung. Auch ohne geladene
 Anlage ist ein eingeschränkter Bericht verfügbar.
 [Betriebscheck mit nativen Browsernachweisen](docs/betriebscheck.md).
+
+Die [historische Tagesansicht](docs/prognosearchiv.md#einen-vergangenen-tag-erkunden)
+zeigt im Analysebereich einzelne abgeschlossene Archivtage mit eingefrorenen
+Stundenständen, ursprünglichem Kontext und belegten Archivmessungen.

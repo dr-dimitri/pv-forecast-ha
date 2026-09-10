@@ -183,7 +183,10 @@ async def test_explicit_export_keeps_source_data_and_uses_no_network(
     assert fetch.await_count == fetch_count
 
 
-async def test_history_requires_read_permission_on_actual_source(hass, archived_entry):
+@pytest.mark.parametrize("day_selection", [{}, {"day_view": {"date": "2026-09-09"}}])
+async def test_history_requires_read_permission_on_actual_source(
+    hass, archived_entry, day_selection
+):
     """Prognose-Entities erlauben keinen indirekten Zugriff auf den Ertragszähler."""
 
     entry, source, _ = archived_entry
@@ -198,11 +201,17 @@ async def test_history_requires_read_permission_on_actual_source(hass, archived_
     manager = entry.runtime_data.history
     with patch.object(manager, "experience_bands") as bands:
         with pytest.raises(Unauthorized):
-            await _history(hass, entry.entry_id, include_records=True, user_id=user.id)
+            await _history(
+                hass,
+                entry.entry_id,
+                include_records=True,
+                user_id=user.id,
+                **day_selection,
+            )
         bands.assert_not_called()
     allowed[source.entity_id] = {"read": True}
     user.mock_policy({"entities": {"entity_ids": allowed}})
-    assert await _history(hass, entry.entry_id, user_id=user.id)
+    assert await _history(hass, entry.entry_id, user_id=user.id, **day_selection)
 
 
 async def test_history_actions_remain_registered_after_unload(hass, archived_entry):
@@ -236,3 +245,28 @@ async def test_current_targets_are_explicit_and_use_existing_permissions(
     user.mock_policy({"entities": {"entity_ids": {source.entity_id: {"read": True}}}})
     with pytest.raises(Unauthorized):
         await _history(hass, entry.entry_id, current_targets=True, user_id=user.id)
+
+
+async def test_day_view_reads_archive_without_bands_or_writes(hass, archived_entry):
+    """Die datierte Auswahl braucht weder aktuelle Messungen noch Bandberechnung."""
+    entry, _, fetch = archived_entry
+    manager = entry.runtime_data.history
+    before = fetch.call_count
+    with patch.object(
+        type(manager),
+        "experience_bands",
+        side_effect=AssertionError("Keine Bandberechnung"),
+    ):
+        result = await _history(
+            hass, entry.entry_id, day_view={"date": "2026-09-09"}, current_targets=True
+        )
+    assert result["day_view"]["schema_version"] == 1
+    assert result["day_view"]["daily_measurement"]["energy_kwh"] == 10
+    assert "current_targets" in result and "horizons" in result
+    assert fetch.call_count == before
+    with patch.object(
+        type(manager), "snapshot", side_effect=AssertionError("Vorher validieren")
+    ):
+        with pytest.raises(ServiceValidationError) as error:
+            await _history(hass, entry.entry_id, day_view={"date": "2026-09-10"})
+    assert error.value.translation_key == "invalid_archive_day"

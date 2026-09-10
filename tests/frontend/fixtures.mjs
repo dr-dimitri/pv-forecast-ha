@@ -95,8 +95,17 @@ export function fixtureHass(scenario = "sunny", { calls = [], connection = {}, d
         return { response: data.forecast };
       }
       if (message.service === "get_measurements") return { response: data.measurement };
+      if (message.service === "get_history" && message.service_data.day_view) return { response: { ...data.history, day_view: archiveFixture(scenario, message.service_data.day_view) } };
       if (message.service === "get_history") return { response: { ...data.history, window_days: message.service_data.days } };
       throw new Error("Unbekannte Testaktion");
     },
   };
+}
+
+export function archiveFixture(scenario, selection) {
+  const live = fixture(scenario).forecast.view;
+  const shift = Date.parse(`${selection.date}T12:00:00Z`) - Date.parse(`${live.date}T12:00:00Z`);
+  const move = (value) => iso(Date.parse(value) + shift);
+  const intervals = live.intervals.map((item, index) => ({ ...item, start: move(item.start), end: move(item.end), source_start: move(item.start), source_end: move(item.end), raw_energy_kwh: item.energy_kwh, cutoff: iso(Date.parse(item.start) + shift - 3600000), fetched_at: iso(Date.parse(item.start) + shift - 3900000), observed_at: iso(Date.parse(item.start) + shift - 3600000), measurement: { energy_kwh: scenario === "gaps" && index === 10 ? null : item.energy_kwh, complete: !(scenario === "gaps" && index === 10), assessed_at: iso(Date.parse(live.end) + shift + 3600000), previous_revision_count: index === 12 ? 1 : 0, revised: index === 12, whole_interval_energy_kwh: item.energy_kwh } }));
+  return { schema_version: 1, scope: "total", date: selection.date, horizon: selection.horizon ?? "hourly_1h", label: selection.horizon === "hourly_3h" ? "Jeweils 3 Stunden vorher" : "Jeweils 1 Stunde vorher", timezone: live.timezone, start: move(live.start), end: move(live.end), configuration_id: selection.configuration_id ?? "synthetic-current", contexts: [{ configuration_id: "synthetic-current", timezone: live.timezone, active: true, min_date: "2026-01-01", max_date: "2026-12-31" }, { configuration_id: "synthetic-old", timezone: live.timezone, active: false, min_date: "2026-01-01", max_date: "2026-12-31" }], status: scenario === "gaps" ? "partial" : "complete", running: true, intervals, daily_forecasts: { daily_previous_18: { energy_kwh: 24 }, daily_same_06: { energy_kwh: 25 } }, daily_measurement: { energy_kwh: scenario === "gaps" ? null : 23, complete: scenario !== "gaps" } };
 }

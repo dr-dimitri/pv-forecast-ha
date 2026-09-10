@@ -251,3 +251,48 @@ Referenzen und Inhaltsfingerprints. Versionen 1–5 werden ohne Datenverlust
 übernommen; alte Hinweise werden nicht erfunden. Die zusätzliche Grenze von
 64 KiB zählt zur bestehenden Archivgrenze. Config Entries bleiben bei 1.1.
 Details: [Experimentelle Minderertragshinweise](minderertragshinweise.md).
+
+## Einen vergangenen Tag erkunden
+
+„Analyse → Archivtag erkunden“ liest einen abgeschlossenen Tag der letzten 90
+lokalen Tage. Datum, Vor-/Zurück, ursprüngliche Vergleichsgrundlage und Vorlauf
+(1 oder 3 Stunden) sind auswählbar. Ohne expliziten Kontext gilt die aktuelle
+Anlagenkonfiguration. Historische Standortzeitzonen bleiben erhalten.
+
+Die Linie besteht aus tatsächlich eingefrorenen Stundenständen mit jeweils
+eigenem Stichtag. Die Tagesprognosen von 18 Uhr am Vortag und 06 Uhr am Zieltag
+stehen separat daneben. Die Stundenlinie ist keine gemeinsame ursprüngliche
+Tagesausgabe. Werte und Faktor entsprechen dem damaligen Stand; aktuelle
+Kalibrierung und Erfahrungsbänder werden nicht rückwirkend angewendet.
+
+Messwerte stammen aus der aktuell gespeicherten Archivbewertung, auch wenn der
+kurzlebige Messstore den Tag nicht mehr enthält. Details zeigen Bewertungszeit
+und vorhandene frühere Revisionen. Gelöschte oder ungültige Messungen werden nicht
+aus alten Revisionen wiederhergestellt. Positive Messmengen über einen angeschnittenen
+Tagesrand bleiben im Teilintervall unbekannt; das ganze Messfenster bleibt als
+solches lesbar. Die Tagesmessung benötigt ein vollständiges Tagesassessment.
+
+```yaml
+action: pv_forecast.get_history
+data:
+  config_entry_id: DEINE_ANLAGE
+  day_view:
+    date: "2026-08-10"
+    horizon: hourly_1h
+    # configuration_id: Kennung aus day_view.contexts
+response_variable: archiv
+```
+
+`day_view` Version 1 enthält UTC-Tagesgrenzen, ursprüngliche Zone, Kontextliste,
+Status/Abdeckung/Kürzung, höchstens 50 Intervalle und zwei getrennte Tagesstände.
+Jedes Intervall enthält Ursprungsgrenzen, Roh-/wirksame Energie, Stichtag,
+Abruf-/Beobachtungszeit, Qualitätsmerkmale und aktuelle Bewertungsmetadaten.
+Konfiguration, Modell und Quellenidentität werden nicht zusammengerechnet.
+Die bisherigen Berichte und optionalen `current_targets` bleiben erhalten.
+Bei `day_view` wird das aktuelle `uncertainty`-Erfahrungsband nicht zusätzlich
+berechnet; normale Archivabfragen bleiben unverändert.
+
+Die Auswahl liest nur das bestehende Archiv unter denselben Quellenrechten.
+Sie bewirkt keine Speicherung, Messbewertung, Wetter-/Recorderabfrage oder
+Verlängerung der Aufbewahrung. Auswahl und bewusstes Aktualisieren teilen
+identische Anfragen zwischen Karten; es gibt keine neue Pollingschleife.

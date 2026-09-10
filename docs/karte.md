@@ -195,3 +195,22 @@ mit synthetischen Prognosen und Messwerten; sie zeigen keine reale Anlage.
 Die moderierten Tests mit fünf realen PV-Anwendern aus #28 sind weiterhin
 geplant. Automatisierte Prüfungen und Screenshots ersetzen weder diese Tests
 noch einen gemessenen Qualitätsvorsprung der Prognose.
+
+### Historische Einzelansicht
+
+Unter „Analyse → Archivtag erkunden“ sind abgeschlossene Tage, frühere
+Anlagenkontexte und 1-/3-Stunden-Vorläufe wählbar. Grafik und Intervallauswahl
+verwenden dieselben UTC-Grenzen wie die Liveansicht, mit lokaler Zeitzone und
+Offset. Tastatur: Diagramm fokussieren, Pfeile sowie Pos1/Ende; Touch: Intervall
+antippen. Historische Tagesprognosen und vollständig belegte Tagesmessung stehen
+separat unter der Grafik. Lücken und revidierte Messungen bleiben sichtbar.
+
+Die Detailabfrage beginnt beim Öffnen beziehungsweise Ändern der Auswahl;
+„Aktualisieren“ liest bewusst neu. Geschlossene oder ausgeblendete Karten
+beginnen keine historischen Abrufe. Screenshots und Browserprüfung mit
+synthetischen Daten: `scripts/check_archive_browser.cjs`, 360/768/1440 px,
+Hell/Dunkel, Datum/Kontext/Vorlauf, Tastatur und Touch. Dies ersetzt keine reale
+Nutzererprobung.
+
+![Archivnavigation bei 360 px](images/ui-132-360-light.png)
+![Archivnavigation im dunklen Design](images/ui-132-360-dark.png)
