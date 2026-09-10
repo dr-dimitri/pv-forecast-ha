@@ -116,7 +116,7 @@ def async_setup_services(hass: HomeAssistant) -> None:
                     {
                         vol.Required("start"): _aware_datetime,
                         vol.Required("end"): _aware_datetime,
-                        vol.Optional("step_minutes"): vol.Not(None),
+                        vol.Optional("step_minutes"): vol.In((5, 15, 30, 60)),
                     }
                 )(call.data["window"])
                 result["window"] = query_forecast_window(
