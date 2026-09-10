@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from collections import Counter
 from collections.abc import Mapping, Sequence
+from copy import deepcopy
 from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime, time, timedelta
 from hashlib import sha256
@@ -345,6 +346,10 @@ class HistoryArchive:
         self.underperformance = empty_state()
         self._configuration_changes: list[tuple[datetime, str]] = []
         self._latest_observed_at: datetime | None = None
+        # Ausschließlich entkoppelte, danach unveränderte Speicherbausteine.
+        # Laufende Bewertungen ersetzen Records; ausstehende Schreibungen
+        # behalten damit ihre eigene alte Generation bis zum Dateischluss.
+        self._storage_records: dict[str, tuple[ArchiveRecord, dict[str, Any], int]] = {}
 
     def note_configuration(self, configuration_id: str, observed_at: datetime) -> bool:
         """Reale Konfigurationswechsel begrenzen die vergleichbare Messperiode."""
@@ -1185,9 +1190,21 @@ class HistoryArchive:
 
     def to_dict(self) -> dict[str, Any]:
         return {
+            **self._storage_metadata(),
+            "records": [
+                record.to_dict()
+                for record in sorted(
+                    self.records.values(), key=lambda item: (item.start, item.horizon)
+                )
+            ],
+        }
+
+    def _storage_metadata(self) -> dict[str, Any]:
+        """Veränderliche Metadaten ohne Verweise auf den laufenden Stand kopieren."""
+        return {
             "timezone": self.timezone.key,
             "retention_truncated": self.retention_truncated,
-            "underperformance": self.underperformance,
+            "underperformance": deepcopy(self.underperformance),
             "latest_observed_at": (
                 self._latest_observed_at.isoformat()
                 if self._latest_observed_at
@@ -1197,8 +1214,49 @@ class HistoryArchive:
                 {"observed_at": instant.isoformat(), "configuration_id": value}
                 for instant, value in self._configuration_changes
             ],
+        }
+
+    def _storage_record(self, record: ArchiveRecord) -> tuple[dict[str, Any], int]:
+        """Nur geänderte Records aufbereiten und ihre genaue UTF-8-Größe messen."""
+        previous = self._storage_records.get(record.record_id)
+        if (
+            previous is not None
+            and previous[0] is record
+            # Diese beiden optionalen Versuchsblöcke sind trotz frozen Record
+            # verschachtelte Dicts. Auch eine Änderung darin darf weder einen
+            # alten Cache verwenden noch einen laufenden Snapshot verändern.
+            and previous[1]["short_term"] == record.short_term
+            and previous[1]["temperature_comparison"] == record.temperature_comparison
+        ):
+            return previous[1], previous[2]
+        data = record.to_dict()
+        data["short_term"] = deepcopy(data["short_term"])
+        data["temperature_comparison"] = deepcopy(data["temperature_comparison"])
+        size = len(json.dumps(data, ensure_ascii=False, allow_nan=False).encode())
+        self._storage_records[record.record_id] = (record, data, size)
+        return data, size
+
+    def _storage_size(self) -> int:
+        """Exakte JSON-Größe aus Metadaten, Recordgrößen und Listentrennern bilden."""
+        metadata = self._storage_metadata()
+        metadata["records"] = []
+        return (
+            len(json.dumps(metadata, ensure_ascii=False, allow_nan=False).encode())
+            + sum(self._storage_record(record)[1] for record in self.records.values())
+            + 2 * max(0, len(self.records) - 1)
+        )
+
+    def storage_snapshot(self) -> dict[str, Any]:
+        """Entkoppelte Speicherbausteine liefern; der Leser darf sie nicht ändern.
+
+        Neue Generationen ersetzen Bausteine vollständig. Der native Store darf
+        diesen Snapshot deshalb außerhalb des Event Loops nach JSON serialisieren.
+        Öffentliche Leseaktionen verwenden weiterhin eigene Darstellungsdaten.
+        """
+        return {
+            **self._storage_metadata(),
             "records": [
-                record.to_dict()
+                self._storage_record(record)[0]
                 for record in sorted(
                     self.records.values(), key=lambda item: (item.start, item.horizon)
                 )
@@ -1281,28 +1339,25 @@ class HistoryArchive:
         ordered = sorted(
             self.records.values(), key=lambda item: (item.end, item.horizon)
         )
-        current_bytes = len(
-            json.dumps(self.to_dict(), ensure_ascii=False, allow_nan=False).encode()
-        )
+        current_bytes = self._storage_size()
+        reached_byte_limit = current_bytes > max_bytes
         for record in ordered:
             if current_bytes <= max_bytes:
                 break
-            record_bytes = len(
-                json.dumps(
-                    record.to_dict(), ensure_ascii=False, allow_nan=False
-                ).encode()
-            )
+            record_bytes = self._storage_record(record)[1]
             current_bytes -= record_bytes + (2 if len(self.records) > 1 else 0)
             self.records.pop(record.record_id)
             self.retention_truncated = True
             changed = True
         self._prune_configuration_changes()
-        if (
-            len(
-                json.dumps(self.to_dict(), ensure_ascii=False, allow_nan=False).encode()
-            )
-            > max_bytes
-        ):
+        self._storage_records = {
+            key: value
+            for key, value in self._storage_records.items()
+            if key in self.records
+        }
+        # Nach tatsächlichem Beschnitt die veränderten Metadaten mitprüfen.
+        # Unterhalb der Grenze genügt die bereits exakte additive Messung.
+        if (changed or reached_byte_limit) and self._storage_size() > max_bytes:
             raise ValueError("Die Archivgrenze ist kleiner als die nötigen Metadaten")
         return changed
 

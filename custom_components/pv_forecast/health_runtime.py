@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, time, timedelta
+from zoneinfo import ZoneInfo
 
 from homeassistant.config_entries import ConfigEntry, ConfigEntryState
 from homeassistant.core import HomeAssistant
@@ -35,6 +36,10 @@ def capture_health(
     sources = []
     configured = entry.options.get("measurement_sources", [])
     if manager is not None:
+        zone = ZoneInfo(str(entry.data[CONF_TIME_ZONE]))
+        day_start = datetime.combine(
+            now.astimezone(zone).date(), time.min, zone
+        ).astimezone(UTC)
         for raw in configured:
             try:
                 source = SourceConfig.from_dict(raw)
@@ -71,6 +76,10 @@ def capture_health(
                         > timedelta(minutes=source.max_interval_minutes)
                     ):
                         sources.append("source_gap")
+                    elif day_start < now and captured.has_retention_loss(
+                        day_start, now
+                    ):
+                        sources.append("source_retention_gap")
                     else:
                         sources.append("source_ok")
             if source.derived_energy:

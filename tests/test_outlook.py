@@ -15,9 +15,17 @@ START = datetime(2026, 9, 9, tzinfo=UTC)
 NOON = START + timedelta(hours=12)
 
 
-def measurements(source_id="a", timezone="UTC", start=START):
+def measurements(source_id="a", timezone="UTC", start=START, max_interval_minutes=60):
     history = SourceHistory(
-        SourceConfig(source_id, f"sensor.{source_id}", "total", "AC-PV"), timezone, 20
+        SourceConfig(
+            source_id,
+            f"sensor.{source_id}",
+            "total",
+            "AC-PV",
+            max_interval_minutes=max_interval_minutes,
+        ),
+        timezone,
+        20,
     )
     history.add_reading(start, 100, "kWh")
     return history
@@ -57,6 +65,112 @@ def test_unmeasured_bridge_is_forecast_and_never_actual():
     assert result["bridge_kwh"] == 0.5
     assert result["remaining_kwh"] == 12
     assert result["total_kwh"] == 20.5
+
+
+def test_silent_counter_keeps_outlook_with_explicit_measurement_age():
+    history = measurements()
+    last = NOON - timedelta(hours=6)
+    for minute in range(5, 361, 5):
+        history.add_reading(START + timedelta(minutes=minute), 100 + minute / 60, "kWh")
+    result = outlook([history])
+    assert result["schema_version"] == 1
+    assert result["status"] == "available"
+    assert result["reason"] is None
+    assert result["measured_until"] == last.isoformat()
+    assert result["measurement_age_minutes"] == 360
+    assert result["measurement_stale"] is True
+    assert result["measurement_quality_flags"] == ["stale"]
+    assert result["forecast_quality_flags"] == []
+    assert result["quality_flags"] == ["stale"]
+    assert result["measured_kwh"] == 6
+    assert result["bridge_kwh"] == 6
+    assert result["remaining_kwh"] == 12
+    assert result["total_kwh"] == 24
+
+
+@pytest.mark.parametrize("max_interval_minutes", [5, 30, 60, 180])
+@pytest.mark.parametrize("overdue_seconds", [-60, 0, 1])
+def test_measurement_staleness_uses_confirmed_source_threshold(
+    max_interval_minutes, overdue_seconds
+):
+    history = measurements(max_interval_minutes=max_interval_minutes)
+    age = timedelta(minutes=max_interval_minutes, seconds=overdue_seconds)
+    history.add_reading(NOON - age, 108, "kWh")
+    result = outlook([history])
+    assert result["status"] == "available"
+    assert result["measurement_age_minutes"] == age.total_seconds() / 60
+    assert result["measurement_stale"] is (overdue_seconds > 0)
+    assert ("stale" in result["measurement_quality_flags"]) is (overdue_seconds > 0)
+
+
+def test_sources_use_their_own_freshness_limit_and_preserve_common_boundary():
+    first = measurements(max_interval_minutes=5)
+    second = measurements("b", max_interval_minutes=60)
+    common = NOON - timedelta(minutes=30)
+    first.add_reading(common, 103, "kWh")
+    second.add_reading(common, 104, "kWh")
+    first.add_reading(NOON - timedelta(minutes=2), 104, "kWh")
+    result = outlook([first, second])
+    assert result["measurement_age_minutes"] == 30
+    assert result["measurement_stale"] is False
+    assert "stale" not in result["measurement_quality_flags"]
+    assert result["measured_until"] == common.isoformat()
+    assert result["measured_kwh"] == 7
+
+    # Gleiche Messungen, jetzt eine überschrittene individuelle Meldefrist.
+    later = NOON + timedelta(minutes=4)
+    result = outlook([first, second], now=later, fetched_at=later)
+    assert result["measurement_age_minutes"] == 34
+    assert result["measurement_stale"] is True
+    assert result["status"] == "available"
+    assert result["measured_until"] == common.isoformat()
+    assert result["measured_kwh"] == 7
+
+
+def test_fresh_offset_sources_do_not_become_stale_from_old_common_boundary():
+    first, second = measurements(max_interval_minutes=5), measurements(
+        "b", max_interval_minutes=5
+    )
+    common = NOON - timedelta(hours=2)
+    first.add_reading(common, 104, "kWh")
+    second.add_reading(common, 103, "kWh")
+    first.add_reading(NOON - timedelta(minutes=1), 105, "kWh")
+    second.add_reading(NOON - timedelta(minutes=2), 104, "kWh")
+    result = outlook([first, second])
+    assert result["measurement_age_minutes"] == 120
+    assert result["measurement_stale"] is False
+    assert "stale" not in result["quality_flags"]
+    assert result["bridge_kwh"] == 2
+
+
+def test_measurement_and_forecast_quality_remain_distinguishable():
+    history = measurements()
+    history.add_reading(NOON - timedelta(hours=2), 108, "kWh")
+    data = forecast([1] * 24, START)
+    data = replace(
+        data,
+        total_intervals=tuple(
+            replace(interval, quality_flags=("missing_temperature",))
+            for interval in data.total_intervals
+        ),
+    )
+    result = outlook([history], data=data)
+    assert result["status"] == "unavailable"
+    assert result["reason"] == "input_fallbacks"
+    assert result["measurement_stale"] is True
+    assert "stale" in result["measurement_quality_flags"]
+    assert "missing_temperature" not in result["measurement_quality_flags"]
+    assert result["forecast_quality_flags"] == ["missing_temperature"]
+    assert result["quality_flags"] == sorted(
+        {*result["measurement_quality_flags"], "missing_temperature"}
+    )
+
+    stale_forecast = outlook([history], data=data, fetched_at=NOON - timedelta(hours=2))
+    assert stale_forecast["reason"] == "stale_forecast"
+    assert stale_forecast["measurement_stale"] is True
+    assert stale_forecast["forecast_quality_flags"] == ["missing_temperature"]
+    # Die bisherige Liste wird an frühen Rückgaben nicht nachträglich erweitert.
+    assert stale_forecast["quality_flags"] == result["measurement_quality_flags"]
 
 
 def test_disjoint_sources_need_common_exact_measurement_boundary():

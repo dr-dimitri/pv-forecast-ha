@@ -662,3 +662,24 @@ async def test_short_term_observation_is_local_and_ends_on_unload(hass, aioclien
     finally:
         await manager.async_stop()
     assert coordinator.listeners == []
+
+
+async def test_unchanged_assessment_neither_prunes_nor_schedules_storage(hass):
+    """Ein lokaler Takt ohne neue Belege verursacht keine Speicheraufbereitung."""
+    manager = ArchiveManager(hass, _entry(hass), _Coordinator(), None)
+    await manager.async_start()
+    await hass.async_block_till_done()
+    await manager._store._async_handle_write_data()
+    try:
+        with (
+            patch.object(manager._archive, "prune") as prune,
+            patch.object(manager._store, "async_delay_save") as delay,
+        ):
+            manager.coordinator.update()
+            await hass.async_block_till_done()
+            prune.assert_not_called()
+            delay.assert_not_called()
+        assert not manager._archive.retention_truncated
+        assert not manager._store.write_pending
+    finally:
+        await manager.async_stop()

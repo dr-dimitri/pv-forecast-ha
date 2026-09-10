@@ -2,12 +2,14 @@
 
 import asyncio
 import json
+import threading
 from datetime import timedelta
 from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
 from homeassistant.config_entries import ConfigEntryState
+from homeassistant.const import EVENT_HOMEASSISTANT_FINAL_WRITE
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.storage import Store
 from homeassistant.util.file import WriteError
@@ -22,6 +24,7 @@ from custom_components.pv_forecast.storage import ConfirmedStore
 
 from .test_calibration_runtime import _managers
 from .test_history_runtime import NOW, _Coordinator, _entry, _source
+from .test_measurement_runtime import START, _report
 
 # Die HA-Fixture ersetzt diese Methode durch einen reinen Speicher-Mock.
 NATIVE_WRITE = Store._async_write_data
@@ -93,7 +96,7 @@ async def test_failed_write_survives_until_unload(
 
 
 @pytest.mark.parametrize(
-    "kind,delay", [("archive", 300), ("learning", 300), ("measurements", 60)]
+    "kind,delay", [("archive", 300), ("learning", 300), ("measurements", 300)]
 )
 async def test_failed_write_retries_at_existing_cadence(
     hass, freezer, tmp_path, native_writes, kind, delay
@@ -193,11 +196,12 @@ async def test_remove_waits_for_old_write_and_cancels_retries(
     assert store._delay_handle is None
 
 
+@pytest.mark.parametrize("kind", ["archive", "measurements"])
 async def test_unload_with_persistent_error_leaves_no_retry(
-    hass, freezer, tmp_path, native_writes
+    hass, freezer, tmp_path, native_writes, kind
 ):
     freezer.move_to(NOW)
-    manager, _ = await _start(hass, "archive", tmp_path)
+    manager, _ = await _start(hass, kind, tmp_path)
     with patch.object(
         manager._store, "_write_prepared_data", side_effect=WriteError("voll")
     ) as writer:
@@ -205,7 +209,9 @@ async def test_unload_with_persistent_error_leaves_no_retry(
         await manager.async_stop()
         assert writer.call_count == 2
     assert manager.storage_error == "storage_unavailable"
-    assert manager._dirty
+    if kind == "archive":
+        assert manager._dirty
+    assert manager._store.write_pending
     assert manager._store._delay_handle is None
 
 
@@ -310,3 +316,98 @@ async def test_native_serialization_failure_has_same_status(
         await store.async_save_checked({"invalid": object()})
     assert store.write_error == "storage_unavailable"
     assert store.write_pending
+
+
+async def test_measurement_writes_run_every_five_minutes(
+    hass, freezer, tmp_path, native_writes
+):
+    """30-Sekunden-Erfassung erzeugt zwölf reguläre Vollschreibungen pro Stunde."""
+    freezer.move_to(START)
+    await _report(hass, freezer, 1, minutes=0)
+    manager, _ = await _start(hass, "measurements", tmp_path)
+    with patch.object(
+        manager._store,
+        "_write_prepared_data",
+        wraps=manager._store._write_prepared_data,
+    ) as writer:
+        for step in range(1, 121):
+            await _report(hass, freezer, 1 + step / 100, minutes=step / 2)
+            async_fire_time_changed(hass)
+            await hass.async_block_till_done()
+        assert writer.call_count == 12
+        await manager.async_stop()
+        assert writer.call_count == 13
+    assert not manager._store.write_pending
+    assert manager._store._delay_handle is None
+
+
+async def test_measurement_snapshot_and_json_use_correct_threads(
+    hass, freezer, tmp_path, native_writes
+):
+    """Während JSON entsteht, verändern neue Meldungen den alten Snapshot nicht."""
+    freezer.move_to(START)
+    await _report(hass, freezer, 1, minutes=0)
+    manager, _ = await _start(hass, "measurements", tmp_path)
+    store = manager._store
+    main_thread = threading.get_ident()
+    started = asyncio.Event()
+    finish = threading.Event()
+    snapshot_threads = []
+    json_threads = []
+    original_snapshot = manager._serialize
+    from homeassistant.helpers import json as json_helper
+
+    original_prepare = json_helper.prepare_save_json
+
+    def snapshot():
+        snapshot_threads.append(threading.get_ident())
+        return original_snapshot()
+
+    def prepare(*args, **kwargs):
+        json_threads.append(threading.get_ident())
+        hass.loop.call_soon_threadsafe(started.set)
+        assert finish.wait(timeout=10)
+        return original_prepare(*args, **kwargs)
+
+    with (
+        patch.object(manager, "_serialize", side_effect=snapshot),
+        patch.object(json_helper, "prepare_save_json", side_effect=prepare),
+    ):
+        task = asyncio.create_task(store._async_handle_write_data())
+        try:
+            await asyncio.wait_for(started.wait(), timeout=10)
+            history = next(iter(manager._histories.values()))
+            history.mark_gap("test_gap")
+            await _report(hass, freezer, 1.1, minutes=1)
+            expected_new = original_snapshot()
+        finally:
+            finish.set()
+        await task
+    assert snapshot_threads == [main_thread]
+    assert json_threads and all(thread != main_thread for thread in json_threads)
+    saved = json.loads((tmp_path / "measurements").read_text())["data"]
+    assert saved != expected_new
+    assert store.write_pending
+    await store._async_handle_write_data()
+    assert json.loads((tmp_path / "measurements").read_text())["data"] == expected_new
+    assert not store.write_pending
+    await manager.async_stop()
+
+
+async def test_measurement_final_write_flushes_pending_snapshot(
+    hass, freezer, tmp_path, native_writes
+):
+    """HA-Final-Write bestätigt den letzten Stand vor dem Fünfminutentermin."""
+    freezer.move_to(START)
+    await _report(hass, freezer, 1, minutes=0)
+    manager, _ = await _start(hass, "measurements", tmp_path)
+    await _report(hass, freezer, 1.1, minutes=1)
+    expected = manager._serialize()
+    assert manager._store.write_pending
+    assert not (tmp_path / "measurements").exists()
+    hass.bus.async_fire(EVENT_HOMEASSISTANT_FINAL_WRITE)
+    await hass.async_block_till_done()
+    assert json.loads((tmp_path / "measurements").read_text())["data"] == expected
+    assert not manager._store.write_pending
+    assert manager._store._delay_handle is None
+    await manager.async_stop()

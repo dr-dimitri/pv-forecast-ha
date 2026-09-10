@@ -54,12 +54,25 @@ Messpfad aktiviert; vorhandene Konfigurationen benötigen keine Migration.
 Jede Quelle hat eine stabile `source_id`, eine bestätigte Entity-Registry-ID
 (soweit vorhanden), Messart, Messgrenze und explizite Herkunftsbestätigungen.
 
-Die lokal erfassten Messdaten verwenden seit #23 einen eigenen HA-Store Version 2
+Die lokal erfassten Messdaten verwenden seit #152 einen eigenen HA-Store Version 3
 mit dem Schlüssel `pv_forecast.measurements.<entry_id>`. Sie werden höchstens
 sieben Tage und bis zu 20.000 Messpunkte sowie 20.000 zugehörige
 Zählerdifferenzen pro Quelle vorgehalten. Quellenwechsel
 werden als neue Segmente geführt und nicht mit alten Messreihen verrechnet.
 Der Datenvertrag ist in [Messdaten](messdaten.md) beschrieben.
+
+Version 3 übernimmt Mess-Stores 1 und 2 verlustfrei. Optionale
+`retention_losses` dokumentieren tatsächlich durch die harte Mengenbegrenzung
+entfernte Messabschnitte mit ihrem bisherigen Segmentbezug; für Altbestände
+werden keine Ereignisse erfunden. Die normale Alterslöschung zählt nicht dazu.
+Gesunde zusammenhängende Abschnitte innerhalb einer UTC-Minute und eines lokalen
+Tages werden ohne Änderung der Energiemenge verdichtet. Lücken, Resets,
+Korrekturen sowie Null-/Positivgrenzen bleiben getrennt. Config Entries bleiben
+bei 1.1, die bestehenden Mengen- und Zeitgrenzen gelten weiter.
+
+Reguläre Messspeicherschreibungen haben feste Fünfminutentermine mit höchstens
+288 Schreibungen am Tag. JSON-Kodierung und Dateiarbeit erfolgen im Executor
+aus einem von der weiteren Erfassung getrennten Stand.
 
 ## Prognosearchiv ab #27
 
@@ -115,7 +128,7 @@ Siehe [Temperaturvergleich](temperaturvergleich.md).
 Version 7 ergänzt bei bewussten Tageskorrekturen `assessment.manual` und
 `measured_assessment` als erhaltene automatische Bewertung. Die Migration aus
 Versionen 1–6 ergänzt keine Korrekturen und verändert keine alten Belege.
-Config Entries 1.1, Mess-Store 2 und Lern-Store 1 bleiben unverändert.
+Diese Archivänderung lässt Config Entries 1.1 sowie Mess- und Lern-Store unverändert.
 Die [Tageskorrektur](tageskorrektur.md) dokumentiert Vorrang, Rücknahme und Grenzen.
 
 ## Archiv-Store 6: experimentelle Minderertragshinweise

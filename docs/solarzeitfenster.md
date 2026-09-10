@@ -105,9 +105,18 @@ unter `outlook` eine getrennte Tagesaussicht für die Gesamtanlage:
 
 - `measured_kwh`: vollständig belegte Energie seit lokaler Mitternacht,
 - `measured_until`: letzter gemeinsamer exakter Messzeitpunkt,
+- `measurement_age_minutes`: Alter dieses gemeinsamen Zeitpunkts in Minuten,
+- `measurement_stale`: mindestens eine beteiligte Quelle hat seit ihrer letzten
+  gültigen Meldung die bestätigte `max_interval_minutes`-Meldefrist überschritten,
 - `bridge_kwh`: geschätzte Energie von diesem Zeitpunkt bis jetzt,
 - `remaining_kwh`: Prognose ausschließlich ab jetzt bis Tagesende,
 - `total_kwh`: die überschneidungsfreie Summe, sofern alle Abschnitte vorliegen.
+
+`measurement_quality_flags` und `forecast_quality_flags` trennen die
+Qualitätsmarkierungen nach Herkunft. Die bisherige gemeinsame Liste
+`quality_flags` bleibt für ältere Karten unverändert bestehen; die Ergänzungen
+verwenden weiterhin `schema_version: 1`. Ohne vollständig belegtes Messpräfix
+bleiben gemeinsamer Messzeitpunkt und dessen Alter `null`.
 
 Die Messantwort liefert daneben `current_location_total_energy` für das
 angefragte Zeitfenster: bereits beobachtete Energie am aktuellen Standort mit
@@ -119,6 +128,16 @@ mehreren Zählern wird eine gemeinsame belegte Grenze benötigt; unterschiedlich
 Meldezeiten rechtfertigen keine anteilige Verteilung von Zählerdifferenzen.
 Fehlt das Messpräfix oder eine Prognoseabdeckung, bleibt die Tagesaussicht
 unvollständig. Die verbleibende Basisprognose bleibt getrennt zugänglich.
+
+Eine halbstündige Brücke ist dabei keine feste Altersgrenze. Meldet eine Quelle
+beispielsweise sechs Stunden nichts mehr, bleibt eine ansonsten vollständige
+Tagesaussicht verfügbar; diese sechs Stunden stammen vollständig aus der
+geschätzten Brücke. In der geöffneten Tagesaussicht erscheinen das Alter des
+gemeinsamen Messzeitpunkts und der eigene Hinweis „Der letzte gesicherte Messwert
+ist zu alt.“ Die bereits bestätigte Meldefrist jeder Quelle entscheidet über
+diesen Hinweis. Individuell frische, versetzt meldende Quellen können eine ältere
+gemeinsame Grenze haben, ohne als veraltet zu gelten. Ihr gemeinsames Alter bleibt
+trotzdem sichtbar. Diagramm, Tageskennzahlen und Archivbewertung ändern sich nicht.
 
 Es wird kein kurzfristiger Korrekturfaktor angewendet (`correction: off`).
 Die Addition bereits bekannter Messenergie belegt keine bessere Vorhersage.

@@ -275,6 +275,39 @@ class SourceHistory:
         self._baseline: Reading | None = None
         self._pending_gap: set[str] = set()
         self._invalid_days: set[tuple[str, str]] = set()
+        self._retention_losses: dict[str, datetime] = {}
+        self._latest_cache_key: tuple[int, int, int] | None = None
+        self._latest_cache: Reading | None = None
+        self._oldest_timestamp: datetime | None = None
+
+    def _reading_key(self) -> tuple[int, int, int]:
+        return (
+            id(self.readings),
+            len(self.readings),
+            id(self.readings[-1]) if self.readings else 0,
+        )
+
+    def _latest_received(self) -> Reading | None:
+        """Im Ereignispfad unveränderte Listen nicht erneut vollständig durchsuchen."""
+        key = self._reading_key()
+        if key != self._latest_cache_key:
+            self._latest_cache = max(
+                self.readings, key=lambda item: item.timestamp, default=None
+            )
+            self._oldest_timestamp = min(
+                (item.timestamp for item in self.readings), default=None
+            )
+            self._latest_cache_key = key
+        return self._latest_cache
+
+    def _append_reading(self, reading: Reading) -> None:
+        latest = self._latest_received()
+        self.readings.append(reading)
+        if latest is None or reading.timestamp > latest.timestamp:
+            self._latest_cache = reading
+        if self._oldest_timestamp is None or reading.timestamp < self._oldest_timestamp:
+            self._oldest_timestamp = reading.timestamp
+        self._latest_cache_key = self._reading_key()
 
     @property
     def latest_reading(self) -> Reading | None:
@@ -437,7 +470,7 @@ class SourceHistory:
                 reading,
                 quality_flags=reading.quality_flags | {"before_location_change"},
             )
-        latest = max(self.readings, key=lambda item: item.timestamp, default=None)
+        latest = self._latest_received()
         if latest is not None and timestamp <= latest.timestamp:
             if (
                 timestamp == latest.timestamp
@@ -450,11 +483,11 @@ class SourceHistory:
                 reading = replace(
                     reading, quality_flags=reading.quality_flags | {"late_reading"}
                 )
-                self.readings.append(reading)
+                self._append_reading(reading)
                 return reading
         if value is None:
             self._pending_gap.update(flags)
-            self.readings.append(reading)
+            self._append_reading(reading)
             return reading
         previous = self._baseline
         if previous is None:
@@ -514,23 +547,115 @@ class SourceHistory:
         reading = replace(
             reading, quality_flags=frozenset(flags), segment_id=self.segment_id
         )
-        self.readings.append(reading)
+        self._append_reading(reading)
         self._baseline = reading
         self._pending_gap.clear()
         return reading
 
-    def prune(self, cutoff: datetime, max_readings: int = 20000) -> None:
+    def _compact(self) -> None:
+        """Belegte Minutenenergie ohne Rundungsverlust oder neue Abdeckung erhalten."""
+        compacted: list[EnergyDelta] = []
+        redundant: set[tuple[str, datetime]] = set()
+        healthy = frozenset({"derived_energy"})
+        for delta in self.deltas:
+            previous = compacted[-1] if compacted else None
+            if (
+                previous is not None
+                and previous.end == delta.start
+                and previous.segment_id == delta.segment_id
+                and previous.quality_flags == delta.quality_flags
+                and delta.quality_flags <= healthy
+                and (previous.energy_kwh == 0) == (delta.energy_kwh == 0)
+                and previous.start.replace(second=0, microsecond=0)
+                == (delta.end - timedelta(microseconds=1)).replace(
+                    second=0, microsecond=0
+                )
+                and self._local_day(previous.start, delta.segment_id)
+                == self._local_day(
+                    delta.end - timedelta(microseconds=1), delta.segment_id
+                )
+            ):
+                energy = previous.energy_kwh + delta.energy_kwh
+                # TwoSum: Nur ein exakt darstellbarer Summand darf die beiden
+                # ursprünglichen ersetzen. fsum liefert dadurch dieselbe Energie.
+                virtual = energy - previous.energy_kwh
+                error = (previous.energy_kwh - (energy - virtual)) + (
+                    delta.energy_kwh - virtual
+                )
+                if isfinite(energy) and error == 0:
+                    redundant.add((delta.segment_id, delta.start))
+                    compacted[-1] = replace(previous, end=delta.end, energy_kwh=energy)
+                    continue
+            compacted.append(delta)
+        if not redundant:
+            return
+        # Qualitätsereignisse und die fortsetzbare Zählerbasis bleiben erhalten.
+        protected = (self._baseline, self.latest_reading, self.last_valid_reading)
+        self.readings = [
+            reading
+            for reading in self.readings
+            if (reading.segment_id, reading.timestamp) not in redundant
+            or not reading.quality_flags <= healthy
+            or reading in protected
+        ]
+        self.deltas = compacted
+
+    def prune_if_needed(self, cutoff: datetime, max_readings: int = 20000) -> None:
+        """Anzahlgrenzen im Ereignispfad ohne Vollscan bei jedem Zustand einhalten."""
+        cutoff = _utc(cutoff)
+        if max_readings < 1:
+            raise ValueError("Mindestens ein Messwert muss speicherbar bleiben")
+        self._latest_received()
+        if (self._oldest_timestamp is not None and self._oldest_timestamp < cutoff) or (
+            self.deltas and self.deltas[0].start < cutoff
+        ):
+            self.prune(cutoff, max_readings)
+            return
+        if len(self.readings) <= max_readings and len(self.deltas) <= max_readings:
+            return
+        self._compact()
+        # Nicht verdichtbare Ereignisfolgen erhalten begrenzten Freiraum, damit
+        # nicht jeder folgende Zustand wieder die ganze Liste kopiert.
+        target = max_readings
+        if len(self.readings) > target or len(self.deltas) > target:
+            target -= min(1000, target // 20)
+        self.prune(cutoff, target, compact=False)
+
+    def has_retention_loss(self, start: datetime, end: datetime) -> bool:
+        """Bekannte Anzahlkürzung im aktuellen Standortkontext sichtbar machen."""
+        start, end = _utc(start), _utc(end)
+        current = self._segment_contexts[self.segment_id]
+        return any(
+            start < timestamp <= end and self._segment_contexts[segment] == current
+            for segment, timestamp in self._retention_losses.items()
+        )
+
+    def prune(
+        self, cutoff: datetime, max_readings: int = 20000, *, compact: bool = True
+    ) -> None:
         """Werte und Deltas gemeinsam begrenzen; alte Tageskorrekturen verwerfen."""
         cutoff = _utc(cutoff)
         if max_readings < 1:
             raise ValueError("Mindestens ein Messwert muss speicherbar bleiben")
+        if compact and (
+            len(self.readings) > max_readings or len(self.deltas) > max_readings
+        ):
+            self._compact()
+        age_cutoff = cutoff
         self.readings = sorted(
             (r for r in self.readings if r.timestamp >= cutoff),
             key=lambda reading: reading.timestamp,
         )[-max_readings:]
         if self.readings:
             cutoff = max(cutoff, min(r.timestamp for r in self.readings))
-        self.deltas = [d for d in self.deltas if d.start >= cutoff][-max_readings:]
+        retained = [d for d in self.deltas if d.start >= cutoff][-max_readings:]
+        first = retained[0].start if retained else None
+        for delta in self.deltas:
+            if delta.start >= age_cutoff and (first is None or delta.start < first):
+                self._retention_losses[delta.segment_id] = max(
+                    delta.end, self._retention_losses.get(delta.segment_id, delta.end)
+                )
+        self.deltas = retained
         if self._baseline is not None and self._baseline not in self.readings:
             self._baseline = None
             self.mark_gap("retention_gap")
@@ -543,6 +668,26 @@ class SourceHistory:
             d.segment_id for d in self.deltas
         }
         used.add(self.segment_id)
+
+        def context_key(segment: str) -> tuple[str | None, ...]:
+            context = self._segment_contexts[segment]
+            return tuple(
+                context[key] for key in ("location_id", "timezone", "started_at")
+            )
+
+        live_contexts = {context_key(segment) for segment in used}
+        losses: dict[tuple[str | None, ...], tuple[str, datetime]] = {}
+        for segment, timestamp in self._retention_losses.items():
+            context = context_key(segment)
+            if timestamp > age_cutoff and context in live_contexts:
+                previous = losses.get(context)
+                if previous is None or timestamp > previous[1]:
+                    losses[context] = (segment, timestamp)
+        # Auch nach dem letzten entfernten Beleg eines früheren Zählersegments
+        # bleibt dessen Kürzung am selben Standort bekannt. Eine Markierung je
+        # noch lebendem Standortkontext begrenzt zusätzliche Segmentmetadaten.
+        self._retention_losses = dict(losses.values())
+        used.update(self._retention_losses)
         self._invalid_days = {item for item in self._invalid_days if item[0] in used}
         self._segments = {
             key: value for key, value in self._segments.items() if key in used
@@ -666,7 +811,7 @@ class SourceHistory:
 
     def to_dict(self) -> dict[str, Any]:
         """Interne Historie unabhängig vom Config-Entry-Schema speichern."""
-        return {
+        result = {
             "source": self.source.to_dict(),
             "segment_id": self.segment_id,
             "segments": {key: value.copy() for key, value in self._segments.items()},
@@ -679,6 +824,11 @@ class SourceHistory:
             "pending_gap": sorted(self._pending_gap),
             "invalid_days": [list(item) for item in sorted(self._invalid_days)],
         }
+        if self._retention_losses:
+            result["retention_losses"] = {
+                key: value.isoformat() for key, value in self._retention_losses.items()
+            }
+        return result
 
     @classmethod
     def from_dict(
@@ -786,6 +936,12 @@ class SourceHistory:
             if history._baseline != expected_baseline:
                 raise ValueError("Die gespeicherte Zählerbasis ist nicht aktuell")
             history._pending_gap = set(_stored_flags(data.get("pending_gap", [])))
+            for key, value in data.get("retention_losses", {}).items():
+                if key not in segments:
+                    raise ValueError(
+                        "Eine Aufbewahrungsmarkierung hat kein Messsegment"
+                    )
+                history._retention_losses[key] = _parse_time(value)
             for item in data.get("invalid_days", []):
                 if (
                     not isinstance(item, list)

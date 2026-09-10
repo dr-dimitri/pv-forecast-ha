@@ -34,6 +34,7 @@ from homeassistant.util import dt as dt_util
 from .configuration import location_fingerprint
 from .const import CONF_INSTALLED_POWER_KWP, CONF_ROOFS, CONF_TIME_ZONE, DOMAIN
 from .measurement_helpers import helper_matches
+from .measurement_storage import MeasurementSnapshotCache
 from .measurement_windows import MeasurementWindow, async_interval_windows
 from .measurements import (
     SourceConfig,
@@ -46,10 +47,10 @@ from .outlook import build_day_outlook
 from .storage import ConfirmedStore
 
 _LOGGER = logging.getLogger(__name__)
-STORAGE_VERSION = 2
+STORAGE_VERSION = 3
 RETENTION = timedelta(days=7)
 MAX_READINGS = 20_000
-SAVE_DELAY = 60
+SAVE_DELAY = 300
 
 
 class _MeasurementStore(ConfirmedStore):
@@ -60,20 +61,34 @@ class _MeasurementStore(ConfirmedStore):
     async def _async_migrate_func(
         self, old_major_version: int, old_minor_version: int, old_data: dict[str, Any]
     ) -> dict[str, Any]:
+        if old_major_version == 2:
+            # Version 3 ergänzt nur optionale Hinweise auf verlorene Abdeckung.
+            return old_data
         if old_major_version != 1:
             raise NotImplementedError
         timezone = str(self.location_data[CONF_TIME_ZONE])
         location_id = location_fingerprint(self.location_data)
         sources = {}
         for source_id, data in old_data["sources"].items():
-            history = SourceHistory.from_dict(
-                SourceConfig.from_dict(data["source"]), data, timezone, float_info.max
+            sources[source_id] = await self.hass.async_add_executor_job(
+                self._migrate_source_context,
+                data,
+                timezone,
+                location_id,
+                dt_util.utcnow(),
             )
-            history.bind_location(location_id, timezone, dt_util.utcnow())
-            sources[source_id] = dict(data) | {
-                "segment_contexts": history.to_dict()["segment_contexts"]
-            }
         return dict(old_data) | {"sources": sources}
+
+    @staticmethod
+    def _migrate_source_context(
+        data: dict[str, Any], timezone: str, location_id: str, now: datetime
+    ) -> dict[str, Any]:
+        """Nur den geladenen Altstand vor Beginn der Erfassung im Executor lesen."""
+        history = SourceHistory.from_dict(
+            SourceConfig.from_dict(data["source"]), data, timezone, float_info.max
+        )
+        history.bind_location(location_id, timezone, now)
+        return dict(data) | {"segment_contexts": history.to_dict()["segment_contexts"]}
 
 
 def _measurement_store(hass: HomeAssistant, entry_id: str) -> ConfirmedStore:
@@ -85,6 +100,8 @@ def _measurement_store(hass: HomeAssistant, entry_id: str) -> ConfirmedStore:
         f"{DOMAIN}.measurements.{entry_id}",
         private=True,
         atomic_writes=True,
+        serialize_in_event_loop=False,
+        snapshot_in_event_loop=True,
     )
     entry = hass.config_entries.async_get_entry(entry_id)
     store.location_data = dict(entry.data) if entry is not None else {}
@@ -129,8 +146,10 @@ class MeasurementManager:
         self._listeners: list[CALLBACK_TYPE] = []
         self._cancel_cleanup: CALLBACK_TYPE | None = None
         self._running = False
+        self._stopped = False
         self._storage_error: str | None = None
         self._save_scheduled = False
+        self._snapshot_cache = MeasurementSnapshotCache()
         # Diese großzügige Grenze ist nur eine Qualitätsheuristik. Sie begründet
         # weder die Herkunft eines Zählers noch die physikalische Anlagengrenze.
         try:
@@ -211,7 +230,7 @@ class MeasurementManager:
     async def async_start(self, *, fresh_after: datetime | None = None) -> None:
         """Historie laden und ausschließlich lokale Ereignisse abonnieren."""
 
-        if self._running:
+        if self._running or self._stopped:
             return
         if not self._histories:
             # Nach bestätigtem Entfernen der letzten Quelle kann der vorherige
@@ -221,6 +240,8 @@ class MeasurementManager:
             return
         try:
             stored = await self._store.async_load()
+            if self._stopped:
+                return
         except (
             HomeAssistantError,
             NotImplementedError,
@@ -228,6 +249,8 @@ class MeasurementManager:
             KeyError,
             TypeError,
         ) as err:
+            if self._stopped:
+                return
             _LOGGER.exception("Gespeicherte PV-Messdaten können nicht geladen werden")
             self._storage_error = (
                 "unsupported_version"
@@ -241,9 +264,15 @@ class MeasurementManager:
         for source_id, history in tuple(self._histories.items()):
             if isinstance(data := source_data.get(source_id), dict):
                 try:
-                    history = SourceHistory.from_dict(
-                        history.source, data, self.timezone, self._max_power_kw
+                    history = await self.hass.async_add_executor_job(
+                        SourceHistory.from_dict,
+                        history.source,
+                        data,
+                        self.timezone,
+                        self._max_power_kw,
                     )
+                    if self._stopped:
+                        return
                     history.bind_location(
                         location_fingerprint(self.entry.data),
                         self.timezone,
@@ -251,8 +280,21 @@ class MeasurementManager:
                     )
                     self._histories[source_id] = history
                 except (KeyError, TypeError, ValueError, OverflowError):
+                    if self._stopped:
+                        return
                     _LOGGER.warning("Ungültige gespeicherte Messquelle %s", source_id)
             history.mark_gap("restart")
+        # Vor dem Listenerstart sind nur die eingefrorenen Punkt-/Deltamodelle
+        # erreichbar. Kein veränderlicher SourceHistory geht an den Executor.
+        items = tuple(
+            item
+            for history in self._histories.values()
+            for collection in (history.readings, history.deltas)
+            for item in collection
+        )
+        await self.hass.async_add_executor_job(self._snapshot_cache.prime, items)
+        if self._stopped:
+            return
         self._resolve_entity_ids()
         self._running = True
         self._subscribe()
@@ -277,6 +319,7 @@ class MeasurementManager:
     async def async_stop(self) -> None:
         """Alle Listener und Timer beenden und ausstehende Daten speichern."""
 
+        self._stopped = True
         self._store.async_stop_retries()
         if not self._running:
             return
@@ -287,7 +330,10 @@ class MeasurementManager:
             self._cancel_cleanup = None
         self._prune(dt_util.utcnow())
         self._save_scheduled = False
-        await self._store.async_save(self._serialize())
+        try:
+            await self._store.async_save_checked(self._serialize())
+        except HomeAssistantError:
+            _LOGGER.error("PV-Messdaten konnten beim Entladen nicht gespeichert werden")
 
     async def async_delete_source_data(self, source_id: str) -> None:
         """Nur diese Historie löschen; der nächste Bericht beginnt neu."""
@@ -630,7 +676,7 @@ class MeasurementManager:
             last_reset,
             quality_flags=flags,
         )
-        history.prune(dt_util.utcnow() - RETENTION, MAX_READINGS)
+        history.prune_if_needed(dt_util.utcnow() - RETENTION, MAX_READINGS)
 
     @callback
     def _registry_changed(
@@ -660,7 +706,8 @@ class MeasurementManager:
     def _schedule_save(self) -> None:
         if self._running and not self._save_scheduled:
             self._save_scheduled = True
-            self._store.async_delay_save(self._serialize_scheduled_save, SAVE_DELAY)
+            delay = SAVE_DELAY - dt_util.utcnow().timestamp() % SAVE_DELAY
+            self._store.async_delay_save(self._serialize_scheduled_save, delay)
 
     @callback
     def _serialize_scheduled_save(self) -> dict[str, Any]:
@@ -671,9 +718,4 @@ class MeasurementManager:
 
     @callback
     def _serialize(self) -> dict[str, Any]:
-        return {
-            "sources": {
-                source_id: history.to_dict()
-                for source_id, history in self._histories.items()
-            }
-        }
+        return self._snapshot_cache.serialize(self._histories)

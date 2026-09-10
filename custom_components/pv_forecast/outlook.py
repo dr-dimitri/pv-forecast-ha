@@ -44,11 +44,15 @@ def build_day_outlook(
         "as_of": now.isoformat(),
         "timezone": timezone_name,
         "measured_until": None,
+        "measurement_age_minutes": None,
+        "measurement_stale": False,
         "measured_kwh": None,
         "bridge_kwh": None,
         "remaining_kwh": _window_energy(intervals, now, end),
         "total_kwh": None,
         "quality_flags": [],
+        "measurement_quality_flags": [],
+        "forecast_quality_flags": [],
         "correction": "off",
     }
 
@@ -74,15 +78,27 @@ def build_day_outlook(
         measured_until = max(boundaries)
         total = aggregate_energy(sources, start, measured_until, now)
         result["quality_flags"] = total["quality_flags"]
+        result["measurement_quality_flags"] = total["quality_flags"]
+        # snapshot() prüft die letzte gültige Meldung jeder Quelle gegen deren
+        # bestätigte Meldefrist. Eine ältere gemeinsame Grenze allein bedeutet
+        # bei weiterhin versetzt meldenden Quellen noch keinen stummen Zähler.
+        result["measurement_stale"] = "stale" in total["quality_flags"]
         if not total["energy_complete"]:
             return unavailable("incomplete_measurements")
         measured = total["energy_kwh"]
     bridge = _window_energy(intervals, measured_until, now)
     result.update(
         measured_until=measured_until.isoformat(),
+        measurement_age_minutes=(now - measured_until).total_seconds() / 60,
         measured_kwh=measured,
         bridge_kwh=bridge,
     )
+    flags = {
+        flag
+        for interval in _project_intervals(intervals, measured_until, end)
+        for flag in interval.quality_flags
+    }
+    result["forecast_quality_flags"] = sorted(flags)
     age = (
         now - fetched_at.astimezone(UTC)
         if fetched_at is not None and fetched_at.utcoffset() is not None
@@ -96,11 +112,6 @@ def build_day_outlook(
         return unavailable("stale_forecast")
     if bridge is None or result["remaining_kwh"] is None:
         return unavailable("incomplete_forecast")
-    flags = {
-        flag
-        for interval in _project_intervals(intervals, measured_until, end)
-        for flag in interval.quality_flags
-    }
     result["quality_flags"] = sorted(set(result["quality_flags"]) | flags)
     if flags:
         return unavailable("input_fallbacks")
