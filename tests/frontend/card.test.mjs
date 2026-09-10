@@ -101,8 +101,8 @@ test("Optionale ACL-Fehler lassen Prognose und Bedienung verfügbar", async () =
   assert.equal(state.measurement.status, "error");
   assert.equal(state.history.status, "error");
   const html = renderContent(config, state, 328);
-  assert.match(html, /Keine Leseberechtigung für Messdaten/);
-  assert.match(html, /Keine Leseberechtigung für Archivdaten/);
+  assert.match(html, /Leseberechtigung fehlt/);
+  assert.match(html, /Leseberechtigung fehlt/);
   assert.match(html, /23,14/);
   assert.match(html, /data-day="tomorrow"/);
 });

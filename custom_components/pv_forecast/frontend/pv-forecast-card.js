@@ -43,11 +43,11 @@ export async function readService(hass, service, serviceData) {
 }
 
 export function sourceError(error, source) {
-  if (error instanceof Error && error.message === UPDATE_HINT) return { status: "error", message: UPDATE_HINT };
+  if (error instanceof Error && error.message === UPDATE_HINT) return { status: "error", reason: "version", message: UPDATE_HINT };
   const code = `${error?.code ?? ""} ${error?.translation_key ?? ""}`;
-  if (/unauthorized|auth_required|permission/i.test(code)) return { status: "error", message: `Keine Leseberechtigung für ${source}.` };
+  if (/unauthorized|auth_required|permission/i.test(code)) return { status: "error", reason: "permission", message: `Keine Leseberechtigung für ${source}.` };
   if (/history_unavailable|measurements_unavailable/.test(code)) return { status: "empty", message: `${source} sind für diese Anlage noch nicht verfügbar.` };
-  return { status: "error", message: `${source} sind derzeit nicht erreichbar.` };
+  return { status: "error", reason: "unavailable", message: `${source} sind derzeit nicht erreichbar.` };
 }
 
 /** Ein Timer je Verbindung; Antworten ohne aktive Abnehmer werden verworfen. */
@@ -121,6 +121,7 @@ export class SharedReadCache {
       const active = () => generation === entry.generation && entry.listeners.size > 0;
       const publish = (state) => {
         if (!active()) return;
+        state = retainReadState(entry.state, state);
         entry.state = state;
         for (const listener of entry.listeners) listener(state);
       };
@@ -149,7 +150,7 @@ export function selectViewDay(state, day = "today") {
   if (!view || view.day === day) return state;
   const selected = view.day_views?.[day];
   if (!selected || selected.day !== day || !validInterval(selected) || !Array.isArray(selected.intervals)) {
-    return { ...state, forecast: { status: "error", message: UPDATE_HINT } };
+    return { ...state, forecast: { status: "error", reason: "version", message: UPDATE_HINT } };
   }
   return { ...state, forecast: { ...state.forecast, data: { ...view, ...selected } } };
 }
@@ -168,7 +169,7 @@ export async function loadView(hass, config, publish, active = () => true, cache
     state.forecast = { status: "ready", data: view, envelope: data };
   } catch (error) {
     const message = /roof_not_found/.test(`${error?.translation_key ?? ""} ${error?.code ?? ""}`) ? "Die ausgewählte Dachfläche ist nicht mehr vorhanden." : error instanceof Error && (error.message === UPDATE_HINT || error.message.startsWith("Die Prognoseansicht")) ? error.message : sourceError(error, "Prognosedaten").message;
-    publish({ ...state, loading: false, forecast: { status: "error", message } });
+    publish({ ...state, loading: false, forecast: { ...sourceError(error, "Prognosedaten"), message, ...(/roof_not_found/.test(`${error?.translation_key} ${error?.code}`) ? { reason: "roof_removed" } : {}) } });
     return;
   }
   if (view.roof_id) {
@@ -194,7 +195,7 @@ export async function loadView(hass, config, publish, active = () => true, cache
   const history = (async () => {
     try {
       const data = await read("get_history", { config_entry_id: config.config_entry_id, days: 7, current_targets: true });
-      state.history = data.current_targets?.view_version === 1 && Array.isArray(data.current_targets.intervals) ? { status: "ready", data } : { status: "error", message: UPDATE_HINT };
+      state.history = data.current_targets?.view_version === 1 && Array.isArray(data.current_targets.intervals) ? { status: "ready", data } : { status: "error", reason: "version", message: UPDATE_HINT };
     } catch (error) { state.history = sourceError(error, "Archivdaten"); }
     if (active()) publish({ ...state });
   })();
@@ -312,10 +313,61 @@ function renderChart(state, width, selectedKey) {
   </svg>`;
 }
 
-function statusText(section, source) {
-  if (section?.status === "loading") return `${source} werden geladen …`;
-  if (section?.message) return section.message;
-  return "";
+/** Nur vorübergehende Ausfälle bewahren denselben gelesenen Stand samt Zeitbasis. */
+export function retainReadState(previous, incoming) {
+  const state = { ...incoming };
+  for (const key of ["forecast", "measurement", "history"]) {
+    const next = state[key], old = previous?.[key];
+    if (!old?.data) continue;
+    if (["loading", "idle"].includes(next?.status)) state[key] = old;
+    else if (next?.reason === "unavailable") state[key] = { ...old, ...next, retained: true };
+  }
+  // Ohne lesbare Prognose dürfen abhängige alte Quellen nicht stehen bleiben.
+  if (state.forecast && !state.forecast.data) {
+    state.measurement = incoming.measurement;
+    state.history = incoming.history;
+  }
+  return state;
+}
+
+export function dataNotices(state) {
+  const result = [];
+  const add = (id, level, title, text, help = "") => result.push({ id, level, title, text, help });
+  const view = state?.forecast?.data;
+  for (const [key, label] of [["forecast", "Prognose"], ["measurement", "Messdaten"], ["history", "Archiv"]]) {
+    const section = state?.[key];
+    if (!section || section.status === "idle") continue;
+    if (section.status === "loading") add(`${key}-loading`, "Information", `${label} wird geladen`, "Die vorhandenen lokalen Daten werden gelesen. Bitte kurz warten.");
+    else if (section.reason === "permission") add("permission", "Fehler", "Leseberechtigung fehlt", "Die benötigten Quellen dürfen nicht gelesen werden.", "Eine Person mit Administrationsrechten kann die Leserechte der zugeordneten Sensoren prüfen.");
+    else if (section.reason === "version") add("version", "Fehler", "Datenversion nicht kompatibel", UPDATE_HINT);
+    else if (section.status === "error") add(`${key}-error`, "Fehler", `${label} derzeit nicht erreichbar`, section.message, section.retained ? "Der letzte lesbare Stand bleibt sichtbar. Die nächste reguläre Aktualisierung versucht es erneut." : "HA-Verbindung und Integrationsstatus prüfen. Die nächste reguläre Aktualisierung versucht es erneut.");
+    else if (section.status === "empty") add(`${key}-empty`, "Information", `${label} noch nicht verfügbar`, section.message, "Einrichtung und Integrationsstatus in Home Assistant prüfen.");
+  }
+  if (!state) add("forecast-loading", "Information", "Prognose wird geladen", "Die vorhandenen lokalen Daten werden gelesen. Bitte kurz warten.");
+  if (view) {
+    if (state.selectionPending) add("selection", "Information", "Auswahl wird geladen", "Bis dahin sind noch die bisherigen Werte sichtbar.");
+    if (view.stale) add("stale", "Einschränkung", "Prognosestand veraltet", "Der letzte verfügbare Stand bleibt sichtbar; seine Zeitangabe steht am Tagesverlauf.", "Integrationsstatus prüfen und den regulären Wetterabruf abwarten.");
+    if (!view.complete) add("incomplete-forecast", "Einschränkung", "Prognose unvollständig", "Schattierte Lücken sind fehlende Daten und kein null Ertrag.");
+    if (view.roof_id) add("roof", "Information", "Nur Dachprognose", "Keine Dachmessung zugeordnet. Das Archiv bezieht sich auf die Gesamtanlage.", "Für Messung und Archiv die Gesamtanlage auswählen.");
+    else if (state.measurement?.status === "ready") {
+      const total = state.measurement.data.current_location_total_energy ?? state.measurement.data.total_energy;
+      if (total?.source_count === 0) add("no-source", "Information", "Keine Messquelle zugeordnet", "Die Prognose funktioniert auch ohne Messung.", "Optional in den Integrationsoptionen eine bestätigte AC-PV-Messquelle zuordnen; bei fehlenden Rechten die Administration darum bitten.");
+      else if (!total?.energy_complete) add("measurement-incomplete", "Einschränkung", finite(total?.energy_kwh) ? "Messung unvollständig" : "Noch keine Messung", finite(total?.energy_kwh) ? "Ist heute ist nur der bisher belegte Teil. Fehlende Erfassung ist kein Nullertrag." : "Für heute sind noch keine belegten Messwerte verfügbar.", "Messquelle prüfen und weitere Zählerstände abwarten. Ein fehlender Tagesbeginn wird nicht nachträglich erfunden.");
+    }
+    if (state.history?.status === "ready") {
+      if (!state.history.data.enabled) add("archive-off", "Information", "Archiv ausgeschaltet", "Es werden keine Prognosestände archiviert.", "Optional das Prognosearchiv in den Integrationsoptionen aktivieren lassen.");
+      else if (!selectedSeries(state).history.length) add("archive-empty", "Information", "Archiv noch leer", "Für diesen Tag sind noch keine Stundenstände eingefroren.", "Das Archiv sammelt rechtzeitig beobachtete Stände ab seiner Aktivierung. Frühere Prognosen werden nicht ergänzt.");
+    }
+    const flags = view.intervals.some((item) => item.quality_flags?.length) || state.measurement?.data?.total_energy?.quality_flags?.length || selectedSeries(state).history.some((item) => item.quality_flags?.length);
+    if (flags) add("quality", "Einschränkung", "Qualitätsmarkierungen vorhanden", "Betroffene Intervalle sind in der Detailansicht gekennzeichnet. Eingabemängel sind keine gemessene Prognosegüte.");
+    if (view.horizon_shading?.active) add("experimental", "Information", "Experimentelles Horizontprofil aktiv", "Direktlicht wird geometrisch abgeschattet, ein diffuser Rest bleibt erhalten. Eine bessere Prognosegüte ist noch nicht belegt.");
+  }
+  // Berechtigungs- und Versionsfehler mehrerer Quellen erhalten einen gemeinsamen Hinweis.
+  return result.filter((item, index) => result.findIndex((other) => other.id === item.id) === index);
+}
+
+function renderNotices(state) {
+  return dataNotices(state).map((item) => `<section class="notices data-notice" data-notice="${item.id}"><h3>${item.level} · ${escapeHtml(item.title)}</h3><p>${escapeHtml(item.text)}</p>${item.help ? `<p>${escapeHtml(item.help)}</p>` : ""}</section>`).join("");
 }
 
 function renderTable(state) {
@@ -354,8 +406,8 @@ export function renderUnderperformance(report) {
 }
 
 export function renderReport(report, days) {
-  if (!report) return `<p class="hint" role="status">Bericht wird geladen …</p>`;
-  if (report.message) return `<p class="hint" role="status">${escapeHtml(report.message)}</p>`;
+  if (!report) return `<p class="hint">Bericht wird geladen …</p>`;
+  if (report.message) return `<p class="hint">${escapeHtml(report.message)}</p>`;
   const data = report.data;
   const metrics = data?.horizons?.hourly_1h;
   if (!metrics) return `<p class="hint">Noch keine abgeschlossenen Zielintervalle im Archiv.</p>`;
@@ -442,8 +494,8 @@ export function renderPlanning(state, planningUI = {}) {
     stale_forecast: "Der Prognosestand ist für ein neues Zeitfenster zu alt.",
     forecast_unavailable: "Es liegt keine verwendbare Prognose für das Zeitfenster vor.",
   }[plan?.reason] ?? "Für diese Auswahl kann noch kein belastbares Solarzeitfenster angegeben werden.";
-  const output = usable ? `<p class="feature-result">${escapeHtml(plantStamp(plan.start, view.timezone))}<br>bis ${escapeHtml(plantStamp(plan.end, view.timezone))}${finite(plan.energy_kwh) ? `<br><strong>${energyText(plan.energy_kwh)} kWh</strong> erwartet` : ""}</p><p class="hint">${plan.status === "started" ? "Dieses empfohlene Fenster läuft bereits und wird nicht automatisch verschoben." : plan.status === "completed" ? "Dieses empfohlene Fenster ist beendet." : "In diesem zusammenhängenden Fenster wird innerhalb deiner Auswahl besonders viel PV-Energie erwartet."}${plan.hysteresis_applied ? " Bei nur geringfügig geänderter Prognose bleibt die bisherige Empfehlung erhalten." : ""} Wetterabruf: ${escapeHtml(plantStamp(plan.fetched_at, view.timezone))}.</p>${plan.quality_flags?.length ? '<p class="hint">Die Prognose enthält Qualitätsmarkierungen. Das Zeitfenster bleibt eine Schätzung.</p>' : ""}` : result?.status === "loading" ? '<p class="hint" role="status">Zeitfenster wird berechnet …</p>' : result ? `<p class="hint" role="status">${escapeHtml(result.message ?? reason)}</p>` : '<p class="hint">Laufdauer und zulässigen Zeitraum wählen, dann bewusst berechnen.</p>';
-  return `<details id="planning"><summary id="planning-toggle">Bestes Solarzeitfenster <span>Gesamtanlage</span></summary><form id="planning-form"><label>Laufdauer in Minuten<input id="planning-duration" name="duration_minutes" type="number" inputmode="numeric" min="1" max="2880" step="1" required value="${escapeHtml(inputs.duration_minutes ?? 120)}"></label><label>Frühester Start<select id="planning-earliest" required>${optionList(inputs.earliest_start)}</select></label><label>Spätestes Ende<select id="planning-latest" required>${optionList(inputs.latest_end)}</select></label><button id="planning-calculate" class="reset-button" type="submit" ${choices.length ? "" : "disabled"}>Zeitfenster berechnen</button></form><p id="planning-input-notice" class="hint" role="status">${planningUI.dirty ? PLANNING_CHANGED_HINT : ""}</p>${output}<p class="hint">Basis sind die vorhandenen Prognoseintervalle mit gleichmäßiger mittlerer Leistung innerhalb jedes Intervalls. Für dieses Fenster gibt es noch kein belastbares Erfahrungsband. Verfügbarer Überschuss hängt zusätzlich von Hausverbrauch und Speicher ab. Es werden keine Geräte eingeschaltet.</p></details>`;
+  const output = usable ? `<p class="feature-result">${escapeHtml(plantStamp(plan.start, view.timezone))}<br>bis ${escapeHtml(plantStamp(plan.end, view.timezone))}${finite(plan.energy_kwh) ? `<br><strong>${energyText(plan.energy_kwh)} kWh</strong> erwartet` : ""}</p><p class="hint">${plan.status === "started" ? "Dieses empfohlene Fenster läuft bereits und wird nicht automatisch verschoben." : plan.status === "completed" ? "Dieses empfohlene Fenster ist beendet." : "In diesem zusammenhängenden Fenster wird innerhalb deiner Auswahl besonders viel PV-Energie erwartet."}${plan.hysteresis_applied ? " Bei nur geringfügig geänderter Prognose bleibt die bisherige Empfehlung erhalten." : ""} Wetterabruf: ${escapeHtml(plantStamp(plan.fetched_at, view.timezone))}.</p>${plan.quality_flags?.length ? '<p class="hint">Die Prognose enthält Qualitätsmarkierungen. Das Zeitfenster bleibt eine Schätzung.</p>' : ""}` : result?.status === "loading" ? '<p class="hint">Zeitfenster wird berechnet …</p>' : result ? `<p class="hint">${escapeHtml(result.message ?? reason)}</p>` : '<p class="hint">Laufdauer und zulässigen Zeitraum wählen, dann bewusst berechnen.</p>';
+  return `<details id="planning"><summary id="planning-toggle">Bestes Solarzeitfenster <span>Gesamtanlage</span></summary><form id="planning-form"><label>Laufdauer in Minuten<input id="planning-duration" name="duration_minutes" type="number" inputmode="numeric" min="1" max="2880" step="1" required value="${escapeHtml(inputs.duration_minutes ?? 120)}"></label><label>Frühester Start<select id="planning-earliest" required>${optionList(inputs.earliest_start)}</select></label><label>Spätestes Ende<select id="planning-latest" required>${optionList(inputs.latest_end)}</select></label><button id="planning-calculate" class="reset-button" type="submit" ${choices.length ? "" : "disabled"}>Zeitfenster berechnen</button></form><p id="planning-input-notice" class="hint">${planningUI.dirty ? PLANNING_CHANGED_HINT : ""}</p>${output}<p class="hint">Basis sind die vorhandenen Prognoseintervalle mit gleichmäßiger mittlerer Leistung innerhalb jedes Intervalls. Für dieses Fenster gibt es noch kein belastbares Erfahrungsband. Verfügbarer Überschuss hängt zusätzlich von Hausverbrauch und Speicher ab. Es werden keine Geräte eingeschaltet.</p></details>`;
 }
 
 export function renderDailyTendencies(view) {
@@ -455,7 +507,7 @@ export function renderContent(config, state, width = 600, report = null, reportD
   const forecast = state?.forecast;
   const view = forecast?.data;
   const title = config.title || view?.plant_name || "PV-Prognose";
-  if (!view) return `<div class="header"><div><p class="eyebrow">PV FORECAST</p><h2>${escapeHtml(title)}</h2></div></div><p class="placeholder" role="status">${escapeHtml(forecast?.message || "Prognose wird geladen …")}</p>${forecast?.status === "error" && config.roof_id ? '<button class="reset-button" data-reset-roof>Gesamtanlage anzeigen</button>' : ""}`;
+  if (!view) return `<div class="header"><div><p class="eyebrow">PV FORECAST</p><h2>${escapeHtml(title)}</h2></div></div><div class="placeholder">${renderNotices(state)}</div>${forecast?.status === "error" && config.roof_id ? '<button class="reset-button" data-reset-roof>Gesamtanlage anzeigen</button>' : ""}`;
   const roof = view.roofs.find((item) => item.id === view.roof_id);
   const scope = roof?.name ?? "Gesamtanlage";
   const fetchedAt = forecast.envelope?.fetched_at;
@@ -464,28 +516,15 @@ export function renderContent(config, state, width = 600, report = null, reportD
   const total = measurement?.data?.current_location_total_energy ?? measurement?.data?.total_energy;
   const actualComplete = total?.energy_complete === true;
   const actual = total?.energy_kwh;
-  const actualHint = view.roof_id ? "Keine Dachmessung" : measurement?.status === "ready" ? actualComplete ? "Seit Tagesbeginn" : finite(actual) ? "Unvollständig erfasst" : "Noch keine Messwerte" : measurement?.status === "loading" ? "Messdaten laden …" : "Keine Messdaten";
+  const actualHint = measurement?.retained || forecast?.retained ? "Letzter Messstand · Aktualisierung fehlgeschlagen" : view.roof_id ? "Keine Dachmessung" : measurement?.status === "ready" ? actualComplete ? "Seit Tagesbeginn" : finite(actual) ? "Unvollständig erfasst" : "Noch keine Messwerte" : measurement?.status === "loading" ? "Messdaten laden …" : "Keine Messdaten";
   const kpi = (name, value, detail, className = "") => `<div class="kpi ${className}${energyText(value).length > 6 ? " kpi-wide" : ""}"><dt>${name}</dt><dd>${energyText(value)} <small>kWh</small></dd><span>${detail}</span></div>`;
-  const hasFlags = view.intervals.some((item) => item.quality_flags?.length);
-  const notices = [
-    state.selectionPending ? "Auswahl wird geladen; bis dahin sind noch die bisherigen Werte sichtbar." : "",
-    view.stale ? "Prognosestand veraltet. Der letzte verfügbare Stand bleibt erkennbar." : "",
-    !view.complete ? "Prognose unvollständig. Schattierte Lücken werden nicht als null Ertrag dargestellt." : "",
-    hasFlags ? "Eingabedaten enthalten Qualitätsmarkierungen. Das ist keine gemessene Prognosegüte." : "",
-    statusText(measurement, "Messdaten"), statusText(state.history, "Archivdaten"),
-    view.horizon_shading?.active ? "Experimentelles Horizontprofil aktiv: Direktlicht wird geometrisch abgeschattet, ein diffuser Rest bleibt erhalten. Eine bessere Prognosegüte ist noch nicht belegt." : "",
-    total?.quality_flags?.length ? "Messdaten enthalten Qualitätsmarkierungen; unvollständige Intervalle bleiben frei." : "",
-    selectedSeries(state).history.some((item) => item.quality_flags?.length) ? "Die archivierten Prognosestände enthalten Qualitätsmarkierungen ihrer Eingabedaten." : "",
-    measurement?.status === "ready" && !actualComplete ? finite(actual) ? "Ist heute ist nur der bisher belegte Teil; die Tageserfassung ist unvollständig." : "Für heute sind noch keine belegten Messwerte verfügbar." : "",
-    state.history?.status === "ready" && !selectedSeries(state).history.length ? "Für diesen Tag sind noch keine Stundenstände im Archiv eingefroren." : "",
-  ].filter(Boolean);
-  return `<div class="header"><div><p class="eyebrow">PV FORECAST</p><h2>${escapeHtml(title)}</h2><p class="subtitle">${escapeHtml(scope)} · ${escapeHtml(formatPlantDate(view.start, view.timezone))}</p></div><span class="badge ${view.stale ? "warning" : ""}">${view.stale ? "Veraltet" : "Prognose"}</span></div>
+  return `<div class="header"><div><p class="eyebrow">PV FORECAST</p><h2>${escapeHtml(title)}</h2><p class="subtitle">${escapeHtml(scope)} · ${escapeHtml(formatPlantDate(view.start, view.timezone))}</p></div><span class="badge ${view.stale ? "warning" : ""}">${forecast.retained ? "Letzter Stand" : view.stale ? "Veraltet" : "Prognose"}</span></div>
     <div class="controls"><div class="day-switch" role="group" aria-label="Prognosetag"><button data-day="today" aria-pressed="${config.day === "today"}">Heute</button><button data-day="tomorrow" aria-pressed="${config.day === "tomorrow"}">Morgen</button></div><label class="roof-label"><span>Fläche</span><select id="roof" aria-label="Fläche"><option value="">Gesamtanlage</option>${view.roofs.map((item) => `<option value="${escapeHtml(item.id)}" ${item.id === config.roof_id ? "selected" : ""}>${escapeHtml(item.name)}</option>`).join("")}</select></label></div>
     <nav class="section-nav" aria-label="Bereiche der PV-Karte"><button id="nav-overview" data-section="overview-heading">Übersicht</button>${view.roof_id ? "" : '<button id="nav-planning" data-section="planning-heading">Planen</button>'}<button id="nav-comparison" data-section="comparison-heading">Vergleichen</button></nav>
     <section aria-labelledby="overview-heading"><h3 class="section-heading" id="overview-heading" tabindex="-1">Tagesübersicht</h3>
-    <div class="overview-metrics"><section aria-label="Tagesprognosen"><h3 class="metric-heading">Tagesprognosen</h3><dl class="kpis">${kpi("Heute", view.summary.today_kwh, "Tagesprognose")}${kpi("Morgen", view.summary.tomorrow_kwh, "Tagesprognose")}</dl></section><section aria-label="Heutiger Stand"><h3 class="metric-heading">Heutiger Stand · ${escapeHtml(formatPlantDate(view.today_start, view.timezone))}</h3><dl class="kpis">${kpi("Rest heute", view.summary.remaining_today_kwh, "Ab jetzt erwartet")}${kpi("Ist heute", view.roof_id ? null : actual, actualHint, actualComplete ? "measured" : "incomplete")}</dl></section></div>
-    <section class="chart-section" aria-label="Tagesverlauf"><div class="chart-heading"><h3>Energie im Tagesverlauf · ${view.day === "tomorrow" ? "Morgen" : "Heute"}</h3><span>kWh / Intervall</span></div><div class="legend"><span><i class="forecast-key"></i>Aktuelle Prognose</span><span><i class="history-key"></i>${ARCHIVE_LABEL}</span><span><i class="actual-key"></i>Ist</span></div>${renderChart(state, width, selectedKey)}${renderIntervalDetails(state, selectedKey)}<p class="chart-note">${escapeHtml(view.timezone)} · Ansicht ${escapeHtml(formatPlantTime(view.as_of, view.timezone))}<br>Wetterabruf ${escapeHtml(weatherStamp)}</p></section>
-    ${notices.length ? `<div class="notices" role="status">${notices.map((text) => `<p>${escapeHtml(text)}</p>`).join("")}</div>` : ""}
+    <div class="overview-metrics"><section aria-label="Tagesprognosen"><h3 class="metric-heading">Tagesprognosen</h3><dl class="kpis">${kpi("Heute", view.summary.today_kwh, view.stale || forecast.retained ? "Letzter Prognosestand" : "Tagesprognose")}${kpi("Morgen", view.summary.tomorrow_kwh, view.stale || forecast.retained ? "Letzter Prognosestand" : "Tagesprognose")}</dl></section><section aria-label="Heutiger Stand"><h3 class="metric-heading">Heutiger Stand · ${escapeHtml(formatPlantDate(view.today_start, view.timezone))}</h3><dl class="kpis">${kpi("Rest heute", view.summary.remaining_today_kwh, forecast.retained ? "Rest zum letzten Stand" : "Ab jetzt erwartet")}${kpi("Ist heute", view.roof_id ? null : actual, actualHint, actualComplete ? "measured" : "incomplete")}</dl></section></div>
+    <section class="chart-section" aria-label="Tagesverlauf"><div class="chart-heading"><h3>Energie im Tagesverlauf · ${view.day === "tomorrow" ? "Morgen" : "Heute"}</h3><span>kWh / Intervall</span></div><div class="legend"><span><i class="forecast-key"></i>Aktuelle Prognose</span><span><i class="history-key"></i>${ARCHIVE_LABEL}</span><span><i class="actual-key"></i>Ist</span></div>${renderChart(state, width, selectedKey)}${renderIntervalDetails(state, selectedKey)}<p class="chart-note">${escapeHtml(view.timezone)} · Ansicht ${escapeHtml(formatPlantTime(view.as_of, view.timezone))}<br>Wetterabruf ${escapeHtml(weatherStamp)}${forecast.retained || measurement?.retained ? `<br>Letzte gelesene Ansicht: ${escapeHtml(plantStamp(view.as_of, view.timezone))}. Messfenster bis ${escapeHtml(plantStamp(measurement?.data?.end ?? measurement?.data?.outlook?.as_of ?? view.as_of, view.timezone))}.` : ""}</p></section>
+    ${renderNotices(state)}
     ${renderDailyTendencies(view)}
     ${view.roof_id ? "" : renderUnderperformance(state.history?.data?.underperformance)}</section>
     ${view.roof_id ? "" : `<section class="task-section" aria-labelledby="planning-heading"><h3 class="section-heading" id="planning-heading" tabindex="-1">Planen</h3><p class="hint">Heutige Tagesaussicht und ein passendes Solarzeitfenster finden.</p>${renderOutlook(state)}${renderPlanning(state, planningUI)}</section>`}
@@ -501,7 +540,7 @@ const styles = `
   .controls{display:flex;flex-wrap:wrap;align-items:flex-end;gap:16px;justify-content:space-between;margin:24px 0 20px}.day-switch{display:flex;background:var(--pv-surface);padding:3px;border-radius:var(--pv-radius)}.day-switch button{border:0;border-radius:var(--pv-radius);background:transparent;color:var(--pv-muted);font:inherit;font-size:var(--pv-text);min-height:44px;padding:0 15px;cursor:pointer}.day-switch button[aria-pressed=true]{background:var(--card-background-color,#fff);box-shadow:0 1px 3px #0002;color:var(--primary-text-color,#202b32);font-weight:600}label{color:var(--pv-muted);font-size:var(--pv-text)}.roof-label{grid-template-columns:minmax(0,1fr);min-width:0;max-width:100%;flex:1;display:grid;gap:4px}select{width:100%;min-width:0;font:inherit;font-size:var(--pv-text);color:var(--primary-text-color,#202b32);background:var(--card-background-color,#fff);border:1px solid var(--pv-muted);border-radius:var(--pv-radius);min-height:44px;max-width:100%;padding:7px 25px 7px 10px}button:focus-visible,select:focus-visible,summary:focus-visible{outline:3px solid var(--primary-color,#007c91);outline-offset:3px}
   .kpis{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--pv-space);margin:0 0 26px;padding:0}.kpi{min-width:0;padding:16px;background:var(--pv-surface);border-radius:var(--pv-radius)}.kpi dt{font-size:var(--pv-text);color:var(--pv-muted);margin-bottom:7px}.kpi dd{margin:0;font-size:30px;font-variant-numeric:tabular-nums;letter-spacing:-.035em;font-weight:600;white-space:normal;overflow-wrap:normal}.kpi small{font-size:var(--pv-text);font-weight:400;color:var(--pv-muted);letter-spacing:0}.kpi>span{display:block;color:var(--pv-muted);font-size:var(--pv-text);line-height:1.4;margin-top:5px}.measured dd{color:var(--pv-line)}
   .chart-heading{display:flex;justify-content:space-between;align-items:baseline;gap:8px}h3{font-size:var(--pv-text);font-weight:600;margin:0}.chart-heading>span{font-size:var(--pv-text);color:var(--pv-muted)}.legend{display:flex;flex-wrap:wrap;gap:8px 16px;margin:12px 0 8px;color:var(--pv-muted);font-size:var(--pv-text);line-height:1.4}.legend span{display:inline-flex;align-items:center;gap:6px}.legend i{display:inline-block;width:18px;flex-shrink:0}.forecast-key{border-top:3px solid var(--pv-line)}.history-key{border-top:2px dashed var(--pv-archive)}.actual-key{height:8px;background:var(--pv-actual);border:1px solid var(--primary-text-color,#202b32)}.chart{display:block;width:100%;height:auto;overflow:visible}.grid{stroke:var(--divider-color,#e4e8eb);stroke-width:1}.axis{fill:var(--pv-muted);font-size:11px}.axis tspan{font-size:10px}.forecast-line{stroke:var(--pv-line);stroke-width:2.5;fill:none;stroke-linejoin:round}.history-line{stroke:var(--pv-archive);stroke-width:2;stroke-dasharray:5 4;fill:none}.actual-bar{fill:var(--pv-actual);fill-opacity:.25;stroke:var(--pv-actual);stroke-width:1}.now{stroke:var(--pv-muted);stroke-width:1;stroke-dasharray:2 4}.now-label{font-size:11px;fill:var(--pv-muted)}.gap{fill:var(--pv-muted);opacity:.09}.empty-plot{font-size:var(--pv-text);fill:var(--pv-muted)}.chart-note{font-size:var(--pv-text);color:var(--pv-muted);text-align:right;margin:0 0 17px;overflow-wrap:anywhere}
-  .notices{padding:9px 11px;margin:0 0 16px;background:var(--pv-surface);border-radius:var(--pv-radius)}.notices p{font-size:var(--pv-text);line-height:1.5;color:var(--pv-muted);margin:3px 0}.placeholder{font-size:14px;line-height:1.6;color:var(--pv-muted);padding:28px 0;min-height:100px}
+  .notices{padding:9px 11px;margin:0 0 16px;background:var(--pv-surface);border-radius:var(--pv-radius)}.notices p{font-size:var(--pv-text);line-height:1.5;color:var(--pv-muted);margin:3px 0}.placeholder{min-height:540px;font-size:14px;line-height:1.6;color:var(--pv-muted);padding:28px 0}
   .reset-button{min-height:44px;padding:10px 15px;border-radius:var(--pv-radius);border:1px solid var(--divider-color,#dce3e6);background:var(--card-background-color,#fff);color:var(--primary-color,#007c91);font:inherit;font-size:var(--pv-text);margin-bottom:16px;cursor:pointer}
   details{border-top:1px solid var(--divider-color,#e4e8eb)}summary{min-height:48px;padding:15px 0;font-size:var(--pv-text);font-weight:500;cursor:pointer;line-height:1.5}summary span{font-size:var(--pv-text);color:var(--pv-muted);display:block;font-weight:400;margin-top:4px}.hint{font-size:var(--pv-text);line-height:1.6;color:var(--pv-muted);margin:0 0 14px}.report-label{display:flex;align-items:center;gap:12px;margin:0 0 12px}.report-metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin:12px 0 16px}.report-metrics dt{font-size:var(--pv-text);color:var(--pv-muted)}.report-metrics dd{margin:4px 0 0;font-size:19px}.report-metrics small{font-size:var(--pv-text);color:var(--pv-muted)}
   table{border-collapse:collapse;width:100%;table-layout:fixed;font-size:var(--pv-text);margin-bottom:12px}th,td{padding:9px 3px;border-bottom:1px solid var(--divider-color,#e4e8eb);text-align:right;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}th:first-child{width:34%;text-align:left}thead th{font-size:var(--pv-text);font-weight:500;color:var(--pv-muted)}tbody th{font-weight:400;font-size:var(--pv-text)}.until{display:block;color:var(--pv-muted);font-size:var(--pv-text);margin-top:3px}.sr-only{position:absolute;clip:rect(0,0,0,0);width:1px;height:1px;overflow:hidden}
@@ -767,7 +806,19 @@ export class PvForecastCard extends ElementBase {
       const now = millis(this._state.forecast.data.as_of);
       this._planningInputs = { duration_minutes: "120", earliest_start: choices.find((value) => millis(value) >= now) ?? choices[0], latest_end: choices.at(-1) };
     }
-    this.shadowRoot.innerHTML = `<style>${styles}</style><ha-card><div class="body" aria-busy="${Boolean(this._selectionPending)}">${renderContent(this._config, this._state ? { ...this._state, selectionPending: this._selectionPending } : null, this._width, this._report, this._reportDays, { inputs: this._planningInputs, result: this._planning, dirty: this._planningDirty }, this._selectedInterval)}</div></ha-card>`;
+    let live = this.shadowRoot.getElementById("data-status");
+    if (!live) {
+      live = document.createElement("div"); live.id = "data-status"; live.className = "sr-only";
+      live.setAttribute("role", "status"); live.setAttribute("aria-atomic", "true");
+    }
+    let content = this.shadowRoot.getElementById("card-content");
+    if (!content) { content = document.createElement("div"); content.id = "card-content"; this.shadowRoot.append(content, live); }
+    content.innerHTML = `<style>${styles}</style><ha-card><div class="body" aria-busy="${Boolean(this._selectionPending)}">${renderContent(this._config, this._state ? { ...this._state, selectionPending: this._selectionPending } : null, this._width, this._report, this._reportDays, { inputs: this._planningInputs, result: this._planning, dirty: this._planningDirty }, this._selectedInterval)}</div></ha-card>`;
+    const announcement = dataNotices(this._state).map((item) => `${item.level}: ${item.title}`).join(". ");
+    if (announcement !== this._dataAnnouncement) {
+      this._dataAnnouncement = announcement;
+      live.textContent = announcement || "Daten verfügbar.";
+    }
     const values = this.shadowRoot.getElementById("values");
     const report = this.shadowRoot.getElementById("report");
     if (values) values.open = this._valuesOpen;

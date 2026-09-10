@@ -347,6 +347,55 @@ async function checkChart(page, card, test) {
   return { first, last, special, refreshed, inspection, touchScroll, readCalls: calls };
 }
 
+async function checkDataStates(browser, origin) {
+  const page = await browser.newPage({ viewport: { width: 360, height: 900 } });
+  try {
+    for (const [scenario, expected] of [["no-source", "Keine Messquelle zugeordnet"], ["no-measurement", "Noch keine Messung"], ["archive-off", "Archiv ausgeschaltet"], ["archive-empty", "Archiv noch leer"], ["acl", "Leseberechtigung fehlt"], ["old", "Datenversion nicht kompatibel"], ["outage", "Prognose derzeit nicht erreichbar"], ["zero", "Ist heute"]]) {
+      await page.goto(`${origin}/tests/frontend/demo.html?scenario=${scenario}&width=360`);
+      const card = page.locator("pv-forecast-card");
+      await card.getByText(expected, { exact: false }).first().waitFor();
+      const unchanged = await card.evaluate(async (element) => {
+        const live = element.shadowRoot.getElementById("data-status");
+        let changes = 0;
+        const observer = new MutationObserver(() => changes++);
+        observer.observe(live, { childList: true, subtree: true, characterData: true });
+        element._render(); element._render();
+        await Promise.resolve(); observer.disconnect();
+        return { changes, same: live === element.shadowRoot.getElementById("data-status"), connected: live.isConnected };
+      });
+      assert.deepEqual(unchanged, { changes: 0, same: true, connected: true });
+      const inspection = await card.evaluate(inspectCard);
+      assert.deepEqual(inspection.findings, [], scenario);
+      if (["no-source", "acl"].includes(scenario)) {
+        const filename = `${prefix}-360-${scenario}.png`;
+        await page.screenshot({ path: path.join(output, filename), fullPage: true });
+        fs.copyFileSync(path.join(output, filename), path.join(root, "docs/images", filename));
+      }
+    }
+    await page.goto(`${origin}/tests/frontend/demo.html?scenario=sunny&width=360`);
+    const card = page.locator("pv-forecast-card");
+    await card.locator(".kpis").first().waitFor();
+    await page.waitForFunction(() => document.querySelector("pv-forecast-card")._state?.loading === false);
+    const transitions = await card.evaluate(async (element) => {
+      const { retainReadState, sourceError } = await import("/custom_components/pv_forecast/frontend/pv-forecast-card.js");
+      const original = element._state;
+      const live = element.shadowRoot.getElementById("data-status");
+      const error = { forecast: sourceError({}, "Prognosedaten"), measurement: { status: "idle" }, history: { status: "idle" } };
+      element._state = retainReadState(original, error); element._render();
+      const retained = element.shadowRoot.textContent.includes("23,14") && element.shadowRoot.textContent.includes("Letzte gelesene Ansicht");
+      const first = live.textContent;
+      element._state = retainReadState(element._state, error); element._render();
+      const repeated = live.textContent === first;
+      element._state = retainReadState(element._state, { forecast: sourceError({code: "unauthorized"}, "Prognosedaten") }); element._render();
+      const cleared = !element.shadowRoot.querySelector(".kpis");
+      element._state = original; element._render();
+      return { retained, repeated, cleared, recovered: live.textContent === "Daten verfügbar." };
+    });
+    assert.deepEqual(transitions, { retained: true, repeated: true, cleared: true, recovered: true });
+    console.log("Datenzustände: 8 Fälle, stille Wiederholung und Fehler/Erholung bestanden");
+  } finally { await page.close(); }
+}
+
 async function main() {
   fs.mkdirSync(output, { recursive: true });
   fs.mkdirSync(path.join(root, "docs/images"), { recursive: true });
@@ -356,6 +405,7 @@ async function main() {
   try {
     browser = await chromium.launch({ headless: true, ...(executablePath ? { executablePath } : {}) });
     const origin = `http://127.0.0.1:${server.address().port}`;
+    if (Number(prefix.split("-").at(-1)) >= 114) await checkDataStates(browser, origin);
     const matrix = [360, 768, 1440].flatMap((viewport) => ["light", "dark", "custom"].map((theme) => ({
       name: `${viewport}-${theme}`, viewport, cardWidth: viewport, theme,
       representative: (viewport === 360 && theme === "light") || (viewport === 768 && theme === "custom") || (viewport === 1440 && theme === "dark"),
