@@ -7,7 +7,12 @@ from math import isclose
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from .card_data import _project_intervals, _window_energy
+from .forecast_intervals import (
+    project_intervals as _project_intervals,
+)
+from .forecast_intervals import (
+    window_energy as _window_energy,
+)
 from .models import ForecastResult
 
 

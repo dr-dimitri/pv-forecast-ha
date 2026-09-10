@@ -502,3 +502,60 @@ def test_coverage_uses_local_days_and_preserves_input_quality(
                 "end": None,
                 "complete": False,
             }
+
+
+async def test_window_and_planning_share_read_only_snapshot(hass, loaded_forecast):
+    """Beide Ergänzungen teilen Zeit, Rechte und Prognose ohne neue Abrufe."""
+    entry, coordinator, client_fetch = loaded_forecast
+    data, fetched = coordinator.data, coordinator.last_update_success_time
+    calls = client_fetch.call_count
+    parameters = {
+        "start": "2026-08-23T12:15:00Z",
+        "end": "2026-08-23T15:15:00Z",
+        "step_minutes": 30,
+    }
+    result = await _get_forecast(
+        hass,
+        entry.entry_id,
+        roof_id="a",
+        include_view=True,
+        window=parameters,
+        planning={
+            "duration_minutes": 60,
+            "earliest_start": parameters["start"],
+            "latest_end": parameters["end"],
+        },
+    )
+    assert result["window"]["status"] == "available"
+    assert result["window"]["scope"] == "total"
+    assert result["window"]["as_of"] == result["planning"]["as_of"]
+    assert result["window"]["energy_kwh"] == pytest.approx(45)
+    assert client_fetch.call_count == calls
+    assert coordinator.data is data
+    assert coordinator.last_update_success_time == fetched
+    coordinator.last_update_success = False
+    result = await _get_forecast(hass, entry.entry_id, window=parameters)
+    assert result["window"]["reason"] == "stale_forecast"
+    assert result["intervals"]
+
+
+@pytest.mark.parametrize(
+    "window",
+    [
+        None,
+        [],
+        True,
+        {},
+        {"start": "2026-08-23T12:00:00", "end": "2026-08-23T13:00:00Z"},
+        {
+            "start": "2026-08-23T12:00:00Z",
+            "end": "2026-08-23T13:00:00Z",
+            "step_minutes": True,
+        },
+    ],
+)
+async def test_invalid_window_has_translated_error(hass, loaded_forecast, window):
+    entry, _, _ = loaded_forecast
+    with pytest.raises(ServiceValidationError) as err:
+        await _get_forecast(hass, entry.entry_id, window=window)
+    assert err.value.translation_key == "invalid_forecast_window"

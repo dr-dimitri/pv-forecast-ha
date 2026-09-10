@@ -24,6 +24,7 @@ from homeassistant.util import dt as dt_util
 
 from .card_data import UnknownRoofError, build_forecast_view
 from .const import CONF_TIME_ZONE, DOMAIN
+from .forecast_window import query_forecast_window
 from .models import ForecastResult
 from .planning import plan_solar_window
 from .shading import shading_metadata
@@ -65,6 +66,7 @@ _GET_FORECAST_SCHEMA = vol.Schema(
         vol.Optional("day", default="today"): vol.In(("today", "tomorrow")),
         vol.Optional("roof_id"): vol.All(cv.string, vol.Length(min=1)),
         vol.Optional("planning"): _PLANNING_SCHEMA,
+        vol.Optional("window"): object,
     }
 )
 
@@ -108,6 +110,28 @@ def async_setup_services(hass: HomeAssistant) -> None:
             coordinator.last_update_success,
         )
         now = dt_util.utcnow()
+        if "window" in call.data:
+            try:
+                window = vol.Schema(
+                    {
+                        vol.Required("start"): _aware_datetime,
+                        vol.Required("end"): _aware_datetime,
+                        vol.Optional("step_minutes"): vol.In((5, 15, 30, 60)),
+                    }
+                )(call.data["window"])
+                result["window"] = query_forecast_window(
+                    coordinator.data,
+                    str(entry.data[CONF_TIME_ZONE]),
+                    now,
+                    coordinator.last_update_success_time,
+                    coordinator.last_update_success,
+                    **window,
+                )
+            except (vol.Invalid, ValueError, TypeError, OverflowError) as err:
+                raise ServiceValidationError(
+                    translation_domain=DOMAIN,
+                    translation_key="invalid_forecast_window",
+                ) from err
         if "planning" in call.data:
             try:
                 result["planning"] = plan_solar_window(
