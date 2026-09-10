@@ -319,6 +319,14 @@ export function retainReadState(previous, incoming) {
   for (const key of ["forecast", "measurement", "history"]) {
     const next = state[key], old = previous?.[key];
     if (!old?.data) continue;
+    if (key !== "forecast") {
+      const before = previous?.forecast?.data, after = state.forecast?.data;
+      // Relative Tageswerte gehören zur damaligen lokalen Tagesbasis, auch
+      // während nur die neue Prognose und noch keine optionalen Antworten da sind.
+      if (!before || !after || before.timezone !== after.timezone
+        || millis(before.today_start) !== millis(after.today_start)
+        || millis(before.today_end) !== millis(after.today_end)) continue;
+    }
     if (["loading", "idle"].includes(next?.status)) state[key] = old;
     else if (next?.reason === "unavailable") state[key] = { ...old, ...next, retained: true };
   }
@@ -419,7 +427,8 @@ const plantStamp = (value, timezone) => finite(millis(value)) ? `${formatPlantDa
 export function renderOutlook(state) {
   const timezone = state.forecast.data.timezone;
   const outlook = state.measurement?.data?.outlook;
-  const available = outlook?.schema_version === 1 && outlook.status === "available" && finite(outlook.total_kwh);
+  const currentDay = outlook?.timezone === timezone && millis(outlook.as_of) >= millis(state.forecast.data.today_start) && millis(outlook.as_of) < millis(state.forecast.data.today_end);
+  const available = currentDay && outlook?.schema_version === 1 && outlook.status === "available" && finite(outlook.total_kwh);
   const reason = {
     no_energy_sources: "Es sind noch keine bestätigten AC-Energiequellen vorhanden.",
     no_common_measurement_boundary: "Die Messquellen haben noch keinen gemeinsamen gesicherten Zeitpunkt.",
@@ -452,7 +461,7 @@ export function renderUncertainty(state) {
   const view = state.forecast.data;
   const uncertainty = state.history?.data?.uncertainty;
   const band = uncertainty?.days?.[view.day];
-  const available = uncertainty?.schema_version === 1 && band?.status === "available" && [band.lower_kwh, band.central_kwh, band.upper_kwh].every(finite);
+  const available = uncertainty?.schema_version === 1 && uncertainty.timezone === view.timezone && band?.target_date === view.date && band.status === "available" && [band.lower_kwh, band.central_kwh, band.upper_kwh].every(finite);
   const checkpoint = band?.horizon === "daily_same_06" ? "06 Uhr am Zieltag" : "18 Uhr am Vortag";
   const evaluation = band?.evaluation;
   const wilson = evaluation?.coverage_wilson95;
