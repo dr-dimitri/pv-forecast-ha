@@ -37,6 +37,9 @@ async def _assert_matches(histories, windows, now):
         complete = expected["energy_complete"] and end <= now
         assert actual["energy_complete"] is complete
         assert actual["energy_kwh"] == (expected["energy_kwh"] if complete else None)
+        assert actual["observed_energy_kwh"] == (
+            expected["energy_kwh"] if end <= now else None
+        )
         assert actual["source_count"] == expected["source_count"]
         assert set(actual["quality_flags"]) == set(expected["quality_flags"]) | (
             {"future_window"} if end > now else set()
@@ -175,3 +178,48 @@ async def test_finite_energy_does_not_emit_infinite_aggregate_power():
     assert result[0]["ac_power_kw"] is None
     assert "arithmetic_overflow" in result[0]["quality_flags"]
     json.dumps(result, allow_nan=False)
+
+
+async def test_positive_offset_readings_remain_visible_as_observed_subtotals():
+    """Versetzte Zählerzeiten lassen belegte Produktion nicht ganz verschwinden."""
+
+    first, second = _history(), _history("b")
+    for history, offset in ((first, 5), (second, 7)):
+        for index in range(13):
+            history.add_reading(
+                START + timedelta(minutes=offset + index * 10), index / 10, "kWh"
+            )
+    windows = [(START + index * HOUR, START + (index + 1) * HOUR) for index in range(3)]
+    result = await _assert_matches((first, second), windows, START + 2 * HOUR)
+    for item in result[:2]:
+        assert item["energy_kwh"] is None
+        assert item["ac_power_kw"] is None
+        assert not item["energy_complete"]
+        # Je Quelle fünf ganze Differenzen; positive Randdifferenzen fehlen.
+        assert item["observed_energy_kwh"] == pytest.approx(1)
+        assert "boundary_gap" in item["quality_flags"]
+    assert result[2]["observed_energy_kwh"] is None
+
+
+async def test_partial_observation_never_splits_a_positive_boundary_delta():
+    """Eine alleinige grenzüberschreitende Differenz bleibt vollständig fehlend."""
+
+    history = _history()
+    history.add_reading(START - HOUR, 0, "kWh")
+    history.add_reading(START + 2 * HOUR, 1, "kWh")
+    [item] = await _assert_matches([history], [(START, START + HOUR)], START + 2 * HOUR)
+    assert item["observed_energy_kwh"] is None
+
+
+async def test_partial_observation_keeps_derived_gaps_missing():
+    """Die zusätzliche Darstellung darf keine Energie aus Integrallücken retten."""
+
+    history = _history(derived_energy=True)
+    history.add_reading(START, 0, "kWh")
+    history.add_reading(START + timedelta(minutes=5), 0.1, "kWh")
+    history.add_reading(START + timedelta(minutes=10), "unavailable", "kWh")
+    history.add_reading(START + timedelta(minutes=15), 0.5, "kWh")
+    [item] = await _assert_matches([history], [(START, START + HOUR)], START + HOUR)
+    assert item["observed_energy_kwh"] == pytest.approx(0.1)
+    assert item["energy_kwh"] is None
+    assert "derived_measurement_gap" in item["quality_flags"]
