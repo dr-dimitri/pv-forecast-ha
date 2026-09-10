@@ -31,7 +31,7 @@ FORM = {
 }
 
 
-@pytest.mark.parametrize("azimuth", [-1, 360, 360.1, float("nan"), float("inf")])
+@pytest.mark.parametrize("azimuth", [-1, 360.1, float("nan"), float("inf")])
 def test_custom_angle_validation_rejects_outside_compass_range(azimuth: float) -> None:
     """Auch außerhalb des Selectors dürfen ungültige Winkel nicht gespeichert werden."""
 

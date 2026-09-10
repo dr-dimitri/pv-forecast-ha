@@ -99,7 +99,7 @@ Mindestens eine Dachfläche ist erforderlich.
 | --- | --- |
 | Name | Eindeutige Bezeichnung, beispielsweise „Süddach“ |
 | Installierte Leistung | Nennleistung der Module in kWp, größer als 0 |
-| Ausrichtung | Himmelsrichtung oder exakter Kompasswinkel von 0° bis unter 360° |
+| Ausrichtung | Himmelsrichtung oder exakter Kompasswinkel von 0° bis 360° (360° wird als 0° gespeichert) |
 | Neigung | Dachneigung von 0° bis 90° |
 | Systemwirkungsgrad | Verbleibender Anteil nach pauschalen Verlusten, standardmäßig 90 % |
 
@@ -110,9 +110,10 @@ detaillierte elektrische Simulation.
 
 Die acht Himmelsrichtungen bleiben als Schnellauswahl erhalten. Für einen
 bekannten Dachwinkel wähle **Genauen Kompasswinkel verwenden**. Nord entspricht
-0°, Ost 90°, Süd 180° und West 270°. Nachkommastellen bleiben beim Speichern
-erhalten. Identische Geometrien teilen einen GTI-Abruf; unterschiedliche
-Geometrien benötigen eigene Abrufe.
+0°, Ost 90°, Süd 180° und West 270°. Die zusätzliche Nordschreibweise 360° wird
+bei der Eingabe als 0° gespeichert. Alle anderen gültigen Winkel einschließlich
+ihrer Nachkommastellen bleiben erhalten. Identische Geometrien teilen einen
+GTI-Abruf; unterschiedliche Geometrien benötigen eigene Abrufe.
 
 ### 3. Wechselrichterlimit festlegen
 

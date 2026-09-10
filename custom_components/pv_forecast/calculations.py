@@ -64,7 +64,7 @@ def validate_roof(roof: PvRoof) -> None:
         or not 0 <= roof.compass_azimuth_deg < 360
     ):
         raise InvalidConfigurationError(
-            "Azimut muss zwischen 0 (inklusive) und 360 liegen"
+            "Azimut muss zwischen 0 (inklusive) und 360 (exklusive) liegen"
         )
     if not math.isfinite(roof.tilt_deg) or not 0 <= roof.tilt_deg <= 90:
         raise InvalidConfigurationError("Neigung muss zwischen 0 und 90 liegen")
