@@ -525,6 +525,18 @@ committen, pushen und mit einer aussagekräftigen Pull-Request-Beschreibung
 einreichen. Keine unnötigen Abhängigkeiten oder spekulativen Erweiterungen
 einführen.
 
+Jede Umsetzung benötigt vor dem Merge ein Review des endgültigen Änderungsstands.
+Das gilt auch für reine Dokumentationsänderungen und Änderungen dieser
+Projektanweisungen. Review-Ergebnis und geprüften Commit im Pull Request
+nachvollziehbar festhalten; offene Review-Befunde vor dem Merge klären und
+erforderliche Korrekturen erneut prüfen lassen.
+
+Nach erfolgreich abgeschlossenem Review und erfolgreichen verbindlichen
+Qualitätsprüfungen einschließlich der GitHub-CI darf der Pull Request
+selbstständig ohne erneute Merge-Bestätigung gemergt werden. Repositoryseitige
+Schutzregeln und erforderliche Freigaben bleiben verbindlich und werden nicht
+umgangen.
+
 ## Prospektiver Beobachtungsversuch zu #30
 
 Die Archivoption „Kurzfristige Korrektur beobachten“ ist standardmäßig aus. Sie verändert keine produktiven Prognosewerte. Nur bei aktiviertem Archiv werden mit neuen Prognoseständen begrenzte Vergleichskandidaten rechtzeitig eingefroren: volle UTC-Stunden mit einer/drei Stunden Vorlauf und der lokale Resttag von 12 Uhr bis Mitternacht. Für den Resttag gilt maximal eine Stunde Datenalter. Alte Stände erhalten keine nachträglichen Kandidaten. Archiv-Store 4 migriert Versionen 1–3 verlustfrei ohne erfundene Belege; Config Entries bleiben 1.1.
