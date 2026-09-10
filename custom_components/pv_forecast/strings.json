@@ -310,7 +310,8 @@
       "duplicate_plant_name": "Dieser Anlagenname ist bereits vergeben. Bitte einen unterscheidbaren Namen wählen.",
       "invalid_dashboard": "Bei aktivem Dashboard bitte einen Titel mit 1 bis 80 Zeichen angeben.",
       "measurement_device_unavailable": "Das Gerät ist nicht mehr verfügbar. Prüfe seine Integration und wähle es erneut aus.",
-      "measurement_helper_failed": "Der Energiezähler konnte nicht eingerichtet werden. Bitte prüfe die Messquelle und versuche es erneut."
+      "measurement_helper_failed": "Der Energiezähler konnte nicht eingerichtet werden. Bitte prüfe die Messquelle und versuche es erneut.",
+      "measurement_delete_failed": "Die Messdaten konnten nicht sicher gelöscht werden. Prüfe freien Speicher und HA-Protokoll und versuche es erneut."
     },
     "abort": {
       "already_configured": "An diesem Standort ist bereits eine PV-Anlage eingerichtet. Für dieselbe Anlage bitte den vorhandenen Eintrag bearbeiten.",
@@ -778,7 +779,8 @@
       "invalid_dashboard": "Bei aktivem Dashboard bitte einen Titel mit 1 bis 80 Zeichen angeben.",
       "measurement_device_unavailable": "Das Gerät ist nicht mehr verfügbar. Prüfe seine Integration und wähle es erneut aus.",
       "measurement_helper_failed": "Der Energiezähler konnte nicht eingerichtet werden. Bitte prüfe die Messquelle und versuche es erneut.",
-      "last_roof_required": "Mindestens eine Dachfläche muss erhalten bleiben. Füge zuerst ein neues Dach hinzu. Wenn du die PV-Anlage nicht mehr verwenden möchtest, entferne ihren Integrationseintrag."
+      "last_roof_required": "Mindestens eine Dachfläche muss erhalten bleiben. Füge zuerst ein neues Dach hinzu. Wenn du die PV-Anlage nicht mehr verwenden möchtest, entferne ihren Integrationseintrag.",
+      "measurement_delete_failed": "Die Messdaten konnten nicht sicher gelöscht werden. Prüfe freien Speicher und HA-Protokoll und versuche es erneut."
     },
     "abort": {
       "reconfigure_entry_changed": "Die Anlage wurde während der Bearbeitung anderweitig geändert. Bitte starte die Bearbeitung erneut."
@@ -1043,7 +1045,7 @@
     "health_input_fallbacks": "**Eingabefallbacks vorhanden** · {severity}\n\n{value} Intervalle tragen Qualitätsmarkierungen. Prüfe den nächsten regulären Wetterstand; diese Markierungen sind keine gemessene Prognosegüte.",
     "health_no_sources": "**Keine Messquelle zugeordnet** · {severity}\n\nMessung ist optional. Ordne unter PV-Erzeugung nur bestätigte AC-PV-Ertragsquellen zu, wenn du Messung oder Lernen verwenden möchtest.",
     "health_measurements_unknown": "**Messquellen nicht prüfbar** · {severity}\n\nDer Messmanager ist nicht verfügbar. Prüfe zuerst den Einrichtungsstatus; daraus lässt sich kein entfernter Sensor ableiten.",
-    "health_measurement_store": "**Messspeicher nicht lesbar** · {severity}\n\nDie Messspeicherung ist eingeschränkt. Prüfe Version und HA-Protokoll. Lösche keine Daten, bevor die Ursache geklärt ist.",
+    "health_measurement_store": "**Messspeicher eingeschränkt** · {severity}\n\nMessdaten konnten nicht sicher gelesen oder geschrieben werden oder die Speicherversion wird nicht unterstützt. Prüfe freien Speicher, Integrationsversion und HA-Protokoll; unbekannte Daten nicht überschreiben.",
     "health_source_removed": "**Zugeordnete Quelle entfernt** · {severity}\n\n{value} Registry-Zuordnungen fehlen. Prüfe die Sensoren unter PV-Erzeugung und bestätige eine neue Quelle bewusst; alte Identitäten werden nicht ersetzt.",
     "health_source_disabled": "**Zugeordnete Quelle deaktiviert** · {severity}\n\n{value} Sensoren sind in der Registry deaktiviert. Prüfe deren Einstellungen in Home Assistant und die gewollte Zuordnung unter PV-Erzeugung.",
     "health_source_identity": "**Quellenidentität nicht sicher prüfbar** · {severity}\n\n{value} Quellen haben keine sicher bestätigte aktuelle Registry-Identität. Prüfe die Zuordnung unter PV-Erzeugung; eine Quelle ohne Registry ist nicht automatisch ausgetauscht.",
@@ -1054,14 +1056,14 @@
     "health_source_daily": "**Grenze eines täglichen Zählers** · {severity}\n\n{value} Quellen setzen täglich zurück. Ein Reset belegt keinen endgültigen Vortagswert. Für vollständige Tagesberichte verwende einen fortlaufenden AC-Zähler oder den KSEM-Assistenten.",
     "health_archive_off": "**Archiv ausgeschaltet** · {severity}\n\nDie Archivierung ist optional und ausgeschaltet. Aktiviere sie unter Erweiterte Funktionen → Prognosearchiv nur, wenn du historische Vergleiche möchtest.",
     "health_archive_unknown": "**Archivzustand nicht prüfbar** · {severity}\n\nDer Archivmanager ist nicht verfügbar. Prüfe zuerst den Einrichtungsstatus; es wird kein Store geöffnet oder repariert.",
-    "health_archive_store": "**Archivspeicher eingeschränkt** · {severity}\n\nDas Archiv ist nicht lesbar oder seine Version wird nicht unterstützt. Prüfe Integrationsversion und Protokoll; unbekannte Daten nicht überschreiben oder vorschnell löschen.",
+    "health_archive_store": "**Archivspeicher eingeschränkt** · {severity}\n\nArchivdaten konnten nicht sicher gelesen oder geschrieben werden oder die Speicherversion wird nicht unterstützt. Prüfe freien Speicher, Integrationsversion und HA-Protokoll; unbekannte Daten nicht überschreiben oder vorschnell löschen.",
     "health_archive_not_loaded": "**Archiv noch nicht geladen** · {severity}\n\nDie lokale Archivinitialisierung ist nicht abgeschlossen. Prüfe den Einrichtungsstatus und das Protokoll.",
     "health_archive_empty": "**Archiv noch leer** · {severity}\n\nNoch keine rechtzeitig beobachteten Stände vorhanden. Lass die Anlage regulär laufen; vergangene Stichtage werden nicht nachträglich erfunden.",
     "health_archive_ready": "**Archivstände vorhanden** · {severity}\n\n{value} Zieldatensätze sind lokal vorhanden. Nutze die Archivansicht zur Auswertung; die Anzahl allein belegt keine Prognosegüte.",
     "health_archive_truncated": "**Archiv wurde begrenzt** · {severity}\n\nAufbewahrungs- oder Größenlimits haben Daten gekürzt. Berücksichtige fehlende ältere Belege; lösche das Archiv nicht automatisch.",
     "health_learning_off": "**Selbstkalibrierung ausgeschaltet** · {severity}\n\nDie optionale Selbstkalibrierung ist aus. Das ist kein Fehler. Einstellungen stehen unter Erweiterte Funktionen → Selbstkalibrierung.",
     "health_learning_unknown": "**Lernstatus nicht prüfbar** · {severity}\n\nEin geprüfter Laufzeitstatus fehlt. Prüfe zuerst die Einrichtung und dann den vorhandenen Lernstatusdialog.",
-    "health_learning_store": "**Lernspeicher nicht lesbar** · {severity}\n\nLernen ist durch einen Speicherfehler eingeschränkt. Prüfe Version und Protokoll; unbekannte Speicherversionen nicht überschreiben.",
+    "health_learning_store": "**Lernspeicher eingeschränkt** · {severity}\n\nDer Lernzustand konnte nicht sicher gelesen oder geschrieben werden. Prüfe freien Speicher, Version und HA-Protokoll; unbekannte Speicherversionen nicht überschreiben.",
     "health_learning_prerequisites": "**Lernvoraussetzungen fehlen** · {severity}\n\nArchiv und bestätigte AC-Energiequellen werden benötigt. Prüfe die Voraussetzungen im Selbstkalibrierungsdialog; es wird nichts automatisch aktiviert.",
     "health_learning_learning": "**Lerndaten werden gesammelt** · {severity}\n\nNoch fehlende gültige Lerntage sind kein technischer Defekt. Prüfe Stichprobe und Messabdeckung im Lernstatusdialog und lasse die Erfassung weiterlaufen.",
     "health_learning_testing": "**Kandidat wird geprüft** · {severity}\n\nDie nachgelagerte Prüfung läuft. Prüfe den Lernstatusdialog; ein Kandidat ist noch keine nachgewiesene Verbesserung.",

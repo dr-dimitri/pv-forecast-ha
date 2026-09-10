@@ -12,13 +12,13 @@ from zoneinfo import ZoneInfo
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import CALLBACK_TYPE, HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
-from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
 from .calibration import CalibrationDay, CalibrationState
 from .const import CONF_TIME_ZONE, DOMAIN
 from .coordinator import PvForecastCoordinator
 from .history_runtime import ArchiveManager, _configuration_id
+from .storage import ConfirmedStore
 
 _LOGGER = logging.getLogger(__name__)
 STORAGE_VERSION = 1
@@ -26,8 +26,8 @@ MAX_STORAGE_BYTES = 1024 * 1024
 SAVE_DELAY = 300
 
 
-def _calibration_store(hass: HomeAssistant, entry_id: str) -> Store[dict[str, Any]]:
-    return Store(
+def _calibration_store(hass: HomeAssistant, entry_id: str) -> ConfirmedStore:
+    return ConfirmedStore(
         hass,
         STORAGE_VERSION,
         f"{DOMAIN}.calibration.{entry_id}",
@@ -71,6 +71,7 @@ class CalibrationManager:
         self.timezone = str(entry.data[CONF_TIME_ZONE])
         self.mode = entry.options.get("calibration_mode", "off")
         self._store = _calibration_store(hass, entry.entry_id)
+        self._store.async_track_writes(self._write_finished, SAVE_DELAY)
         self._state = self._new_state()
         self._loaded = False
         self._running = False
@@ -89,6 +90,16 @@ class CalibrationManager:
         return CalibrationState(
             _configuration_id(self.entry), dt_util.utcnow(), timezone=self.timezone
         )
+
+    @property
+    def storage_error(self) -> str | None:
+        """Unlesbare Versionen und wiederholbare Schreibfehler getrennt halten."""
+        return self._storage_error or self._store.write_error
+
+    @callback
+    def _write_finished(self) -> None:
+        if not self._store.write_pending:
+            self._dirty = False
 
     @property
     def prerequisites_met(self) -> bool:
@@ -143,11 +154,16 @@ class CalibrationManager:
         """Listener beenden und den letzten begrenzten Lernzustand sichern."""
 
         self._running = False
+        self._store.async_stop_retries()
         self._stopped = True
         if self._cancel_listener is not None:
             self._cancel_listener()
             self._cancel_listener = None
-        if self._loaded and self._storage_error is None and self._dirty:
+        if (
+            self._loaded
+            and self._storage_error is None
+            and (self._dirty or self._store.write_pending)
+        ):
             await self._store.async_save(self._serialize())
 
     async def async_reset(self) -> None:
@@ -307,12 +323,12 @@ class CalibrationManager:
         result.update(
             mode=self.mode,
             effective_factor=self.coordinator.calibration_factor,
-            storage_error=self._storage_error,
+            storage_error=self.storage_error,
             learning_paused=self.history.learning_paused,
         )
         if self.mode == "off":
             result["status"] = "off"
-        elif self._storage_error:
+        elif self.storage_error:
             result["status"] = "storage_unavailable"
         elif not self.prerequisites_met:
             result["status"] = "prerequisites_missing"
@@ -338,5 +354,4 @@ class CalibrationManager:
     @callback
     def _serialize(self) -> dict[str, Any]:
         self._save_scheduled = False
-        self._dirty = False
         return self._pending_payload or {"state": self._state.to_dict()}

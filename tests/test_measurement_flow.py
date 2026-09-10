@@ -7,6 +7,7 @@ import pytest
 import voluptuous_serialize
 from homeassistant.config_entries import SOURCE_USER
 from homeassistant.data_entry_flow import FlowResultType
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant_custom_component.common import MockConfigEntry
@@ -343,6 +344,41 @@ async def test_targeted_deletion_requires_confirmation(hass, remove):
     assert result["data"][CONF_MEASUREMENT_SOURCES] == (
         [other] if remove else [source, other]
     )
+
+
+@pytest.mark.parametrize("remove", [False, True])
+async def test_failed_deletion_stays_in_confirmation_and_preserves_assignment(
+    hass, remove
+):
+    """Ein fehlgeschlagener Speicherabschluss wird nicht als Löschung bestätigt."""
+    source = _source(hass)
+    entry = _entry(hass, [source])
+    result = await _choose(
+        hass,
+        await _options(hass, entry),
+        "remove_measurement" if remove else "delete_measurement_data",
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"source_id": source["source_id"]}
+    )
+    with patch(
+        "custom_components.pv_forecast.measurement_runtime.async_delete_measurement_source_data",
+        side_effect=HomeAssistantError("nicht gespeichert"),
+    ):
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"confirm_delete": True}
+        )
+    assert result["step_id"] == "confirm_measurement_delete"
+    assert result["errors"] == {"base": "measurement_delete_failed"}
+    assert entry.options[CONF_MEASUREMENT_SOURCES] == [source]
+    with patch(
+        "custom_components.pv_forecast.measurement_runtime.async_delete_measurement_source_data"
+    ):
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"confirm_delete": True}
+        )
+    result = await _choose(hass, result, "measurements_done")
+    assert result["data"][CONF_MEASUREMENT_SOURCES] == ([] if remove else [source])
 
 
 @pytest.mark.asyncio

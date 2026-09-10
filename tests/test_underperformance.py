@@ -3,7 +3,7 @@
 from copy import deepcopy
 from dataclasses import replace
 from datetime import timedelta
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -228,7 +228,7 @@ async def test_runtime_pauses_learning_and_bundles_notifications_and_controls(
         assert coordinator.calibration_factor == 1
         assert calibration.snapshot()["status"] == "underperformance_paused"
         assert calibration.capture_parameters() == {}
-        history._store.async_save = Mock(side_effect=lambda value: _async_none())
+        # Der native In-Memory-Store bestätigt den tatsächlichen Schreibabschluss.
         await history.async_observation_control("acknowledge")
         assert history.learning_paused
         assert history.snapshot(now=now)["underperformance"]["acknowledged"] is True
@@ -237,10 +237,6 @@ async def test_runtime_pauses_learning_and_bundles_notifications_and_controls(
         assert history._archive.underperformance["segment_start"] == now.isoformat()
         update.assert_called_once()
     history._running = calibration._running = False
-
-
-async def _async_none():
-    return None
 
 
 def test_dst_days_remain_seven_local_days_with_complete_evidence():
