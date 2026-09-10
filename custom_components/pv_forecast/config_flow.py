@@ -34,6 +34,7 @@ from homeassistant.helpers.selector import (
     TextSelector,
 )
 from homeassistant.helpers.translation import async_get_translations
+from homeassistant.util import dt as dt_util
 
 from .api import OpenMeteoConnectionError, OpenMeteoDataError
 from .calculations import InvalidConfigurationError, validate_coordinates
@@ -1178,6 +1179,7 @@ class PvForecastOptionsFlow(
             "measurements",
             "dashboard",
             "advanced_options",
+            "health",
         ]
         translations = await _async_ui_translations(self.hass)
         return self.async_show_menu(
@@ -1193,6 +1195,35 @@ class PvForecastOptionsFlow(
                     translations,
                 ),
             },
+        )
+
+    async def async_step_health(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Den lokalen Betrieb ohne Testabruf oder Speicherzugriff erklären."""
+        from .health import check_health
+        from .health_runtime import capture_health
+
+        now = dt_util.utcnow()
+        findings = check_health(capture_health(self.hass, self.config_entry, now), now)
+        translations = await _async_ui_translations(self.hass)
+        lines = []
+        for group in ("weather", "measurements", "archive", "calibration", "cache"):
+            lines.append("### " + translations[f"common.health_group_{group}"])
+            for finding in findings:
+                if finding.group == group:
+                    lines.append(
+                        translations[f"common.health_{finding.code}"].format(
+                            value=finding.value,
+                            severity=translations[
+                                f"common.health_severity_{finding.severity}"
+                            ],
+                        )
+                    )
+        return self.async_show_menu(
+            step_id="health",
+            menu_options=["health", "init"],
+            description_placeholders={"report": "\n\n".join(lines)},
         )
 
     async def async_step_plant_options(

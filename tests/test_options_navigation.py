@@ -21,12 +21,19 @@ async def test_four_native_groups_and_return_preserve_options(hass):
         "measurements",
         "dashboard",
         "advanced_options",
+        "health",
     ]
     translations = await async_get_translations(hass, "de", "options", {"pv_forecast"})
     assert [
         translations[f"component.pv_forecast.options.step.init.menu_options.{key}"]
         for key in result["menu_options"]
-    ] == ["Anlage", "PV-Erzeugung", "Dashboard", "Erweiterte Funktionen"]
+    ] == [
+        "Anlage",
+        "PV-Erzeugung",
+        "Dashboard",
+        "Erweiterte Funktionen",
+        "Betrieb prüfen",
+    ]
     for group, expected in [
         ("plant_options", {"add_roof", "edit_roof", "remove_roof", "system", "init"}),
         (

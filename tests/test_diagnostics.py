@@ -161,6 +161,7 @@ async def test_download_has_fixed_metadata_snapshot(hass, hass_client, forecast_
                 "current_local_days": True,
                 "interval_count": 48,
                 "complete": True,
+                "energy_current_complete": True,
                 "incomplete_intervals": 0,
                 "quality_marked_intervals": 0,
             },
@@ -409,6 +410,7 @@ async def test_missing_coverage_and_old_local_days_remain_visible(
         "current_local_days": False,
         "interval_count": 47,
         "complete": False,
+        "energy_current_complete": False,
         "incomplete_intervals": 1,
         "quality_marked_intervals": 1,
     }

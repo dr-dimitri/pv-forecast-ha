@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, time, timedelta
-from itertools import pairwise
+from datetime import datetime
 from typing import TYPE_CHECKING, Any
-from zoneinfo import ZoneInfo
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import UpdateFailed
@@ -24,6 +22,7 @@ from .calibration import RULE_VERSION
 from .calibration_runtime import STORAGE_VERSION as CALIBRATION_STORAGE_VERSION
 from .configuration import roofs_from_options
 from .const import CONF_INVERTER_MAX_POWER_KW, CONF_TIME_ZONE, DOMAIN, UPDATE_INTERVAL
+from .health import forecast_coverage
 from .history import MODEL_VERSION
 from .history_runtime import STORAGE_VERSION as HISTORY_STORAGE_VERSION
 from .measurement_runtime import STORAGE_VERSION as MEASUREMENT_STORAGE_VERSION
@@ -85,37 +84,8 @@ def _error_class(error: BaseException | None) -> str | None:
 def _coverage(
     forecast: ForecastResult | None, timezone_name: str, now: datetime
 ) -> dict[str, Any]:
-    """Abdeckung der gespeicherten Zieltage ohne Zeit- oder Ertragslisten prüfen."""
-
-    if forecast is None:
-        return {"available": False}
-    timezone = ZoneInfo(timezone_name)
-    intervals = forecast.total_intervals
-    start = datetime.combine(forecast.local_date, time.min, timezone).astimezone(UTC)
-    end = datetime.combine(
-        forecast.local_date + timedelta(days=2), time.min, timezone
-    ).astimezone(UTC)
-    return {
-        "available": True,
-        "current_local_days": forecast.local_date == now.astimezone(timezone).date(),
-        "interval_count": len(intervals),
-        "complete": (
-            bool(intervals)
-            and intervals[0].start.astimezone(UTC) == start
-            and intervals[-1].end.astimezone(UTC) == end
-            and all(
-                item.is_complete
-                and item.end.astimezone(UTC) > item.start.astimezone(UTC)
-                for item in intervals
-            )
-            and all(
-                left.end.astimezone(UTC) == right.start.astimezone(UTC)
-                for left, right in pairwise(intervals)
-            )
-        ),
-        "incomplete_intervals": sum(not item.is_complete for item in intervals),
-        "quality_marked_intervals": sum(bool(item.quality_flags) for item in intervals),
-    }
+    """Gemeinsame Abdeckungsprüfung ohne Ertragslisten verwenden."""
+    return forecast_coverage(forecast, timezone_name, now)
 
 
 def _calibration_status(manager: CalibrationManager | None) -> dict[str, Any]:
