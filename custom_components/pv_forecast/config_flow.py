@@ -1218,10 +1218,50 @@ class PvForecastOptionsFlow(
                 "history",
                 "calibration",
                 "forecast_horizon",
+                "forecast_cache",
                 "inverter_groups",
             ]
             + (["horizon_profile"] if roofs else [])
             + ["init"],
+        )
+
+    async def async_step_forecast_cache(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Den unabhängigen Neustartcache bewusst aktivieren oder entfernen."""
+        from .forecast_cache import CONF_FORECAST_CACHE
+        from .forecast_cache_runtime import async_remove_forecast_cache
+
+        if user_input is not None:
+            enabled = user_input[CONF_FORECAST_CACHE]
+            if not enabled:
+                manager = getattr(
+                    getattr(self.config_entry, "runtime_data", None),
+                    "forecast_cache",
+                    None,
+                )
+                if manager is not None:
+                    await manager.async_stop(remove=True)
+                else:
+                    await async_remove_forecast_cache(
+                        self.hass, self.config_entry.entry_id
+                    )
+            return self.async_create_entry(
+                title="",
+                data=dict(self.config_entry.options) | {CONF_FORECAST_CACHE: enabled},
+            )
+        return self.async_show_form(
+            step_id="forecast_cache",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(
+                        CONF_FORECAST_CACHE,
+                        default=self.config_entry.options.get(
+                            CONF_FORECAST_CACHE, False
+                        ),
+                    ): BooleanSelector(),
+                }
+            ),
         )
 
     async def async_step_forecast_horizon(

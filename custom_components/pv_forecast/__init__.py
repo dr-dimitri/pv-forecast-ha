@@ -7,14 +7,18 @@ from dataclasses import dataclass
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.typing import ConfigType
+from homeassistant.util import dt as dt_util
 
+from .api import OpenMeteoError
 from .calibration_runtime import CalibrationManager, async_remove_calibration_store
 from .const import DOMAIN, PLATFORMS
 from .coordinator import PvForecastCoordinator
 from .dashboard import DashboardManager, dashboard_issue_id
+from .forecast_cache_runtime import ForecastCacheManager, async_remove_forecast_cache
 from .frontend import async_setup_frontend
 from .history_runtime import ArchiveManager, async_remove_history_store
 from .history_services import async_setup_history_services
@@ -35,6 +39,7 @@ class PvForecastRuntimeData:
     history: ArchiveManager | None = None
     calibration: CalibrationManager | None = None
     dashboard: DashboardManager | None = None
+    forecast_cache: ForecastCacheManager | None = None
 
 
 type PvForecastConfigEntry = ConfigEntry[PvForecastRuntimeData]
@@ -56,7 +61,25 @@ async def async_setup_entry(hass: HomeAssistant, entry: PvForecastConfigEntry) -
     client = async_get_open_meteo_client(hass)
     coordinator = PvForecastCoordinator(hass, entry, client)
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
-    await coordinator.async_config_entry_first_refresh()
+    cache = ForecastCacheManager(hass, entry, coordinator)
+    coordinator.forecast_cache = cache
+    try:
+        restored = await cache.async_load()
+        try:
+            await coordinator.async_config_entry_first_refresh()
+        except ConfigEntryNotReady:
+            cause = coordinator.last_exception
+            if restored is None or not isinstance(
+                getattr(cause, "__cause__", cause), OpenMeteoError
+            ):
+                raise
+            coordinator.raw_data = coordinator.data = restored.forecast
+            coordinator.last_update_success_time = restored.fetched_at
+            coordinator.origin = "restored"
+            coordinator.restored_at = dt_util.utcnow()
+    except (Exception, CancelledError):
+        await cache.async_stop()
+        raise
     coordinator.async_start_day_updates()
     coordinator.async_start_planning_updates()
 
@@ -64,10 +87,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: PvForecastConfigEntry) -
     history = ArchiveManager(hass, entry, coordinator, measurements)
     calibration = CalibrationManager(hass, entry, coordinator, history)
     entry.runtime_data = PvForecastRuntimeData(
-        coordinator, measurements, history, calibration
+        coordinator, measurements, history, calibration, forecast_cache=cache
     )
     try:
-        await measurements.async_start()
+        await measurements.async_start(fresh_after=coordinator.restored_at)
         await history.async_start()
         await calibration.async_start()
         await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
@@ -76,6 +99,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: PvForecastConfigEntry) -
         entry.async_on_unload(dashboard.async_stop)
         await dashboard.async_sync()
     except (Exception, CancelledError):
+        await cache.async_stop()
         if entry.runtime_data.dashboard is not None:
             entry.runtime_data.dashboard.async_stop()
         try:
@@ -94,6 +118,10 @@ async def async_unload_entry(hass: HomeAssistant, entry: PvForecastConfigEntry) 
 
     unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unloaded:
+        if entry.runtime_data.forecast_cache is not None:
+            await entry.runtime_data.forecast_cache.async_stop(
+                remove=not entry.runtime_data.forecast_cache.enabled
+            )
         if entry.runtime_data.dashboard is not None:
             entry.runtime_data.dashboard.async_stop()
         try:
@@ -112,6 +140,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: PvForecastConfigEntry) 
 async def async_remove_entry(hass: HomeAssistant, entry: PvForecastConfigEntry) -> None:
     """Beim Entfernen einer Anlage ihre lokalen Messdaten und ihr Archiv löschen."""
 
+    await async_remove_forecast_cache(hass, entry.entry_id)
     ir.async_delete_issue(hass, DOMAIN, dashboard_issue_id(entry.entry_id))
     try:
         await async_remove_calibration_store(hass, entry.entry_id)

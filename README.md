@@ -559,3 +559,8 @@ gewählten UTC-Zeitfensters und mittlere Leistung in 5-/15-/30-/60-Minuten-Schri
 [Beispiele und Fehlerprüfung](docs/stundenprognose.md#frei-gewähltes-energie--und-leistungsfenster)
 erklären Drei-Stunden-Abfragen, Raster und die Unterscheidung zwischen Nullertrag
 und fehlenden Daten.
+
+Optional bewahrt **Erweiterte Funktionen → Letzte Prognose speichern** den letzten
+vollständigen Rohmodellstand für Neustarts ohne Internet. Herkunft, ursprüngliche
+Abrufzeit und Fehler bleiben sichtbar; lokale Messung kann wieder starten.
+[Prognosecache und Grenzen](docs/prognosecache.md).

@@ -35,6 +35,7 @@ async def test_four_native_groups_and_return_preserve_options(hass):
                 "history",
                 "calibration",
                 "forecast_horizon",
+                "forecast_cache",
                 "inverter_groups",
                 "horizon_profile",
                 "init",

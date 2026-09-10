@@ -202,7 +202,7 @@ class MeasurementManager:
             )
         )
 
-    async def async_start(self) -> None:
+    async def async_start(self, *, fresh_after: datetime | None = None) -> None:
         """Historie laden und ausschließlich lokale Ereignisse abonnieren."""
 
         if self._running:
@@ -256,9 +256,13 @@ class MeasurementManager:
         for history in self._histories.values():
             if self._identity_matches(history.source):
                 state = self.hass.states.get(history.source.entity_id)
-                if state is not None and (
-                    history.latest_reading is None
-                    or state.last_reported > history.latest_reading.timestamp
+                if (
+                    state is not None
+                    and (fresh_after is None or state.last_reported >= fresh_after)
+                    and (
+                        history.latest_reading is None
+                        or state.last_reported > history.latest_reading.timestamp
+                    )
                 ):
                     self._record(history, state, state.last_reported)
         self._prune(dt_util.utcnow())
