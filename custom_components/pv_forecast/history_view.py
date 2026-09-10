@@ -41,6 +41,12 @@ def _assessment(
         "assessed_at": current.assessed_at.isoformat() if current else None,
         "revised": bool(record.assessment_revisions),
         "previous_revision_count": len(record.assessment_revisions),
+        "manual_correction": bool(current and current.manual),
+        "measured_energy_kwh": (
+            record.measured_assessment.actual_energy_kwh
+            if current and current.manual and record.measured_assessment
+            else None
+        ),
         "reasons": (
             ["deleted_sources"]
             if record.deleted_sources
@@ -205,6 +211,15 @@ def build_archive_day_view(
         ]
         if all(item == latest_views[0] for item in latest_views):
             result["daily_measurement"] = latest_views[0]
+        elif all(
+            item["manual_correction"]
+            and item["complete"]
+            and item["energy_kwh"] == latest_views[0]["energy_kwh"]
+            for item in latest_views
+        ):
+            result["daily_measurement"] = latest_views[0] | {
+                "measured_energy_kwh": None
+            }
     seconds = (end - start).total_seconds()
     covered = sum(
         (min(r.end, end) - max(r.start, start)).total_seconds() for r in hours

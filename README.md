@@ -303,6 +303,16 @@ Die Erfassung beginnt ab diesem Zeitpunkt; fehlende Vergangenheit wird nicht
 nachgebaut. Pausieren erhält die vorhandenen Daten für Bericht und Export.
 Ohne zugeordneten Energiezähler bleiben Bewertungen fehlend.
 
+Unter **Konfigurieren → Tagesertrag korrigieren** kannst du für einen
+abgeschlossenen Archivtag den endgültigen AC-PV-Ertrag deines SmartMeters in
+kWh bestätigen, auch nachträglich. Der korrigierte Wert gilt für Tagesberichte,
+Vergleiche und die Selbstkalibrierung nach deren bestehenden Prüfregeln.
+Der ursprünglich erfasste Wert bleibt erhalten. Du kannst die Korrektur später
+ändern oder zurücknehmen; die historische Kartenansicht zeigt beide Werte.
+Verfügbar sind gespeicherte Tagesstände der letzten 365 Tage mit zugeordneten
+PV-Messquellen. Stundenwerte und fremde HA-Zähler werden dabei nicht verändert.
+Die [Anleitung zur Tageskorrektur](docs/tageskorrektur.md) erläutert den Ablauf.
+
 Der Bericht zeigt für 7, 30 oder 90 abgeschlossene lokale Tage die Anzahl
 rechtzeitig erfasster Prognosen, gültige Messpaare, Abdeckung, MAE und Bias in
 kWh. Positiver Bias bedeutet Überschätzung. Die Horizonte sind getrennt:

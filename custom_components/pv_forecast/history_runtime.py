@@ -50,7 +50,7 @@ if TYPE_CHECKING:
     from .calibration_runtime import CalibrationManager
 
 _LOGGER = logging.getLogger(__name__)
-STORAGE_VERSION = 6
+STORAGE_VERSION = 7
 SAVE_DELAY = 300
 MAX_STORAGE_BYTES = 32 * 1024 * 1024
 MAX_RECORDS = 6000
@@ -63,7 +63,7 @@ class _HistoryStore(ConfirmedStore):
     async def _async_migrate_func(
         self, old_major_version: int, old_minor_version: int, old_data: dict[str, Any]
     ) -> dict[str, Any]:
-        if old_major_version not in (1, 2, 3, 4, 5):
+        if old_major_version not in (1, 2, 3, 4, 5, 6):
             raise NotImplementedError
         # Version 1 erhält weiterhin keine erfundene Kalibrierungsbasis.
         # Version 3 erlaubt verschiedene, je Record unverändert validierte
@@ -71,6 +71,7 @@ class _HistoryStore(ConfirmedStore):
         # keine Vorgängerversion erhält nachträgliche Kandidaten. Version 5
         # ergänzt nur neue Temperaturvergleiche, keine historischen Modellwerte.
         # Version 6 beginnt ohne rückwirkend erfundene Minderertragshinweise.
+        # Version 7 bewahrt automatische Tagesbelege neben bewussten Korrekturen.
         HistoryArchive.from_dict(old_data["archive"], old_data["archive"]["timezone"])
         return old_data
 
@@ -414,6 +415,48 @@ class ArchiveManager:
             with suppress(asyncio.CancelledError):
                 await task
             self._assessment_task = None
+
+    async def async_correct_day(
+        self, record_id: str, energy_kwh: float | None, *, expected_revision: str
+    ) -> None:
+        """Eine administrative Tageskorrektur lokal anwenden und sicher speichern."""
+        from .history_corrections import correct_day
+
+        if (
+            not self._loaded
+            or self._storage_error is not None
+            or self._stopped
+            or self._mutation_in_progress
+        ):
+            raise HomeAssistantError("Das Prognosearchiv ist nicht verfügbar")
+        self._mutation_in_progress = True
+        try:
+            await self._async_cancel_assessment()
+            if self._stopped:
+                raise HomeAssistantError("Die Anlage wurde inzwischen entladen")
+            now = dt_util.utcnow()
+            changed = correct_day(
+                self._archive,
+                record_id,
+                energy_kwh,
+                now,
+                expected_revision=expected_revision,
+            )
+            if changed:
+                self._dirty = True
+                self._observe(now)
+                # Schreibfehler dürfen eine überholte Lernfreigabe nicht erhalten.
+                if self.calibration is not None:
+                    self.calibration.async_reconcile()
+            if changed or self._dirty or self._store.write_pending:
+                data = self._serialize()
+                if record_id not in self._archive.records:
+                    raise HomeAssistantError(
+                        "Der Tagesstand überschreitet die Archivgrenze"
+                    )
+                await self._store.async_save_checked(data)
+        finally:
+            self._mutation_in_progress = False
 
     @callback
     def _updated(self) -> None:

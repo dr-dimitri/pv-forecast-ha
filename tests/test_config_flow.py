@@ -977,6 +977,7 @@ async def test_options_flow_menu_offers_removal_of_last_roof(hass) -> None:
     assert set(result["menu_options"]) == {
         "plant_options",
         "measurements",
+        "daily_correction",
         "dashboard",
         "advanced_options",
         "health",
@@ -1001,6 +1002,7 @@ async def test_options_flow_menu_hides_edit_and_remove_without_roofs(hass) -> No
     assert set(result["menu_options"]) == {
         "plant_options",
         "measurements",
+        "daily_correction",
         "dashboard",
         "advanced_options",
         "health",
@@ -1027,6 +1029,7 @@ async def test_options_flow_add_roof_does_not_touch_existing_roofs(hass) -> None
     assert set(result["menu_options"]) == {
         "plant_options",
         "measurements",
+        "daily_correction",
         "dashboard",
         "advanced_options",
         "health",
@@ -1256,6 +1259,7 @@ async def test_options_flow_removing_roof_requires_confirmation(hass) -> None:
     assert set(result["menu_options"]) == {
         "plant_options",
         "measurements",
+        "daily_correction",
         "dashboard",
         "advanced_options",
         "health",

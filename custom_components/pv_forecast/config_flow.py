@@ -70,6 +70,7 @@ from .const import (
     LOCATION_SOURCE_HOME_ASSISTANT,
     ROOF_DIRECTION_CUSTOM,
 )
+from .correction_configuration import CorrectionFlowMixin
 from .dashboard import CONF_DASHBOARD_ENABLED, CONF_DASHBOARD_REVISION
 from .dashboard_configuration import DashboardFlowMixin
 from .geocoding import (
@@ -982,6 +983,7 @@ class PvForecastConfigFlow(
 
 
 class PvForecastOptionsFlow(
+    CorrectionFlowMixin,
     DashboardFlowMixin,
     ShadingFlowMixin,
     InverterGroupFlowMixin,
@@ -1177,6 +1179,7 @@ class PvForecastOptionsFlow(
         menu_options = [
             "plant_options",
             "measurements",
+            "daily_correction",
             "dashboard",
             "advanced_options",
             "health",

@@ -52,3 +52,15 @@ test("Datumsnavigation rechnet Kalendertage unabhängig von Sommerzeit", () => {
   assert.equal(shiftArchiveDate("2026-03-29", -1), "2026-03-28");
   assert.equal(shiftArchiveDate("2026-10-25", 1), "2026-10-26");
 });
+
+test("Bestätigter Tagesertrag erscheint neben Original, ohne Stunden umzuschreiben", () => {
+  const data = archiveFixture("sunny", selection);
+  const before = tableRows(historicalState(data));
+  data.daily_measurement = { ...data.daily_measurement, energy_kwh: 18.125, measured_energy_kwh: 16, manual_correction: true, assessed_at: "2026-08-12T14:00:00Z" };
+  const html = renderArchiveDay({selection, result: {status: "ready", data}}, 360);
+  assert.match(html, /Bestätigter Tagesertrag · korrigiert/);
+  assert.match(html, /Automatisch erfasster Tageswert/);
+  assert.match(html, /Tagesertrag manuell bestätigt am/);
+  assert.match(html, /Die Stundenmessungen bleiben unverändert/);
+  assert.deepEqual(tableRows(historicalState(data)), before);
+});
