@@ -8,9 +8,16 @@ from zoneinfo import ZoneInfo
 
 import pytest
 from homeassistant.helpers import entity_registry as er
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant_custom_component.common import (
+    MockConfigEntry,
+    async_fire_time_changed,
+)
 
-from custom_components.pv_forecast.api import OpenMeteoClient, OpenMeteoDataError
+from custom_components.pv_forecast.api import (
+    OpenMeteoClient,
+    OpenMeteoConnectionError,
+    OpenMeteoDataError,
+)
 from custom_components.pv_forecast.calculations import calculate_forecast
 from custom_components.pv_forecast.card_data import build_forecast_view
 from custom_components.pv_forecast.const import DOMAIN
@@ -18,6 +25,10 @@ from custom_components.pv_forecast.energy import async_get_solar_forecast
 from custom_components.pv_forecast.horizon import forecast_days_from_options
 from custom_components.pv_forecast.models import AcInverterGroup
 from custom_components.pv_forecast.planning import plan_solar_window
+from custom_components.pv_forecast.sensor import (
+    PvForecastRoofSensor,
+    PvForecastTotalSensor,
+)
 from custom_components.pv_forecast.services import _serialize_forecast
 
 from .helpers import configure_options, persisted_roof, roof
@@ -115,6 +126,152 @@ async def test_seven_day_response_missing_last_gti_is_rejected():
                 local_date=date(2026, 9, 9),
                 forecast_days=7,
             )
+
+
+@pytest.mark.parametrize(
+    "zone,day",
+    [
+        ("UTC", date(2026, 9, 9)),
+        ("Europe/Berlin", date(2026, 3, 27)),
+        ("Europe/Berlin", date(2026, 10, 23)),
+        ("Asia/Kathmandu", date(2026, 9, 9)),
+    ],
+)
+async def test_sensors_follow_all_covered_days_after_midnight(hass, freezer, zone, day):
+    """Vorhandene Folgetage bleiben mit Karte, Clipping und Fehlerstatus konsistent."""
+    timezone = ZoneInfo(zone)
+    started = datetime.combine(day, time(23, 59), timezone).astimezone(UTC)
+    freezer.move_to(started)
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={"latitude": 48, "longitude": 16, "time_zone": zone},
+        options={
+            "roofs": [persisted_roof("a"), persisted_roof("b")],
+            "forecast_days": 7,
+            "inverter_max_power_kw": 15,
+        },
+    )
+    entry.add_to_hass(hass)
+    session = HorizonSession()
+    with patch(
+        "custom_components.pv_forecast.runtime.async_get_clientsession",
+        return_value=session,
+    ):
+        assert await hass.config_entries.async_setup(entry.entry_id)
+    coordinator = entry.runtime_data.coordinator
+    coordinator.async_set_calibration(0.5, None)
+    snapshot = coordinator.data
+    fetched_at = coordinator.last_update_success_time
+    sensors = {
+        (selected, roof_id): (
+            PvForecastTotalSensor(coordinator, entry, selected)
+            if roof_id is None
+            else PvForecastRoofSensor(coordinator, entry, roof_id, "Dach", selected)
+        )
+        for selected in ("today", "tomorrow")
+        for roof_id in (None, "a", "b")
+    }
+    try:
+        for offset in range(1, 8):
+            now = datetime.combine(
+                day + timedelta(days=offset), time.min, timezone
+            ).astimezone(UTC)
+            freezer.move_to(now)
+            coordinator.async_update_listeners()
+            for (selected, roof_id), sensor in sensors.items():
+                view = build_forecast_view(
+                    snapshot, zone, "Anlage", now, fetched_at, True, roof_id=roof_id
+                )
+                expected = view["summary"][f"{selected}_kwh"]
+                assert sensor.native_value == (
+                    round(expected, 2) if expected is not None else None
+                )
+                assert sensor.available is (expected is not None)
+            assert coordinator.get_daily_yield("today", "entfernt") is None
+        assert session.calls == 1
+        assert coordinator.data is snapshot
+        assert coordinator.last_update_success_time == fetched_at
+
+        # Ein Nulltag ist verfügbar; eine fehlende oder unvollständige Stunde nicht.
+        zero_day = day + timedelta(days=2)
+        zero_start = datetime.combine(zero_day, time.min, timezone).astimezone(UTC)
+        freezer.move_to(zero_start)
+        zero_snapshot = replace(
+            snapshot,
+            total_intervals=tuple(
+                replace(i, energy_kwh=0, ac_power_kw=0)
+                for i in snapshot.total_intervals
+            ),
+            roofs={
+                key: replace(
+                    value,
+                    intervals=tuple(
+                        replace(i, energy_kwh=0, ac_power_kw=0) for i in value.intervals
+                    ),
+                )
+                for key, value in snapshot.roofs.items()
+            },
+        )
+        coordinator.data = zero_snapshot
+        assert all(sensor.native_value == 0 for sensor in sensors.values())
+        first_interval = next(
+            i for i in zero_snapshot.total_intervals if i.start <= zero_start < i.end
+        )
+        for missing in (False, True):
+            coordinator.data = replace(
+                zero_snapshot,
+                total_intervals=tuple(
+                    replace(i, is_complete=False) if i is first_interval else i
+                    for i in zero_snapshot.total_intervals
+                    if not missing or i is not first_interval
+                ),
+            )
+            assert all(
+                coordinator.get_daily_yield("today", roof_id) is None
+                for roof_id in (None, "a", "b")
+            )
+        coordinator.data = snapshot
+
+        # Auch ein belegter Folgetag macht einen fehlgeschlagenen Abruf nicht gesund.
+        freezer.move_to(started + timedelta(days=2))
+        with patch.object(
+            coordinator._client,
+            "async_fetch_roofs",
+            side_effect=OpenMeteoConnectionError("offline"),
+        ):
+            await coordinator.async_refresh()
+        assert sensors[("today", None)].native_value is not None
+        assert all(not sensor.available for sensor in sensors.values())
+        assert coordinator.last_update_success_time == fetched_at
+    finally:
+        await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_midnight_uses_existing_horizon_without_extra_request(hass, freezer):
+    """Ein abgedeckter dritter Tag benötigt keinen zusätzlichen Mitternachtsabruf."""
+    freezer.move_to("2026-09-09T23:59:00Z")
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={"latitude": 48, "longitude": 16, "time_zone": "UTC"},
+        options={"roofs": [persisted_roof("a")], "forecast_days": 3},
+    )
+    entry.add_to_hass(hass)
+    session = HorizonSession()
+    with patch(
+        "custom_components.pv_forecast.runtime.async_get_clientsession",
+        return_value=session,
+    ):
+        assert await hass.config_entries.async_setup(entry.entry_id)
+    coordinator = entry.runtime_data.coordinator
+    scheduled = coordinator._unsub_refresh
+    try:
+        freezer.move_to("2026-09-10T00:00:00Z")
+        async_fire_time_changed(hass)
+        await hass.async_block_till_done(wait_background_tasks=True)
+        assert session.calls == 1
+        assert coordinator._unsub_refresh is scheduled
+    finally:
+        await hass.config_entries.async_unload(entry.entry_id)
 
 
 @pytest.mark.parametrize(

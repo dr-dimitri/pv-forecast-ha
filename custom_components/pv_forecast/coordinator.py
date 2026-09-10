@@ -23,6 +23,7 @@ from homeassistant.util import dt as dt_util
 from .api import OpenMeteoClient, OpenMeteoError, OpenMeteoRetryError
 from .calculations import (
     InvalidConfigurationError,
+    aggregate_energy_for_day,
     apply_calibration,
     calculate_forecast,
     calculate_planning_values,
@@ -37,6 +38,7 @@ from .const import (
     UPDATE_INTERVAL,
 )
 from .explanation import ExplanationSnapshot, build_explanation
+from .forecast_intervals import window_energy
 from .horizon import forecast_days_from_options
 from .models import ForecastDay, ForecastResult, PlanningValues
 from .temperature_comparison import COEFFICIENTS, mountings_from_options
@@ -246,6 +248,23 @@ class PvForecastCoordinator(TimestampDataUpdateCoordinator[ForecastResult]):
             return daily.today
         if target_date == self.data.local_date + timedelta(days=1):
             return daily.tomorrow
+        if (
+            self.data.local_date + timedelta(days=2)
+            <= target_date
+            < (self.data.local_date + timedelta(days=self.data.forecast_days))
+        ):
+            # Folgetage behalten ihre UTC-Intervallbasis auch nach Mitternacht.
+            # Fehlende Abdeckung darf dabei nicht zu einer Nullprognose werden.
+            start = datetime.combine(target_date, time.min, timezone).astimezone(UTC)
+            end = datetime.combine(
+                target_date + timedelta(days=1), time.min, timezone
+            ).astimezone(UTC)
+            total = window_energy(self.data.total_intervals, start, end)
+            if roof_id is None or total is None:
+                return total
+            return aggregate_energy_for_day(
+                self.data.roofs[roof_id].intervals, target_date, timezone
+            )
         return None
 
     async def _async_update_data(self) -> ForecastResult:
