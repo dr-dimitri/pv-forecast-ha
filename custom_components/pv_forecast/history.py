@@ -193,11 +193,12 @@ class Assessment:
     valid: bool
     reasons: tuple[str, ...]
     sources: tuple[SourceAssessment, ...]
+    manual: bool = False
 
     @property
     def has_derived_gap(self) -> bool:
         """Auch alte Messkopien können eine unbelegte Integralmenge dokumentieren."""
-        return any(
+        return not self.manual and any(
             {"derived_energy", "gap"} <= set(source.quality_flags)
             for source in self.sources
         )
@@ -209,6 +210,7 @@ class Assessment:
             "valid": self.valid,
             "reasons": list(self.reasons),
             "sources": [item.to_dict() for item in self.sources],
+            **({"manual": True} if self.manual else {}),
         }
 
     @classmethod
@@ -219,17 +221,25 @@ class Assessment:
             else None
         )
         reasons = _strings(data["reasons"])
+        manual = data.get("manual", False)
         if (
-            not isinstance(data["valid"], bool)
+            not isinstance(manual, bool)
+            or not isinstance(data["valid"], bool)
             or (data["valid"] and (actual is None or reasons))
             or (not data["valid"] and actual is not None)
+            or (manual and (not data["valid"] or data["sources"]))
         ):
             raise ValueError("Die archivierte Bewertung ist inkonsistent")
         sources = tuple(SourceAssessment.from_dict(item) for item in data["sources"])
         if len({item.source_id for item in sources}) != len(sources):
             raise ValueError("Archivierte Messquellen sind doppelt vorhanden")
         return cls(
-            _timestamp(data["assessed_at"]), actual, data["valid"], reasons, sources
+            _timestamp(data["assessed_at"]),
+            actual,
+            data["valid"],
+            reasons,
+            sources,
+            manual,
         )
 
 
@@ -264,6 +274,7 @@ class ArchiveRecord:
     candidate_energy_kwh: float | None = None
     short_term: dict[str, Any] | None = None
     temperature_comparison: dict[str, Any] | None = None
+    measured_assessment: Assessment | None = None
 
     @property
     def config_fingerprint(self) -> str:
@@ -309,6 +320,17 @@ class ArchiveRecord:
             "assessment_revisions": [
                 item.to_dict() for item in self.assessment_revisions
             ],
+            **(
+                {
+                    "measured_assessment": (
+                        self.measured_assessment.to_dict()
+                        if self.measured_assessment
+                        else None
+                    )
+                }
+                if self.assessment and self.assessment.manual
+                else {}
+            ),
             "deleted_sources": list(self.deleted_sources),
         }
 
@@ -661,6 +683,9 @@ class HistoryArchive:
         """Vollständige Quellendeltas bewerten, ohne Lücken auf Stunden zu verteilen."""
         assessed_at = _utc(assessed_at)
         record = self.records[record_id]
+        if record.assessment and record.assessment.manual:
+            # Der ausdrücklich bestätigte Tageswert hat Vorrang vor Rohmessungen.
+            return False
         if assessed_at < record.end or record.deleted_sources:
             return False
         if record.assessment and assessed_at < record.assessment.assessed_at:
@@ -831,6 +856,7 @@ class HistoryArchive:
                     ),
                     assessment=None,
                     assessment_revisions=(),
+                    measured_assessment=None,
                     short_term=None,
                     deleted_sources=tuple(sorted({*record.deleted_sources, source_id})),
                 )
@@ -1455,9 +1481,31 @@ def _record_from_dict(data: Mapping[str, Any], timezone: ZoneInfo) -> ArchiveRec
     revisions = tuple(
         Assessment.from_dict(item) for item in data["assessment_revisions"]
     )
+    measured = (
+        Assessment.from_dict(data["measured_assessment"])
+        if data.get("measured_assessment") is not None
+        else None
+    )
+    if assessment and assessment.manual and "measured_assessment" not in data:
+        raise ValueError("Die Korrektur nennt keinen ursprünglichen Messstand")
+    if measured is not None and (
+        measured.manual
+        or not assessment
+        or not assessment.manual
+        or measured.assessed_at > assessment.assessed_at
+    ):
+        raise ValueError("Die ursprüngliche Tagesmessung ist inkonsistent")
     all_assessments = (*revisions, *((assessment,) if assessment else ()))
     expected_source_ids = {source.source_id for source in sources}
-    for item in all_assessments:
+    for item in (*all_assessments, *((measured,) if measured else ())):
+        if item.assessed_at < end:
+            raise ValueError("Eine Bewertung liegt vor dem Tagesabschluss")
+        if item.manual:
+            if horizon not in ("daily_previous_18", "daily_same_06") or not sources:
+                raise ValueError(
+                    "Eine Tageskorrektur benötigt eine bestätigte Messgrenze"
+                )
+            continue
         actual_ids = {source.source_id for source in item.sources}
         if not actual_ids <= expected_source_ids:
             raise ValueError("Eine Bewertung nennt nicht zugeordnete Messquellen")
@@ -1505,4 +1553,5 @@ def _record_from_dict(data: Mapping[str, Any], timezone: ZoneInfo) -> ArchiveRec
         **calibration,
         short_term=validate_trial(data.get("short_term")),
         temperature_comparison=validate_comparison(data.get("temperature_comparison")),
+        measured_assessment=measured,
     )

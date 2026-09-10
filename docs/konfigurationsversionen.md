@@ -110,6 +110,14 @@ verlustfrei migriert; bestehende Datensätze erhalten keine erfundenen
 Alternativprognosen. Config Entries bleiben 1.1.
 Siehe [Temperaturvergleich](temperaturvergleich.md).
 
+## Archiv-Store 7: manuell bestätigte Tageserträge
+
+Version 7 ergänzt bei bewussten Tageskorrekturen `assessment.manual` und
+`measured_assessment` als erhaltene automatische Bewertung. Die Migration aus
+Versionen 1–6 ergänzt keine Korrekturen und verändert keine alten Belege.
+Config Entries 1.1, Mess-Store 2 und Lern-Store 1 bleiben unverändert.
+Die [Tageskorrektur](tageskorrektur.md) dokumentiert Vorrang, Rücknahme und Grenzen.
+
 ## Archiv-Store 6: experimentelle Minderertragshinweise
 
 Version 6 ergänzt optional einen begrenzten Hinweiszustand mit höchstens 97

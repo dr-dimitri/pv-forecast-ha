@@ -330,13 +330,15 @@
           "measurements": "PV-Erzeugung",
           "dashboard": "Dashboard",
           "advanced_options": "Erweiterte Funktionen",
-          "health": "Betrieb prüfen"
+          "health": "Betrieb prüfen",
+          "daily_correction": "Tagesertrag korrigieren"
         },
         "menu_option_descriptions": {
           "plant_options": "Dachflächen und maximale Wechselrichterleistung bearbeiten.",
           "measurements": "Vorhandenes KSEM auswählen oder PV-Sensoren manuell zuordnen. Optional.",
           "dashboard": "Eigene PV-Seite einrichten oder deren Titel ändern.",
-          "advanced_options": "Archiv, Kalibrierung, Prognosehorizont, AC-Gruppen und experimentelles Horizontprofil."
+          "advanced_options": "Archiv, Kalibrierung, Prognosehorizont, AC-Gruppen und experimentelles Horizontprofil.",
+          "daily_correction": "Einen abgeschlossenen Archivtag bestätigen, ändern oder auf den Messwert zurücksetzen."
         }
       },
       "add_roof": {
@@ -746,6 +748,33 @@
           "health": "Erneut prüfen",
           "init": "Zurück zur Übersicht"
         }
+      },
+      "daily_correction": {
+        "title": "Tagesertrag korrigieren",
+        "description": "Wähle einen abgeschlossenen Tag. Verfügbar sind gespeicherte Tagesprognosen der letzten 365 Tage mit zugeordneten AC-PV-Messquellen. Das Archiv muss zuvor unter „Erweiterte Funktionen → Archiv“ aktiviert worden sein. Maßgeblich ist die damalige Anlagenzeitzone.",
+        "data": {
+          "date": "Tag"
+        }
+      },
+      "daily_correction_context": {
+        "title": "Messgrenze auswählen",
+        "description": "Für dieses Datum sind unterschiedliche Anlagen- oder Quellenstände gespeichert. Wähle genau die Messgrenze, zu der dein Tagesertrag gehört.",
+        "data": {
+          "context": "Anlagen- und Quellenstand"
+        }
+      },
+      "daily_correction_edit": {
+        "title": "Tagesertrag bestätigen",
+        "description": "**{date} · {timezone}**\n\n**Messgrenze:** {scope}\n\n**Automatisch erfasst:** {measured}\n\n**Bisherige Korrektur:** {corrected}\n\nGib den endgültigen AC-PV-Gesamtertrag dieses Tages ein. Der bestätigte Wert wird für Tagesberichte, Vergleiche und die Selbstkalibrierung verwendet. Stundenwerte bleiben unverändert.\n\n„Korrektur zurücknehmen“ verwendet wieder die erhaltene automatische Bewertung. Beim Schließen ohne Bestätigung wird nichts gespeichert.",
+        "data": {
+          "energy_kwh": "Bestätigter Tagesertrag",
+          "remove": "Korrektur zurücknehmen",
+          "confirm": "Ich bestätige den endgültigen PV-Ertrag für den gesamten Tag und dieselbe Messgrenze bzw. die Rücknahme. Netzexport, Verbrauch und Batterieentladung sind nicht enthalten."
+        }
+      },
+      "daily_correction_saved": {
+        "title": "Tagesertrag gespeichert",
+        "description": "Der bestätigte Tageswert bzw. die Rücknahme wurde gespeichert. Tagesauswertungen verwenden den maßgeblichen Wert; abhängige Kalibrierungsnachweise wurden erneut geprüft. Eine bereits geöffnete historische Kartenansicht kannst du mit „Aktualisieren“ neu laden."
       }
     },
     "error": {
@@ -780,10 +809,17 @@
       "measurement_device_unavailable": "Das Gerät ist nicht mehr verfügbar. Prüfe seine Integration und wähle es erneut aus.",
       "measurement_helper_failed": "Der Energiezähler konnte nicht eingerichtet werden. Bitte prüfe die Messquelle und versuche es erneut.",
       "last_roof_required": "Mindestens eine Dachfläche muss erhalten bleiben. Füge zuerst ein neues Dach hinzu. Wenn du die PV-Anlage nicht mehr verwenden möchtest, entferne ihren Integrationseintrag.",
-      "measurement_delete_failed": "Die Messdaten konnten nicht sicher gelöscht werden. Prüfe freien Speicher und HA-Protokoll und versuche es erneut."
+      "measurement_delete_failed": "Die Messdaten konnten nicht sicher gelöscht werden. Prüfe freien Speicher und HA-Protokoll und versuche es erneut.",
+      "daily_correction_unavailable": "Für diesen abgeschlossenen Tag gibt es keinen passenden gespeicherten Tagesstand mit bestätigten PV-Messquellen. Prüfe Datum, Archivierung und Messgrenze. Verfügbar sind die letzten 365 Tage.",
+      "daily_correction_invalid": "Bitte einen gültigen Tag und einen endlichen, nichtnegativen Tagesertrag in kWh eingeben. Null ist zulässig.",
+      "daily_correction_changed": "Der Tagesstand wurde inzwischen geändert. Bitte den Tag erneut öffnen.",
+      "daily_correction_confirmation_required": "Bitte den endgültigen Tagesertrag bzw. die Rücknahme ausdrücklich bestätigen.",
+      "daily_correction_save_failed": "Der Wert ist noch nicht sicher gespeichert. Bitte erneut bestätigen. Bis zum erfolgreichen Schreiben kann er nur vorübergehend angewendet sein."
     },
     "abort": {
-      "reconfigure_entry_changed": "Die Anlage wurde während der Bearbeitung anderweitig geändert. Bitte starte die Bearbeitung erneut."
+      "reconfigure_entry_changed": "Die Anlage wurde während der Bearbeitung anderweitig geändert. Bitte starte die Bearbeitung erneut.",
+      "history_unavailable": "Das Archiv ist nicht verfügbar. Bitte die Anlage und ihren Archivspeicher prüfen.",
+      "daily_correction_changed": "Der Tagesstand oder die Anlage wurde inzwischen geändert. Bitte die Korrektur erneut öffnen."
     }
   },
   "selector": {
@@ -1086,7 +1122,8 @@
     "health_group_cache": "Neustartcache",
     "health_severity_info": "Information",
     "health_severity_warning": "Hinweis",
-    "health_severity_error": "Fehler"
+    "health_severity_error": "Fehler",
+    "daily_correction_missing": "Kein bestätigter Wert vorhanden"
   },
   "issues": {
     "dashboard_update": {

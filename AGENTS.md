@@ -667,3 +667,11 @@ Fehlende Werte bleiben leer. Backendwerte, Qualitätsmerkmale, Abdeckungsprüfun
 und Mess-/Archiv-/Lernregeln bleiben unverändert. Diese in Issue #1 festgehaltene
 Darstellungsentscheidung ersetzt die entgegenstehenden Kennzeichnungs- und
 Kurvenvorgaben der Karte.
+
+## Manuell bestätigter Tagesertrag vom 10.09.2026
+
+Auf ausdrücklichen Anwenderwunsch bietet der administrative Options Flow „Tagesertrag korrigieren“. Für vorhandene archivierte Tagesstände der letzten 365 abgeschlossenen lokalen Tage kann ein nichtnegativer endlicher AC-Gesamtertrag in kWh eingegeben, nachträglich geändert oder zurückgenommen werden. Die Bestätigung gilt für dieselbe gesamte PV-Messgrenze; Netzexport, Verbrauch und Batterieentladung sind keine Tageserzeugung. Alte Anlagen-/Quellenkontexte werden ausdrücklich ausgewählt und nicht auf die aktuelle Anlage übertragen. Ohne passenden gespeicherten Tagesstand wird keine historische Prognose erfunden.
+
+Der bestätigte Wert ist die maßgebliche Tageswahrheit für Soll-Ist-Berichte, Tagesvergleiche, Erfahrungsbänder und Selbstkalibrierung unter deren bestehenden Zulassungs- und Zeitregeln. Die automatisch erfasste Bewertung bleibt zusätzlich erhalten. Beide Tagesstichtage derselben Vergleichsgrundlage erhalten dieselbe Korrektur; Stunden-/Restfenster, Rohzähler und fremde HA-Sensoren werden nicht aus einem Tagesgesamtwert umgerechnet. Rücknahme verwendet wieder die erhaltene automatische Bewertung. Änderungen erhalten den tatsächlichen Bestätigungszeitpunkt und höchstens drei frühere Bewertungsrevisionen; abhängige Lernfreigaben und Beobachtungsbelege werden erneut geprüft.
+
+Archiv-Store 7 migriert Versionen 1–6 verlustfrei ohne erfundene Korrekturen. Quellen-/Archivlöschung entfernt zugehörige Korrekturen einschließlich der bewahrten Messkopien. Bestehende Aufbewahrungs-, Speicher- und Leserechte bleiben erhalten. Bewusste Korrekturen werden unmittelbar gespeichert und erst nach erfolgreichem Schreiben bestätigt; veraltete Dialoge dürfen neuere Korrekturen nicht überschreiben. Keine zusätzlichen Stores, Entities, öffentlichen Schreibaktionen, Geräte-/Wetterabrufe oder Config-Entry-Reloads; Schema 1.1 bleibt bestehen. Karte und Archivexport kennzeichnen korrigierte Tageswerte und erhalten den ursprünglichen Messwert als Kontext.

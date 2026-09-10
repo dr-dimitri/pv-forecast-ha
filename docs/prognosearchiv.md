@@ -1,5 +1,11 @@
 # Prognosestände und ehrlicher Soll-Ist-Vergleich
 
+Endgültige AC-Tageserträge lassen sich im Optionsdialog nachträglich
+[korrigieren](tageskorrektur.md). Die bestätigte Tageswahrheit ersetzt die
+automatische Tagesbewertung für Auswertungen; der ursprüngliche Messbeleg
+bleibt zusätzlich erhalten. Archiv-Store 7 übernimmt Vorgängerversionen
+verlustfrei und bewahrt die bisherigen Speichergrenzen.
+
 Das Prognosearchiv wird bewusst in der Einrichtung oder unter **Konfigurieren →
 Prognosearchiv** aktiviert. Es beobachtet die vorhandenen gemeinsamen Prognosen
 und lokalen Messwerte; es fragt keine zusätzlichen Geräte, Wetteranbieter oder
