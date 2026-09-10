@@ -219,6 +219,13 @@ async function checkNavigation(page, card, test) {
 
 // Echte Browserereignisse prüfen die Auswahl unabhängig von Backendberechnungen.
 async function checkChart(page, card, test) {
+  if (test.scenario === "offset-measurements") {
+    const partial = card.locator("#interval-chart .actual-partial-line");
+    assert.ok(await partial.count() > 0, "Versetzte positive Messwerte benötigen eine sichtbare Teilkurve");
+    const bounds = await partial.first().evaluate((element) => element.getBBox().y);
+    assert.ok(bounds < 198, "Die Teilkurve liegt oberhalb der nächtlichen Nulllinie");
+    assert.match(await card.locator(".legend").first().textContent(), /Teilweise erfasst/);
+  }
   const chart = card.locator("#interval-chart");
   const markers = await chart.locator(".hour-tick").evaluateAll((items) => items.map((item) => ({
     x: item.x1.baseVal.value, endX: item.x2.baseVal.value,
@@ -587,6 +594,7 @@ async function main() {
       representative: (viewport === 360 && theme === "light") || (viewport === 768 && theme === "custom") || (viewport === 1440 && theme === "dark"),
     })));
     matrix.push(
+      ...["light", "dark"].map((theme) => ({ name: `360-offset-${theme}`, viewport: 360, cardWidth: 360, theme, scenario: "offset-measurements" })),
       { name: "desktop-card360", viewport: 1440, cardWidth: 360, theme: "light" },
       { name: "360-long-large", viewport: 360, cardWidth: 360, theme: "light", stress: true },
       { name: "1440-long-large", viewport: 1440, cardWidth: 1440, theme: "dark", stress: true },

@@ -136,3 +136,18 @@ werden weder an Fenstergrenzen geteilt noch proportional auf Stunden verteilt.
 Die je Quelle gültigen Deltas und die gemeinsame Aggregation bleiben die
 Berechnungsgrundlage; ein großer Rohdatensatz wird dafür nicht je Intervall
 vollständig erneut durchsucht.
+
+Zusätzlich enthält jedes Intervall `observed_energy_kwh`: die Summe der bereits
+belegten, vollständig innerhalb des Fensters liegenden Zählerdifferenzen nach
+allen bestehenden Quellen-, Lücken- und Korrekturregeln. Bei unvollständigen
+Stunden ist dies nur eine Teilmenge; `energy_kwh` und `ac_power_kw` bleiben null.
+Ohne belegte Differenzen sowie für noch nicht abgeschlossene Fenster bleibt
+auch `observed_energy_kwh` null. Gesunde Nullplateaus behalten die bestehende
+exakte Randzuordnung. Es gibt keine Hochrechnung auf eine vollständige Stunde.
+
+Die Karte zeichnet solche Teilmengen gestrichelt in der Produktionsfarbe und
+kennzeichnet sie in Legende, Intervallauswahl und Tabelle als „teilweise erfasst“.
+So bleiben positive Messwerte bei üblichen, zur vollen Stunde versetzten
+Zählermeldungen sichtbar. Die vollständige Stundenproduktion ist dabei weiterhin
+unbekannt. Archiv, Lernen und vollständige Prognosevergleiche verwenden weiterhin
+nur ihre bisherigen zulässigen Messwerte.

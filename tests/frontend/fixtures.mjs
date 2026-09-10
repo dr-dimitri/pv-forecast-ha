@@ -1,5 +1,5 @@
 // Ausschließlich synthetische, deterministische Testdaten; keine Modellberechnung.
-export const SCENARIOS = ["restored","no-source", "no-measurement", "archive-off", "archive-empty", "zero", "shading", "horizon","underperformance", "sunny", "gaps", "stale", "empty", "acl", "outage", "old", "roof", "deleted-roof", "spring", "fold", "kolkata", "midnight", "experience", "planning-unavailable"];
+export const SCENARIOS = ["offset-measurements", "restored","no-source", "no-measurement", "archive-off", "archive-empty", "zero", "shading", "horizon","underperformance", "sunny", "gaps", "stale", "empty", "acl", "outage", "old", "roof", "deleted-roof", "spring", "fold", "kolkata", "midnight", "experience", "planning-unavailable"];
 const HOURS = [0, 0, 0, 0, 0, 0, 0.1, 0.38, 0.95, 1.7, 2.45, 3.1, 3.6, 3.4, 2.9, 2.1, 1.4, 0.7, 0.22, 0.04, 0, 0, 0, 0];
 const iso = (instant) => new Date(instant).toISOString();
 
@@ -36,6 +36,12 @@ export function fixture(scenario = "sunny", { day = "today", roof_id } = {}) {
     const complete = Date.parse(item.end) <= asOf && !(scenario === "gaps" && [8, 9, 10, 11].includes(index));
     return { start: item.start, end: item.end, energy_kwh: complete ? [0, 0, 0, 0, 0, 0, 0.08, 0.31, 0.81, 1.4, 2.5, 3.0, 3.7][index] ?? 0 : null, ac_power_kw: null, energy_complete: complete, quality_flags: complete ? [] : ["incomplete"], source_count: 2 };
   });
+  if (scenario === "offset-measurements") {
+    for (const item of totalIntervals) if (item.energy_kwh > 0) {
+      // Entspricht ganzen Zählerdifferenzen innerhalb versetzter Stundenränder.
+      Object.assign(item, { observed_energy_kwh: item.energy_kwh, energy_kwh: null, energy_complete: false, quality_flags: ["boundary_gap", "incomplete"] });
+    }
+  }
   if (scenario === "shading") view.horizon_shading = { rule_version: 1, active: true, experimental: true, measured_improvement: "unavailable" };
   if (scenario === "horizon") view.daily_forecasts = Array.from({ length: 7 }, (_, i) => ({ date: `2026-09-${10 + i}`, energy_kwh: i === 3 ? null : [24, 25, 18, 0, 30, 27, 22][i], tendency: i >= 2, quality_flags: i === 2 ? ["gti_fallback"] : [] }));
   const history = {

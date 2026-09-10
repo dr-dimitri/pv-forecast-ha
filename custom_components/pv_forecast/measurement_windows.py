@@ -102,6 +102,9 @@ async def async_interval_windows(
                 "start": start.isoformat(),
                 "end": end.isoformat(),
                 "energy_kwh": energy,
+                # Belegte Teilsummen bleiben sichtbar, ohne Randdifferenzen
+                # aufzuteilen oder eine vollständige Stunde zu behaupten.
+                "observed_energy_kwh": total["energy_kwh"] if end <= now else None,
                 "ac_power_kw": power,
                 "energy_complete": complete,
                 "quality_flags": sorted(flags),

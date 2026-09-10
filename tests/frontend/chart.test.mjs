@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { intervalAtPosition, intervalDetails, intervalKey, loadView, renderIntervalDetails, tableRows } from "../../custom_components/pv_forecast/frontend/pv-forecast-card.js";
+import { intervalAtPosition, intervalDetails, intervalKey, loadView, renderContent, renderIntervalDetails, tableRows } from "../../custom_components/pv_forecast/frontend/pv-forecast-card.js";
 import { fixtureHass } from "./fixtures.mjs";
 
 async function load(scenario) {
@@ -50,4 +50,24 @@ test("Ausgewähltes Intervall liest neue Werte desselben UTC-Schlüssels ohne ei
   assert.equal(intervalDetails(state, key).sources.forecast.energy_kwh, 1.2345);
   state.forecast.data.intervals[8].is_complete = false;
   assert.equal(intervalDetails(state, key).sources.forecast.energy_kwh, null);
+});
+
+
+test("Positive Teilmengen versetzter Messungen bleiben sichtbar und ausdrücklich unvollständig", async () => {
+  const state = await load("offset-measurements"), rows = tableRows(state);
+  const key = intervalKey(rows[8]);
+  const detail = intervalDetails(state, key);
+  assert.equal(detail.sources.actual.status, "incomplete");
+  assert.equal(detail.sources.actual.energy_kwh, null);
+  assert.equal(detail.sources.actual.observed_energy_kwh, 0.81);
+  assert.equal(rows[8].actual, null);
+  assert.equal(rows[8].actual_observed, 0.81);
+  const html = renderContent({ config_entry_id: "demo-plant", day: "today" }, state);
+  assert.match(html, /class="actual-line actual-partial-line"/);
+  assert.match(html, /0,81 · teilweise erfasst/);
+  assert.match(html, /nur belegte Teilmengen/);
+  assert.match(renderIntervalDetails(state, key), /0,81 kWh · teilweise erfasst; vollständige Menge unbekannt/);
+  // Alte Backendantworten und unvollständige Werte ohne Teilsumme bleiben leer.
+  for (const item of state.measurement.data.total_intervals) delete item.observed_energy_kwh;
+  assert.doesNotMatch(renderContent({}, state), /class="actual-line actual-partial-line"/);
 });
