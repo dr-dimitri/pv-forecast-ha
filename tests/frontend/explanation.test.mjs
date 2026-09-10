@@ -18,7 +18,10 @@ test("Geschlossene Erklärung fordert keine Zusatzdaten, aktive Ansicht nur vorh
   assert.match(renderContent(config,opened.state),/Prognose erklärt/);
   assert.doesNotMatch(renderContent(config,opened.state),/class="raw-line"/);
   const html=renderContent({...config,show_raw_forecast:true},opened.state);
-  assert.match(html,/class="raw-line"/);assert.match(html,/Grundmodell ohne Selbstkalibrierung/);
+  assert.doesNotMatch(html,/class="raw-line"/);assert.match(html,/Grundmodell ohne Selbstkalibrierung/);
+  const chart = html.match(/<svg id="interval-chart"[\s\S]*?<\/svg>/)[0];
+  for (const item of opened.state.forecast.envelope.explanation.raw_intervals) item.energy_kwh = 10000;
+  assert.equal(renderContent({...config,show_raw_forecast:true},opened.state).match(/<svg id="interval-chart"[\s\S]*?<\/svg>/)[0], chart);
   assert.match(html,/Zusätzliche Kürzung durch Anlagenlimit/);
   assert.match(html,/keine gemessenen Geräteverluste/);
 });
@@ -70,7 +73,7 @@ for (const mode of ["available", "roof", "missing", "unavailable", "wrong_day", 
 
     const restored = await load({ include_explanation: true });
     const returned = renderContent(options, restored.state, 360, null, 7, {}, intervalKey(tableRows(restored.state)[0]));
-    assert.match(returned, /class="raw-line"/);
+    assert.doesNotMatch(returned, /class="raw-line"/);
     assert.match(returned.match(/<section id="interval-detail"[\s\S]*?<\/section>/)[0], /Grundmodell ohne Selbstkalibrierung/);
   });
 }

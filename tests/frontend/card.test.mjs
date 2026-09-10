@@ -15,7 +15,7 @@ test("Ist-Kennzahl verwendet nach Standortwechsel nur aktuelle Messanteile", asy
   state.measurement.data.current_location_total_energy = { energy_kwh: 2, energy_complete: false };
   const html = renderContent(config, state);
   assert.match(html, /Ist heute<\/dt><dd>2 <small>kWh<\/small>/);
-  assert.match(html, /Unvollständig erfasst/);
+  assert.doesNotMatch(html, /Unvollständig erfasst/);
   assert.doesNotMatch(html, /Ist heute<\/dt><dd>99 /);
 });
 const flush = async () => { for (let index = 0; index < 30; index++) await Promise.resolve(); };
@@ -169,12 +169,12 @@ for (const version of [undefined, 2]) test(`Separater 30-Tage-Bericht weist unbe
   } finally { card.disconnectedCallback(); }
 });
 
-test("Teilweise erfasste Energie bleibt ausdrücklich unvollständig, mehrere Zähler werden nicht im Browser addiert", async () => {
+test("Ist-Energie bleibt unverändert ohne Erfassungshinweis, mehrere Zähler werden nicht im Browser addiert", async () => {
   const { state } = await load("gaps");
   const html = renderContent(config, state, 328);
   assert.match(html, /5,6/);
-  assert.match(html, /Unvollständig erfasst/);
-  assert.match(html, /nur der bisher belegte Teil/);
+  assert.doesNotMatch(html, /Unvollständig erfasst/);
+  assert.doesNotMatch(html, /nur der bisher belegte Teil|Messung unvollständig/);
   assert.match(html, /Schattierte Lücken/);
   assert.equal(state.measurement.data.total_energy.source_count, 2);
   assert.equal(tableRows(state)[8].actual, null);
@@ -256,7 +256,8 @@ test("Dynamische Texte sind HTML-escaped; Semantik und Tabellenfallback sind vor
   assert.match(html, /scope="row"/);
   assert.match(html, /role="group" aria-roledescription="Interaktives Diagramm"/);
   assert.doesNotMatch(html, /class="history-line"/);
-  assert.match(html, /class="actual-bar"/);
+  assert.match(html, /class="actual-line"/);
+  assert.doesNotMatch(html, /class="actual-bar"/);
 });
 
 test("Veralteter Stand und leeres Archiv werden nicht als aktuelle vollständige Nullprognose ausgegeben", async () => {
@@ -853,7 +854,7 @@ test("Halbstündige Zeitumstellung verschiebt Stundenstriche nicht auf halbe Uhr
   }
 });
 
-test("Abgeleitete und gemischte Ist-Energie bleibt numerisch unverändert und erkennbar", async () => {
+test("Abgeleitete und gemischte Ist-Energie bleibt numerisch unverändert ohne Herkunftshinweis", async () => {
   for (const energy of [0, 36]) {
     for (const complete of [true, false]) {
       const { state } = await load();
@@ -861,43 +862,46 @@ test("Abgeleitete und gemischte Ist-Energie bleibt numerisch unverändert und er
       const before = structuredClone(state);
       const html = renderContent(config, state, 360);
       assert.match(html, new RegExp(`Ist heute</dt><dd>${energy} <small>kWh</small>`));
-      assert.match(html, /enthält berechnete Energie/);
-      assert.match(html, /kein exakter Energiezählerstand/);
-      assert.match(html, /denselben Tag, Endzeitpunkt und AC-Messumfang/);
-      assert.doesNotMatch(html, /Tatsächlich produziert/);
-      assert.match(html, complete ? /Seit Tagesbeginn/ : /Unvollständig erfasst/);
+      assert.doesNotMatch(html, /enthält berechnete Energie/);
+      assert.doesNotMatch(html, /kein exakter Energiezählerstand/);
+      assert.doesNotMatch(html, /denselben Tag, Endzeitpunkt und AC-Messumfang/);
+      assert.match(html, /Tatsächlich produziert/);
+      assert.match(html, /Aktueller Stand/);
+      assert.doesNotMatch(html, /Seit Tagesbeginn|Unvollständig erfasst|measurement-incomplete|derived-energy/);
       assert.deepEqual(state, before);
     }
   }
 });
 
-test("Herkunftshinweis bewahrt Ausfälle und verschwindet ohne lesbare Messdaten", async () => {
+test("Ausfälle und fehlende Leserechte bleiben ohne Herkunftshinweis erkennbar", async () => {
   const { state } = await load();
   state.measurement.data.total_energy.quality_flags = ["derived_energy"];
   state.measurement.retained = true;
-  assert.match(renderContent(config, state), /Letzter Messstand · Aktualisierung fehlgeschlagen · enthält berechnete Energie/);
+  assert.match(renderContent(config, state), /Letzter Messstand · Aktualisierung fehlgeschlagen/);
+  assert.doesNotMatch(renderContent(config, state), /enthält berechnete Energie/);
   state.measurement = { status: "error", reason: "permission" };
   assert.doesNotMatch(renderContent(config, state), /enthält berechnete Energie|Ertrag enthält berechnete Energie/);
 });
 
-test("Aktuelle Messherkunft wird nach Standortwechsel nicht aus alten Anteilen abgeleitet", async () => {
+test("Standortwechsel und Dachansicht zeigen keine Herkunftshinweise", async () => {
   const { state } = await load();
   state.measurement.data.total_energy.quality_flags = ["derived_energy"];
   state.measurement.data.current_location_total_energy = { energy_kwh: 2, energy_complete: true, quality_flags: [] };
   assert.doesNotMatch(renderContent(config, state), /enthält berechnete Energie|Ertrag enthält berechnete Energie/);
   state.measurement.data.current_location_total_energy.quality_flags = ["derived_energy"];
-  assert.match(renderContent(config, state), /enthält berechnete Energie/);
+  assert.doesNotMatch(renderContent(config, state), /enthält berechnete Energie/);
   state.forecast.data.roof_id = "south";
   assert.doesNotMatch(renderContent(config, state), /enthält berechnete Energie|Ertrag enthält berechnete Energie/);
 });
 
 
-test("Intervall und Säule kennzeichnen auch gemischte Energie als teilweise berechnet", async () => {
+test("Intervall und Diagramm zeigen gemischte Energie ohne Herkunftshinweis oder Säulen", async () => {
   const { state } = await load("derived-energy");
   const interval = selectedSeries(state).actual.find((item) => item.energy_kwh > 0);
   const details = renderIntervalDetails(state, intervalKey(interval));
-  assert.match(details, /Enthält aus Leistung berechnete Energie/);
-  assert.match(renderContent(config, state), /kWh mit aus Leistung berechnetem Anteil/);
+  assert.doesNotMatch(details, /Enthält aus Leistung berechnete Energie/);
+  assert.match(details, /0,08 kWh/);
+  assert.doesNotMatch(renderContent(config, state), /berechnetem Anteil|class="actual-bar"/);
   const direct = await load("sunny");
   assert.doesNotMatch(renderContent(config, direct.state), /berechnete Energie|berechnetem Anteil/);
 });

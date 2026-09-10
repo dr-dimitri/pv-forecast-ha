@@ -200,8 +200,7 @@ wenn vorhanden: Er kann auch bei ausgefallenem Home Assistant weiterzählen.
 
 **Vergleich mit dem KOSTAL Solar Portal:** „Ist heute“ enthält beim KSEM-Assistenten
 **aus Leistung berechnete Energie**, keinen aus dem Portal übernommenen
-Energiezählerstand. Die Karte kennzeichnet diese Herkunft auch bei vollständiger
-Zeitabdeckung und bei einer Mischung mit echten Energiezählern. Die
+Energiezählerstand. Die
 [HA-Trapezregel](https://www.home-assistant.io/integrations/integration/#trapezoidal)
 nähert den Leistungsverlauf zwischen Meldungen linear an. Seltene Meldungen und
 schnelle Wechsel, etwa bei durchziehenden Wolken, können die Summe sowohl erhöhen
@@ -378,8 +377,8 @@ visuellen Editor ohne YAML einrichten.
 Sie zeigt vier Tageskennzahlen, Heute/Morgen und Gesamt-/Dachauswahl, eine
 Energiekurve sowie freiwillig erfasste Messungen und feste Archivprognosen.
 Messlücken werden nicht aufgefüllt; ohne zugeordnete Dachmessung bleibt diese
-in der Dachansicht fehlend. Das Tagesdiagramm unterscheidet **„Tatsächlich produziert“** (durchgezogen)
-und **„Unvollständig erfasst“** (gestrichelt). Feste Archivprognosen bleiben
+in der Dachansicht fehlend. Das Tagesdiagramm zeigt ausschließlich **„Aktuelle Prognose“** (durchgezogen)
+und **„Tatsächlich produziert“** (gestrichelt). Feste Archivprognosen bleiben
 in den Details und der separaten Archivansicht verfügbar. Die Karte verwendet die
 Anlagenzeitzone und unterscheidet wiederholte Stunden bei Zeitumstellungen.
 
@@ -601,6 +600,6 @@ zeigt im Analysebereich einzelne abgeschlossene Archivtage mit eingefrorenen
 Stundenständen, ursprünglichem Kontext und belegten Archivmessungen.
 
 „Prognose erklärt“ macht den angewendeten Faktor und die beiden AC-Begrenzungen
-für die aktuelle Gesamtprognose nachvollziehbar. Die optionale Grundmodellkurve
-enthält bereits Temperaturannahme, Anwenderwirkungsgrad und reale AC-Grenzen.
+für die aktuelle Gesamtprognose nachvollziehbar. Die optionalen Grundmodellwerte
+enthalten bereits Temperaturannahme, Anwenderwirkungsgrad und reale AC-Grenzen.
 [Erklärung und Grenzen](docs/kalibrierung.md#angewendete-wirkung-nachvollziehen).
