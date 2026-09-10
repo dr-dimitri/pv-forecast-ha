@@ -603,6 +603,9 @@ async function main() {
       { name: "360-gaps", viewport: 360, cardWidth: 360, theme: "light", scenario: "gaps" },
       { name: "360-touch", viewport: 360, cardWidth: 360, theme: "light", touch: true },
     );
+    if (Number(prefix.split("-").at(-1)) >= 129) matrix.push(
+      ...["light", "dark"].map((theme) => ({ name: `360-restored-${theme}`, viewport: 360, cardWidth: 360, theme, scenario: "restored" })),
+    );
     const selectedCases = matrix.filter((test) => !option("case") || test.name === option("case"));
     assert.ok(selectedCases.length, "Unbekannter Browserfall");
     const results = [];

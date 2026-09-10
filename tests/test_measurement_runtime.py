@@ -549,3 +549,21 @@ async def test_registered_source_without_state_keeps_confirmed_identity(
         assert manager.identity_unresolved == ()
     finally:
         await manager.async_stop()
+
+
+async def test_restored_forecast_start_ignores_pre_start_meter_state(hass):
+    """Der Offline-Start macht stehengebliebene Zustände nicht zu frischen Messungen."""
+    with freeze_time(START, real_asyncio=True) as clock:
+        await _report(hass, clock, 10, minutes=0)
+        manager = MeasurementManager(hass, _entry(hass, _source()))
+        clock.move_to(START + timedelta(minutes=15))
+        await manager.async_start(fresh_after=START + timedelta(minutes=15))
+        assert manager._histories["source-1"].latest_reading is None
+        await _report(hass, clock, 11, minutes=20)
+        await _report(hass, clock, 12, minutes=30)
+        result = manager.snapshot(
+            START, START + timedelta(minutes=30), START + timedelta(minutes=30)
+        )
+        assert result["sources"][0]["energy_kwh"] == 1
+        assert not result["sources"][0]["complete"]
+        await manager.async_stop()

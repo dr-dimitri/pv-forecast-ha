@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 from datetime import UTC, datetime, time, timedelta
-from typing import Any, override
+from typing import TYPE_CHECKING, Any, override
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from homeassistant.config_entries import ConfigEntry
@@ -40,6 +40,9 @@ from .horizon import forecast_days_from_options
 from .models import ForecastDay, ForecastResult, PlanningValues
 from .temperature_comparison import COEFFICIENTS, mountings_from_options
 
+if TYPE_CHECKING:
+    from .forecast_cache_runtime import ForecastCacheManager
+
 _LOGGER = logging.getLogger(__name__)
 
 
@@ -69,10 +72,24 @@ class PvForecastCoordinator(TimestampDataUpdateCoordinator[ForecastResult]):
         self._update_in_progress = False
         self.planning_values: PlanningValues | None = None
         self.raw_data: ForecastResult | None = None
+        self.origin = "live"
+        self.restored_at: datetime | None = None
+        self.forecast_cache: ForecastCacheManager | None = None
         self.temperature_data: ForecastResult | None = None
         self.temperature_mountings: dict[str, str] | None = None
         self.calibration_factor = 1.0
         self.calibration_candidate_id: str | None = None
+
+    @callback
+    @override
+    def _async_refresh_finished(self) -> None:
+        """Nur ein abgeschlossener echter Abruf ersetzt Herkunft und Cachegeneration."""
+        super()._async_refresh_finished()
+        if self.last_update_success and not self._shutdown_requested:
+            self.origin = "live"
+            self.restored_at = None
+            if self.forecast_cache is not None:
+                self.forecast_cache.async_capture()
 
     @callback
     def async_set_calibration(self, factor: float, candidate_id: str | None) -> None:

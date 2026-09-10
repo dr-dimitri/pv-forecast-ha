@@ -72,6 +72,8 @@ def build_forecast_view(
     fetched_at: datetime | None,
     last_update_success: bool,
     *,
+    origin: str = "live",
+    restored_at: datetime | None = None,
     day: ForecastDay = "today",
     roof_id: str | None = None,
 ) -> dict[str, Any]:
@@ -130,6 +132,8 @@ def build_forecast_view(
         }
     return {
         "view_version": 1,
+        "origin": origin,
+        "restored_at": _utc(restored_at).isoformat() if restored_at else None,
         "as_of": now.isoformat(),
         "timezone": timezone_name,
         "plant_name": plant_name,

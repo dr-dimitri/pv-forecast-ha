@@ -225,5 +225,22 @@ async def async_get_config_entry_diagnostics(
         if history is not None
         else {"available": False}
     )
+    cache = getattr(runtime, "forecast_cache", None)
+    result["forecast_cache"] = {
+        "status": _allowed(
+            cache.status if cache else None,
+            frozenset(
+                {
+                    "disabled",
+                    "empty",
+                    "available",
+                    "unsupported_version",
+                    "storage_limit",
+                    "storage_unavailable",
+                    "invalid_snapshot",
+                }
+            ),
+        )
+    }
     result["calibration"] = _calibration_status(runtime.calibration)
     return result

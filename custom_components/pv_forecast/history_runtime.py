@@ -418,6 +418,7 @@ class ArchiveManager:
         calibration_signature = tuple(calibration.items())
         if (
             self.coordinator.last_update_success
+            and getattr(self.coordinator, "origin", "live") == "live"
             and self.coordinator.data is not None
             and fetched_at is not None
             and (

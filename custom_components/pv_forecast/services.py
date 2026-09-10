@@ -109,6 +109,10 @@ def async_setup_services(hass: HomeAssistant) -> None:
             coordinator.last_update_success_time,
             coordinator.last_update_success,
         )
+        result["origin"] = coordinator.origin
+        result["restored_at"] = (
+            coordinator.restored_at.isoformat() if coordinator.restored_at else None
+        )
         now = dt_util.utcnow()
         if "window" in call.data:
             try:
@@ -157,6 +161,8 @@ def async_setup_services(hass: HomeAssistant) -> None:
                     now,
                     coordinator.last_update_success_time,
                     coordinator.last_update_success,
+                    origin=coordinator.origin,
+                    restored_at=coordinator.restored_at,
                     day=call.data["day"],
                     roof_id=call.data.get("roof_id"),
                 )

@@ -726,7 +726,15 @@
           "forecast_horizon": "Prognosehorizont",
           "inverter_groups": "AC-Wechselrichtergruppen zuordnen",
           "horizon_profile": "Horizontprofil je Dach (experimentell)",
-          "init": "Zurück zur Übersicht"
+          "init": "Zurück zur Übersicht",
+          "forecast_cache": "Letzte Prognose speichern"
+        }
+      },
+      "forecast_cache": {
+        "title": "Prognose für Neustarts speichern",
+        "description": "Speichert unabhängig vom Prognosearchiv den letzten erfolgreichen Rohmodellstand. Bei einem Neustart ohne Internet bleibt dieser mit ursprünglicher Abrufzeit sichtbar; operative Planung und Sensoren behalten ihren Fehlerstatus. Ausschalten löscht ausschließlich diesen Cache.",
+        "data": {
+          "forecast_cache_enabled": "Letzte Prognose für Neustarts speichern"
         }
       }
     },
