@@ -29,7 +29,6 @@ from homeassistant.helpers.event import (
     async_track_state_report_event,
     async_track_time_interval,
 )
-from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
 from .configuration import location_fingerprint
@@ -44,6 +43,7 @@ from .measurements import (
 )
 from .models import ForecastResult
 from .outlook import build_day_outlook
+from .storage import ConfirmedStore
 
 _LOGGER = logging.getLogger(__name__)
 STORAGE_VERSION = 2
@@ -52,7 +52,7 @@ MAX_READINGS = 20_000
 SAVE_DELAY = 60
 
 
-class _MeasurementStore(Store[dict[str, Any]]):
+class _MeasurementStore(ConfirmedStore):
     """Standortkontexte alter Messsegmente ohne Änderung der Messwerte ergänzen."""
 
     location_data: dict[str, Any]
@@ -76,7 +76,7 @@ class _MeasurementStore(Store[dict[str, Any]]):
         return dict(old_data) | {"sources": sources}
 
 
-def _measurement_store(hass: HomeAssistant, entry_id: str) -> Store[dict[str, Any]]:
+def _measurement_store(hass: HomeAssistant, entry_id: str) -> ConfirmedStore:
     """Den unabhängig von Config Entries versionierten lokalen Speicher öffnen."""
 
     store = _MeasurementStore(
@@ -113,7 +113,7 @@ async def async_delete_measurement_source_data(
     data = await store.async_load()
     if isinstance(data, dict) and isinstance(data.get("sources"), dict):
         data["sources"].pop(source_id, None)
-        await store.async_save(data)
+        await store.async_save_checked(data)
 
 
 class MeasurementManager:
@@ -124,6 +124,7 @@ class MeasurementManager:
         self.entry = entry
         self.timezone = str(entry.data[CONF_TIME_ZONE])
         self._store = _measurement_store(hass, entry.entry_id)
+        self._store.async_track_writes(None, SAVE_DELAY)
         self._histories: dict[str, SourceHistory] = {}
         self._listeners: list[CALLBACK_TYPE] = []
         self._cancel_cleanup: CALLBACK_TYPE | None = None
@@ -202,6 +203,11 @@ class MeasurementManager:
             )
         )
 
+    @property
+    def storage_error(self) -> str | None:
+        """Schreibfehler melden, ohne die weiterhin gültige Erfassung zu sperren."""
+        return self._storage_error or self._store.write_error
+
     async def async_start(self, *, fresh_after: datetime | None = None) -> None:
         """Historie laden und ausschließlich lokale Ereignisse abonnieren."""
 
@@ -271,6 +277,7 @@ class MeasurementManager:
     async def async_stop(self) -> None:
         """Alle Listener und Timer beenden und ausstehende Daten speichern."""
 
+        self._store.async_stop_retries()
         if not self._running:
             return
         self._running = False
@@ -297,7 +304,7 @@ class MeasurementManager:
         replacement.mark_gap("data_deleted")
         self._histories[source_id] = replacement
         self._save_scheduled = False
-        await self._store.async_save(self._serialize())
+        await self._store.async_save_checked(self._serialize())
 
     @callback
     def preview(self, source_id: str) -> dict[str, Any]:
@@ -414,7 +421,7 @@ class MeasurementManager:
     ) -> dict[str, Any]:
         return {
             "schema_version": 1,
-            "storage_error": self._storage_error,
+            "storage_error": self.storage_error,
             "timezone": self.timezone,
             "start": start.isoformat(),
             "end": end.isoformat(),

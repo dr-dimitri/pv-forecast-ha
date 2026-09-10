@@ -633,6 +633,7 @@ class MeasurementFlowMixin:
             for item in sources
             if item["source_id"] == self._selected_measurement_source
         )
+        errors: dict[str, str] = {}
         if user_input is not None:
             if user_input.get("confirm_delete") is True:
                 if (entry := self._measurement_entry()) is not None:
@@ -641,18 +642,23 @@ class MeasurementFlowMixin:
                         async_delete_measurement_source_data,
                     )
 
-                    await async_delete_measurement_source_data(
-                        self.hass, entry, source["source_id"]
-                    )
-                if self._measurement_remove:
+                    try:
+                        await async_delete_measurement_source_data(
+                            self.hass, entry, source["source_id"]
+                        )
+                    except HomeAssistantError:
+                        errors["base"] = "measurement_delete_failed"
+                if self._measurement_remove and not errors:
                     self._measurement_options()[CONF_MEASUREMENT_SOURCES] = [
                         item
                         for item in sources
                         if item["source_id"] != source["source_id"]
                     ]
-            return await self.async_step_measurements()
+            if not errors:
+                return await self.async_step_measurements()
         return self.async_show_form(
             step_id="confirm_measurement_delete",
+            errors=errors,
             data_schema=vol.Schema(
                 {vol.Required("confirm_delete", default=False): BooleanSelector()}
             ),

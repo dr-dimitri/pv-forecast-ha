@@ -12,6 +12,20 @@ Archiv nicht erneut. Ohne Runtime bleiben Detailzustände ausdrücklich nicht
 prüfbar. Ein deaktiviertes Archiv, ausgeschaltetes Lernen und eine zu kleine
 Lernstichprobe sind keine technischen Defekte.
 
+Schreibfehler von Mess-, Archiv- und Lerndaten werden erst nach dem tatsächlichen
+Dateischreibversuch gemeldet. Ein fehlgeschlagener Stand bleibt als ungespeichert
+erkennbar. Solange die Anlage geladen ist, erfolgt ein weiterer Versuch im
+bestehenden Speichertakt, auch ohne neue Messmeldung; neue Daten verschieben
+diesen Termin nicht. Erfolgreiches Schreiben hebt den Schreibfehler wieder auf.
+Beim Entladen gibt es einen abschließenden Versuch und danach keine Wiederholungen.
+Ein weiterhin fehlerhafter Datenträger kann die Persistenz verhindern. Unbekannte
+oder unlesbare Speicherversionen bleiben davon getrennt und werden nicht überschrieben.
+
+Eine bewusst angeforderte Löschung oder Quittierung wird bei fehlgeschlagenem
+Speicherabschluss nicht als erfolgreich bestätigt. Die Änderung kann bereits im
+Arbeitsspeicher wirksam sein; prüfe freien Speicher und HA-Protokoll und wiederhole
+die Bestätigung. Die Betriebsprüfung selbst löst keinen Speicherversuch aus.
+
 Eine Anbieterpause bedeutet **frühestens wieder möglich**, nicht den Termin eines
 garantierten Abrufs. Neustarts oder Force-Updates werden nicht zum Umgehen der Pause
 empfohlen. Datenalter ist keine Fehlerwahrscheinlichkeit. Die Abdeckung des gesamten

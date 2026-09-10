@@ -178,7 +178,7 @@ async def async_get_config_entry_diagnostics(
             "running": measurements.running,
             "source_count": len(measurements._histories),
             "unresolved_identity_count": len(measurements.identity_unresolved),
-            "storage_error": _allowed(measurements._storage_error, _STORAGE_ERRORS),
+            "storage_error": _allowed(measurements.storage_error, _STORAGE_ERRORS),
         }
         if measurements is not None
         else {"available": False}
@@ -190,7 +190,7 @@ async def async_get_config_entry_diagnostics(
             "enabled": history.enabled,
             "loaded": history.loaded,
             "running": history.running,
-            "storage_error": _allowed(history._storage_error, _STORAGE_ERRORS),
+            "storage_error": _allowed(history.storage_error, _STORAGE_ERRORS),
         }
         if history is not None
         else {"available": False}

@@ -93,12 +93,12 @@ def capture_health(
         sources=tuple(sources),
         source_count=len(configured),
         measurements_available=manager is not None,
-        measurement_storage_error=bool(getattr(manager, "_storage_error", None)),
+        measurement_storage_error=bool(getattr(manager, "storage_error", None)),
         archive_enabled=entry.options.get("history_enabled") is True,
         archive_available=history is not None,
         archive_loaded=bool(getattr(history, "loaded", False)),
         archive_count=len(history._archive.records) if history else 0,
-        archive_storage_error=bool(getattr(history, "_storage_error", None)),
+        archive_storage_error=bool(getattr(history, "storage_error", None)),
         archive_truncated=bool(history and history._archive.retention_truncated),
         calibration_status=(
             calibration.snapshot().get("status") if calibration else None

@@ -19,7 +19,6 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import CALLBACK_TYPE, HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import entity_registry as er
-from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
 from .configuration import inverter_groups_from_options, roofs_from_options
@@ -42,6 +41,7 @@ from .measurement_runtime import MeasurementManager
 from .measurements import SourceConfig
 from .shading import CONF_HORIZON_PROFILES, HORIZON_RULE_VERSION
 from .short_term import trial_report
+from .storage import ConfirmedStore
 from .temperature_comparison import comparison_report, mountings_from_options
 from .uncertainty_data import current_experience_bands
 from .underperformance import empty_state, notification_due, observe
@@ -57,7 +57,7 @@ MAX_RECORDS = 6000
 ASSESSMENT_RETENTION = timedelta(days=7)
 
 
-class _HistoryStore(Store[dict[str, Any]]):
+class _HistoryStore(ConfirmedStore):
     """Alte Archive mit ihrer ursprünglichen Modell- und Tagesbasis bewahren."""
 
     async def _async_migrate_func(
@@ -75,7 +75,7 @@ class _HistoryStore(Store[dict[str, Any]]):
         return old_data
 
 
-def _history_store(hass: HomeAssistant, entry_id: str) -> Store[dict[str, Any]]:
+def _history_store(hass: HomeAssistant, entry_id: str) -> ConfirmedStore:
     return _HistoryStore(
         hass,
         STORAGE_VERSION,
@@ -126,7 +126,7 @@ async def async_delete_history_source_data(
     )
     if archive.delete_measurement_source(source_id):
         stored["archive"] = archive.to_dict()
-        await store.async_save(stored)
+        await store.async_save_checked(stored)
         persistent_notification.async_dismiss(
             hass, f"{DOMAIN}.observation.{entry.entry_id}"
         )
@@ -221,6 +221,7 @@ class ArchiveManager:
         self.enabled = entry.options.get("history_enabled") is True
         self._archive = HistoryArchive(self.timezone)
         self._store = _history_store(hass, entry.entry_id)
+        self._store.async_track_writes(self._write_finished, SAVE_DELAY)
         self._cancel_listener: CALLBACK_TYPE | None = None
         self._last_fetched_at: datetime | None = None
         self._storage_error: str | None = None
@@ -239,6 +240,16 @@ class ArchiveManager:
             "status": "off",
             "experimental": True,
         }
+
+    @property
+    def storage_error(self) -> str | None:
+        """Ladefehler bleiben Schreibsperren; Schreibfehler bleiben wiederholbar."""
+        return self._storage_error or self._store.write_error
+
+    @callback
+    def _write_finished(self) -> None:
+        if not self._store.write_pending:
+            self._dirty = False
 
     @property
     def running(self) -> bool:
@@ -339,12 +350,17 @@ class ArchiveManager:
         """Den gemeinsamen Listener beenden und ausstehende Daten speichern."""
 
         self._running = False
+        self._store.async_stop_retries()
         self._stopped = True
         if self._cancel_listener is not None:
             self._cancel_listener()
             self._cancel_listener = None
         await self._async_cancel_assessment()
-        if self._loaded and self._storage_error is None and self._dirty:
+        if (
+            self._loaded
+            and self._storage_error is None
+            and (self._dirty or self._store.write_pending)
+        ):
             await self._store.async_save(self._serialize())
 
     async def async_delete_data(self) -> None:
@@ -381,11 +397,13 @@ class ArchiveManager:
         self._mutation_in_progress = True
         try:
             await self._async_cancel_assessment()
-            if self._archive.delete_measurement_source(source_id):
+            changed = self._archive.delete_measurement_source(source_id)
+            if changed:
                 self._dismiss_observation()
                 self._observe(dt_util.utcnow())
                 self._dirty = True
-                await self._store.async_save(self._serialize())
+            if changed or self._store.write_pending:
+                await self._store.async_save_checked(self._serialize())
         finally:
             self._mutation_in_progress = False
 
@@ -597,7 +615,7 @@ class ArchiveManager:
         self._dismiss_observation()
         self._observe(dt_util.utcnow())
         self._dirty = True
-        await self._store.async_save(self._serialize())
+        await self._store.async_save_checked(self._serialize())
         if self.calibration is not None:
             self.calibration.async_reconcile()
 
@@ -664,7 +682,7 @@ class ArchiveManager:
         result.update(
             enabled=self.enabled,
             running=self.running,
-            storage_error=self._storage_error,
+            storage_error=self.storage_error,
         )
         result["short_term"] = trial_report(
             tuple(self._archive.records.values()),
@@ -732,7 +750,7 @@ class ArchiveManager:
         result.update(
             enabled=self.enabled,
             running=self.running,
-            storage_error=self._storage_error,
+            storage_error=self.storage_error,
         )
         if self._storage_error is not None or not self.loaded:
             result.update(
@@ -814,7 +832,6 @@ class ArchiveManager:
             max_bytes=MAX_STORAGE_BYTES - 1024,
         )
         self._save_scheduled = False
-        self._dirty = False
         return {
             "archive": self._archive.to_dict(),
             "last_fetched_at": (
