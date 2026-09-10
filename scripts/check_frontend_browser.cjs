@@ -82,7 +82,7 @@ function inspectCard(card) {
     const style = getComputedStyle(element);
     const isSvg = element instanceof SVGElement;
     const bounds = element.getBoundingClientRect();
-    if ((!isSvg || element.matches("text, tspan")) && bounds.width > 0 && (bounds.left < cardBounds.left - 1 || bounds.right > cardBounds.right + 1)) findings.push({ kind: "overflow", element: label(element), left: bounds.left, right: bounds.right, cardRight: cardBounds.right });
+    if (!element.parentElement?.closest(".table-scroll") && (!isSvg || element.matches("text, tspan")) && bounds.width > 0 && (bounds.left < cardBounds.left - 1 || bounds.right > cardBounds.right + 1)) findings.push({ kind: "overflow", element: label(element), left: bounds.left, right: bounds.right, cardRight: cardBounds.right });
     const directText = [...element.childNodes].some((node) => node.nodeType === Node.TEXT_NODE && node.textContent.trim());
     if (element.matches(".kpi dd") && element.scrollWidth > element.clientWidth + 1) findings.push({ kind: "kpi-overflow", element: label(element), width: element.clientWidth, textWidth: element.scrollWidth });
     if (!directText && !element.matches("input, select")) continue;
@@ -366,7 +366,7 @@ async function checkDataStates(browser, origin) {
       assert.deepEqual(unchanged, { changes: 0, same: true, connected: true });
       const inspection = await card.evaluate(inspectCard);
       assert.deepEqual(inspection.findings, [], scenario);
-      if (["no-source", "acl"].includes(scenario)) {
+      if (prefix === "ui-114" && ["no-source", "acl"].includes(scenario)) {
         const filename = `${prefix}-360-${scenario}.png`;
         await page.screenshot({ path: path.join(output, filename), fullPage: true });
         fs.copyFileSync(path.join(output, filename), path.join(root, "docs/images", filename));
@@ -396,6 +396,122 @@ async function checkDataStates(browser, origin) {
   } finally { await page.close(); }
 }
 
+async function checkAccessibility(browser, origin) {
+  const results = [];
+  for (const theme of ["light", "dark"]) {
+    const page = await browser.newPage({ viewport: { width: 320, height: 900 }, reducedMotion: "reduce" });
+    try {
+      await page.goto(`${origin}/tests/frontend/demo.html?width=360&theme=${theme}`);
+      const card = page.locator("pv-forecast-card");
+      await page.waitForFunction(() => document.querySelector("pv-forecast-card")._state?.loading === false);
+      const immediateToggle = await card.evaluate((element) => {
+        const details = element.shadowRoot.getElementById("planning");
+        details.open = true;
+        element._render();
+        return details.isConnected && details.open;
+      });
+      assert.equal(immediateToggle, true, "Update vor dem verzögerten toggle-Ereignis schließt keine Details");
+      const duration = card.locator("#planning-duration");
+      await duration.fill("123");
+      await duration.press("ArrowLeft"); await duration.press("ArrowLeft");
+      await card.evaluate((element) => {
+        element._testInput = element.shadowRoot.getElementById("planning-duration");
+        element._state.forecast.data.summary.today_kwh = 24;
+        element._render();
+      });
+      await duration.press("9");
+      assert.equal(await duration.inputValue(), "1923", "Cursorposition überlebt das Update während der Eingabe");
+      assert.equal(await card.evaluate((element) => element._testInput === element.shadowRoot.activeElement), true);
+      // Eine native Auswahl wird weder ersetzt noch werden ihre Optionen verändert.
+      const earliest = card.locator("#planning-earliest");
+      await earliest.focus(); await earliest.press("Alt+ArrowDown");
+      const select = await card.evaluate(async (element) => {
+        const select = element.shadowRoot.activeElement;
+        const first = select.firstChild;
+        element._state.forecast.data.as_of = new Date(Date.parse(element._state.forecast.data.as_of) + 60000).toISOString();
+        let mutations = 0;
+        const observer = new MutationObserver(() => mutations++);
+        observer.observe(select, { childList: true, attributes: true, subtree: true });
+        element._render(); await Promise.resolve(); observer.disconnect();
+        return { same: select === element.shadowRoot.activeElement, first: first === select.firstChild, mutations };
+      });
+      assert.deepEqual(select, { same: true, first: true, mutations: 0 });
+      await earliest.press("Escape"); await earliest.press("Tab");
+      await card.locator("#values-toggle").click();
+      const table = card.locator(".table-scroll");
+      await table.focus(); await table.press("ArrowRight");
+      const continuity = await card.evaluate((element) => {
+        const table = element.shadowRoot.querySelector(".table-scroll");
+        table.scrollLeft = 80;
+        const before = { left: table.scrollLeft, scroll: window.scrollY };
+        element._render();
+        return { before, after: { left: table.scrollLeft, scroll: window.scrollY }, same: table === element.shadowRoot.activeElement, details: element.shadowRoot.getElementById("values").open };
+      });
+      assert.deepEqual(continuity.before, continuity.after);
+      assert.equal(continuity.same && continuity.details, true);
+      await card.locator("#interval-chart").focus(); await card.locator("#interval-chart").press("Enter");
+      const announcement = await card.evaluate((element) => {
+        const live = element.shadowRoot.getElementById("interaction-status");
+        const before = live.textContent;
+        element._render();
+        return { before, unchanged: before === live.textContent };
+      });
+      assert.match(announcement.before, /UTC\+02:00/); assert.equal(announcement.unchanged, true);
+      await card.locator("#interval-chart").press("Escape");
+      assert.equal(await card.locator("#interval-detail").count(), 0);
+      // Textvergrößerung verdoppelt tatsächlich die Schrift, nicht nur das Viewportbild.
+      await card.evaluate((element) => {
+        element._state.forecast.data.summary.tomorrow_kwh = 123456.78;
+        element._state.forecast.data.plant_name = "Photovoltaikanlage am Mehrgenerationenhaus mit Werkstattanbau";
+        element._render();
+      });
+      await page.evaluate(() => { document.documentElement.style.fontSize = "200%"; });
+      await card.locator("details").evaluateAll((items) => { for (const item of items) item.open = true; });
+      const inspection = await card.evaluate(inspectCard);
+      assert.deepEqual(inspection.findings, []);
+      assert.ok(inspection.minimumText >= 27.9);
+      const controls = await card.locator("button, select, input, summary").evaluateAll((items) => items.filter((item) => item.checkVisibility()).map((item) => ({ id: item.id || item.textContent, width: item.getBoundingClientRect().width, height: item.getBoundingClientRect().height })));
+      assert.ok(controls.every((item) => item.width >= 44 && item.height >= 44), JSON.stringify(controls));
+      await page.evaluate(() => window.scrollTo(0, 0));
+      await page.screenshot({ path: path.join(output, `qa-320-${theme}-top.png`) });
+      const screenshot = `${prefix}-320-${theme}-text200.png`;
+      await page.screenshot({ path: path.join(output, screenshot), fullPage: true });
+      fs.copyFileSync(path.join(output, screenshot), path.join(root, "docs/images", screenshot));
+      // Entfernte Dachansicht: ein vorhandenes, sinnvoll benanntes Ziel erhält Fokus.
+      await card.locator("#roof").focus();
+      const removed = await card.evaluate((element) => {
+        element._config.roof_id = "removed";
+        element._state = { forecast: { status: "error", reason: "roof_removed", message: "Die ausgewählte Dachfläche ist nicht mehr vorhanden." } };
+        element._render();
+        return element.shadowRoot.activeElement?.id;
+      });
+      assert.equal(removed, "reset-roof");
+      await card.locator("#reset-roof").click();
+      await card.locator("#roof").waitFor();
+      assert.equal(await card.evaluate((element) => element.shadowRoot.activeElement?.id), "roof");
+      results.push({ theme, continuity, select, announcement, controls, inspection });
+    } finally { await page.close(); }
+  }
+  const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+  try {
+    await page.goto(`${origin}/tests/frontend/demo.html?width=360&multiple=1`);
+    await page.waitForFunction(() => [...document.querySelectorAll("pv-forecast-card")].every((card) => card._state?.loading === false));
+    assert.equal(await page.evaluate(() => window.demo.calls.length), 3);
+    await page.locator("pv-forecast-card").evaluateAll((cards) => cards.forEach((card) => { card.style.display = "none"; }));
+    await page.waitForFunction(() => [...document.querySelectorAll("pv-forecast-card")].every((card) => !card._visible));
+    const stopped = await page.evaluate(async () => {
+      const { connectionCache } = await import("/custom_components/pv_forecast/frontend/pv-forecast-card.js");
+      const cache = connectionCache(window.demo.hass);
+      return { listeners: [...cache.entries.values()].reduce((count, entry) => count + entry.listeners.size, 0), timer: cache.timer };
+    });
+    assert.deepEqual(stopped, { listeners: 0, timer: null });
+    await page.locator("pv-forecast-card").evaluateAll((cards) => cards.forEach((card) => card.remove()));
+    results.push({ multiple: true, readCalls: 3, stopped });
+  } finally { await page.close(); }
+  fs.writeFileSync(path.join(output, "accessibility.json"), JSON.stringify(results, null, 2));
+  console.log("Bedienung: Cursor, native Auswahl, Details, Scrollen, 320 px/200 % Text, Fokus bei Dachlöschung und geteilte Abrufe bestanden");
+}
+
 async function main() {
   fs.mkdirSync(output, { recursive: true });
   fs.mkdirSync(path.join(root, "docs/images"), { recursive: true });
@@ -406,6 +522,7 @@ async function main() {
     browser = await chromium.launch({ headless: true, ...(executablePath ? { executablePath } : {}) });
     const origin = `http://127.0.0.1:${server.address().port}`;
     if (Number(prefix.split("-").at(-1)) >= 114) await checkDataStates(browser, origin);
+    if (Number(prefix.split("-").at(-1)) >= 116) await checkAccessibility(browser, origin);
     const matrix = [360, 768, 1440].flatMap((viewport) => ["light", "dark", "custom"].map((theme) => ({
       name: `${viewport}-${theme}`, viewport, cardWidth: viewport, theme,
       representative: (viewport === 360 && theme === "light") || (viewport === 768 && theme === "custom") || (viewport === 1440 && theme === "dark"),
