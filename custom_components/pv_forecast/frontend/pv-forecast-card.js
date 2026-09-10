@@ -373,7 +373,7 @@ function renderNotices(state) {
 function renderTable(state) {
   const view = state.forecast.data;
   const rows = tableRows(state);
-  return `<details id="values"><summary id="values-toggle">Intervallwerte anzeigen <span>${rows.length} Intervalle</span></summary><p class="hint">kWh je angegebenem Intervall. „—“ bedeutet fehlend; 0 ist ein gültiger Wert. Zeitangaben gelten für ${escapeHtml(view.timezone)}.</p><table><caption class="sr-only">Intervallenergie in kWh</caption><thead><tr><th scope="col">Zeit</th><th scope="col">Prognose</th><th scope="col">1 Stunde<br>vorher</th><th scope="col">Ist</th></tr></thead><tbody>${rows.map((row) => `<tr><th scope="row"><time datetime="${escapeHtml(row.start)}">${escapeHtml(formatPlantTime(row.start, view.timezone))}</time><span class="until">bis ${escapeHtml(formatPlantTime(row.end, view.timezone))}</span></th><td>${energyText(row.forecast)}</td><td>${energyText(row.history)}</td><td>${energyText(row.actual)}</td></tr>`).join("")}</tbody></table></details>`;
+  return `<details id="values"><summary id="values-toggle">Intervallwerte anzeigen <span>${rows.length} Intervalle</span></summary><p class="hint">kWh je angegebenem Intervall. „—“ bedeutet fehlend; 0 ist ein gültiger Wert. Zeitangaben gelten für ${escapeHtml(view.timezone)}.</p><div class="table-scroll" tabindex="0" role="region" aria-label="Intervallwerte, horizontal scrollbar"><table><caption class="sr-only">Intervallenergie in kWh</caption><thead><tr><th scope="col">Zeit</th><th scope="col">Prognose</th><th scope="col">1 Stunde<br>vorher</th><th scope="col">Ist</th></tr></thead><tbody>${rows.map((row) => `<tr><th scope="row"><time datetime="${escapeHtml(row.start)}">${escapeHtml(formatPlantTime(row.start, view.timezone))}</time><span class="until">bis ${escapeHtml(formatPlantTime(row.end, view.timezone))}</span></th><td>${energyText(row.forecast)}</td><td>${energyText(row.history)}</td><td>${energyText(row.actual)}</td></tr>`).join("")}</tbody></table></div></details>`;
 }
 
 function renderShortTerm(report) {
@@ -495,7 +495,7 @@ export function renderPlanning(state, planningUI = {}) {
     forecast_unavailable: "Es liegt keine verwendbare Prognose für das Zeitfenster vor.",
   }[plan?.reason] ?? "Für diese Auswahl kann noch kein belastbares Solarzeitfenster angegeben werden.";
   const output = usable ? `<p class="feature-result">${escapeHtml(plantStamp(plan.start, view.timezone))}<br>bis ${escapeHtml(plantStamp(plan.end, view.timezone))}${finite(plan.energy_kwh) ? `<br><strong>${energyText(plan.energy_kwh)} kWh</strong> erwartet` : ""}</p><p class="hint">${plan.status === "started" ? "Dieses empfohlene Fenster läuft bereits und wird nicht automatisch verschoben." : plan.status === "completed" ? "Dieses empfohlene Fenster ist beendet." : "In diesem zusammenhängenden Fenster wird innerhalb deiner Auswahl besonders viel PV-Energie erwartet."}${plan.hysteresis_applied ? " Bei nur geringfügig geänderter Prognose bleibt die bisherige Empfehlung erhalten." : ""} Wetterabruf: ${escapeHtml(plantStamp(plan.fetched_at, view.timezone))}.</p>${plan.quality_flags?.length ? '<p class="hint">Die Prognose enthält Qualitätsmarkierungen. Das Zeitfenster bleibt eine Schätzung.</p>' : ""}` : result?.status === "loading" ? '<p class="hint">Zeitfenster wird berechnet …</p>' : result ? `<p class="hint">${escapeHtml(result.message ?? reason)}</p>` : '<p class="hint">Laufdauer und zulässigen Zeitraum wählen, dann bewusst berechnen.</p>';
-  return `<details id="planning"><summary id="planning-toggle">Bestes Solarzeitfenster <span>Gesamtanlage</span></summary><form id="planning-form"><label>Laufdauer in Minuten<input id="planning-duration" name="duration_minutes" type="number" inputmode="numeric" min="1" max="2880" step="1" required value="${escapeHtml(inputs.duration_minutes ?? 120)}"></label><label>Frühester Start<select id="planning-earliest" required>${optionList(inputs.earliest_start)}</select></label><label>Spätestes Ende<select id="planning-latest" required>${optionList(inputs.latest_end)}</select></label><button id="planning-calculate" class="reset-button" type="submit" ${choices.length ? "" : "disabled"}>Zeitfenster berechnen</button></form><p id="planning-input-notice" class="hint">${planningUI.dirty ? PLANNING_CHANGED_HINT : ""}</p>${output}<p class="hint">Basis sind die vorhandenen Prognoseintervalle mit gleichmäßiger mittlerer Leistung innerhalb jedes Intervalls. Für dieses Fenster gibt es noch kein belastbares Erfahrungsband. Verfügbarer Überschuss hängt zusätzlich von Hausverbrauch und Speicher ab. Es werden keine Geräte eingeschaltet.</p></details>`;
+  return `<details id="planning"><summary id="planning-toggle">Bestes Solarzeitfenster <span>Gesamtanlage</span></summary><form id="planning-form"><label>Laufdauer in Minuten<input id="planning-duration" name="duration_minutes" type="number" inputmode="numeric" min="1" max="2880" step="1" required value="${escapeHtml(inputs.duration_minutes ?? 120)}"></label><label>Frühester Start<select id="planning-earliest" required>${optionList(inputs.earliest_start)}</select><span class="selected-time" aria-hidden="true">${finite(millis(inputs.earliest_start)) ? escapeHtml(plantStamp(inputs.earliest_start, view.timezone)) : "Noch kein Start gewählt"}</span></label><label>Spätestes Ende<select id="planning-latest" required>${optionList(inputs.latest_end)}</select><span class="selected-time" aria-hidden="true">${finite(millis(inputs.latest_end)) ? escapeHtml(plantStamp(inputs.latest_end, view.timezone)) : "Noch kein Ende gewählt"}</span></label><button id="planning-calculate" class="reset-button" type="submit" ${choices.length ? "" : "disabled"}>Zeitfenster berechnen</button></form><p id="planning-input-notice" class="hint">${planningUI.dirty ? PLANNING_CHANGED_HINT : ""}</p>${output}<p class="hint">Basis sind die vorhandenen Prognoseintervalle mit gleichmäßiger mittlerer Leistung innerhalb jedes Intervalls. Für dieses Fenster gibt es noch kein belastbares Erfahrungsband. Verfügbarer Überschuss hängt zusätzlich von Hausverbrauch und Speicher ab. Es werden keine Geräte eingeschaltet.</p></details>`;
 }
 
 export function renderDailyTendencies(view) {
@@ -507,7 +507,7 @@ export function renderContent(config, state, width = 600, report = null, reportD
   const forecast = state?.forecast;
   const view = forecast?.data;
   const title = config.title || view?.plant_name || "PV-Prognose";
-  if (!view) return `<div class="header"><div><p class="eyebrow">PV FORECAST</p><h2>${escapeHtml(title)}</h2></div></div><div class="placeholder">${renderNotices(state)}</div>${forecast?.status === "error" && config.roof_id ? '<button class="reset-button" data-reset-roof>Gesamtanlage anzeigen</button>' : ""}`;
+  if (!view) return `<div class="header"><div><p class="eyebrow">PV FORECAST</p><h2 tabindex="-1">${escapeHtml(title)}</h2></div></div><div class="placeholder">${renderNotices(state)}</div>${forecast?.status === "error" && config.roof_id ? '<button class="reset-button" id="reset-roof" data-reset-roof>Gesamtanlage anzeigen</button>' : ""}`;
   const roof = view.roofs.find((item) => item.id === view.roof_id);
   const scope = roof?.name ?? "Gesamtanlage";
   const fetchedAt = forecast.envelope?.fetched_at;
@@ -518,7 +518,7 @@ export function renderContent(config, state, width = 600, report = null, reportD
   const actual = total?.energy_kwh;
   const actualHint = measurement?.retained || forecast?.retained ? "Letzter Messstand · Aktualisierung fehlgeschlagen" : view.roof_id ? "Keine Dachmessung" : measurement?.status === "ready" ? actualComplete ? "Seit Tagesbeginn" : finite(actual) ? "Unvollständig erfasst" : "Noch keine Messwerte" : measurement?.status === "loading" ? "Messdaten laden …" : "Keine Messdaten";
   const kpi = (name, value, detail, className = "") => `<div class="kpi ${className}${energyText(value).length > 6 ? " kpi-wide" : ""}"><dt>${name}</dt><dd>${energyText(value)} <small>kWh</small></dd><span>${detail}</span></div>`;
-  return `<div class="header"><div><p class="eyebrow">PV FORECAST</p><h2>${escapeHtml(title)}</h2><p class="subtitle">${escapeHtml(scope)} · ${escapeHtml(formatPlantDate(view.start, view.timezone))}</p></div><span class="badge ${view.stale ? "warning" : ""}">${forecast.retained ? "Letzter Stand" : view.stale ? "Veraltet" : "Prognose"}</span></div>
+  return `<div class="header"><div><p class="eyebrow">PV FORECAST</p><h2 tabindex="-1">${escapeHtml(title)}</h2><p class="subtitle">${escapeHtml(scope)} · ${escapeHtml(formatPlantDate(view.start, view.timezone))}</p></div><span class="badge ${view.stale ? "warning" : ""}">${forecast.retained ? "Letzter Stand" : view.stale ? "Veraltet" : "Prognose"}</span></div>
     <div class="controls"><div class="day-switch" role="group" aria-label="Prognosetag"><button data-day="today" aria-pressed="${config.day === "today"}">Heute</button><button data-day="tomorrow" aria-pressed="${config.day === "tomorrow"}">Morgen</button></div><label class="roof-label"><span>Fläche</span><select id="roof" aria-label="Fläche"><option value="">Gesamtanlage</option>${view.roofs.map((item) => `<option value="${escapeHtml(item.id)}" ${item.id === config.roof_id ? "selected" : ""}>${escapeHtml(item.name)}</option>`).join("")}</select></label></div>
     <nav class="section-nav" aria-label="Bereiche der PV-Karte"><button id="nav-overview" data-section="overview-heading">Übersicht</button>${view.roof_id ? "" : '<button id="nav-planning" data-section="planning-heading">Planen</button>'}<button id="nav-comparison" data-section="comparison-heading">Vergleichen</button></nav>
     <section aria-labelledby="overview-heading"><h3 class="section-heading" id="overview-heading" tabindex="-1">Tagesübersicht</h3>
@@ -534,29 +534,73 @@ export function renderContent(config, state, width = 600, report = null, reportD
 }
 
 const styles = `
-  :host{display:block;--pv-space:8px;--pv-muted:color-mix(in srgb,var(--secondary-text-color,#64717a) 85%,var(--primary-text-color,#202b32));--pv-radius:12px;--pv-text:14px;--pv-surface:var(--secondary-background-color,#f2f5f6);--pv-border:var(--divider-color,#e4e8eb);--pv-line:var(--primary-color,#007c91);--pv-archive:var(--secondary-text-color,#636b73);--pv-actual:color-mix(in srgb,var(--accent-color,#b88424) 55%,var(--primary-text-color,#202b32));color:var(--primary-text-color,#202b32);font-family:var(--paper-font-body1_-_font-family,Roboto,system-ui,sans-serif)}
+  :host{display:block;--pv-space:8px;--pv-muted:color-mix(in srgb,var(--secondary-text-color,#64717a) 85%,var(--primary-text-color,#202b32));--pv-radius:12px;--pv-text:.875rem;--pv-surface:var(--secondary-background-color,#f2f5f6);--pv-border:var(--divider-color,#e4e8eb);--pv-line:var(--primary-color,#007c91);--pv-archive:var(--secondary-text-color,#636b73);--pv-actual:color-mix(in srgb,var(--accent-color,#b88424) 55%,var(--primary-text-color,#202b32));color:var(--primary-text-color,#202b32);font-family:var(--paper-font-body1_-_font-family,Roboto,system-ui,sans-serif)}
   *{box-sizing:border-box}ha-card{display:block;background:var(--ha-card-background,var(--card-background-color,#fff));border-radius:var(--ha-card-border-radius,16px);border:var(--ha-card-border-width,1px) solid var(--ha-card-border-color,var(--divider-color,#e4e8eb));box-shadow:var(--ha-card-box-shadow,none);overflow:hidden} .body{padding:22px 22px 8px;min-width:0}
-  .header{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}.eyebrow{font-size:var(--pv-text);font-weight:700;letter-spacing:.14em;color:var(--pv-muted);margin:0 0 6px}h2{font-size:26px;font-weight:600;letter-spacing:-.025em;line-height:1.25;margin:0;overflow-wrap:anywhere}.subtitle{color:var(--pv-muted);font-size:var(--pv-text);margin:6px 0 0;overflow-wrap:anywhere}.badge{font-size:var(--pv-text);border:1px solid var(--divider-color,#e4e8eb);padding:5px 8px;border-radius:20px;white-space:nowrap}.warning{color:var(--warning-color,#956400)}
+  .header{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}.eyebrow{font-size:var(--pv-text);font-weight:700;letter-spacing:.14em;color:var(--pv-muted);margin:0 0 6px}h2{font-size:1.625rem;font-weight:600;letter-spacing:-.025em;line-height:1.25;margin:0;overflow-wrap:anywhere}.subtitle{color:var(--pv-muted);font-size:var(--pv-text);margin:6px 0 0;overflow-wrap:anywhere}.badge{font-size:var(--pv-text);border:1px solid var(--divider-color,#e4e8eb);padding:5px 8px;border-radius:20px;white-space:nowrap}.warning{color:var(--warning-color,#956400)}
   .controls{display:flex;flex-wrap:wrap;align-items:flex-end;gap:16px;justify-content:space-between;margin:24px 0 20px}.day-switch{display:flex;background:var(--pv-surface);padding:3px;border-radius:var(--pv-radius)}.day-switch button{border:0;border-radius:var(--pv-radius);background:transparent;color:var(--pv-muted);font:inherit;font-size:var(--pv-text);min-height:44px;padding:0 15px;cursor:pointer}.day-switch button[aria-pressed=true]{background:var(--card-background-color,#fff);box-shadow:0 1px 3px #0002;color:var(--primary-text-color,#202b32);font-weight:600}label{color:var(--pv-muted);font-size:var(--pv-text)}.roof-label{grid-template-columns:minmax(0,1fr);min-width:0;max-width:100%;flex:1;display:grid;gap:4px}select{width:100%;min-width:0;font:inherit;font-size:var(--pv-text);color:var(--primary-text-color,#202b32);background:var(--card-background-color,#fff);border:1px solid var(--pv-muted);border-radius:var(--pv-radius);min-height:44px;max-width:100%;padding:7px 25px 7px 10px}button:focus-visible,select:focus-visible,summary:focus-visible{outline:3px solid var(--primary-color,#007c91);outline-offset:3px}
-  .kpis{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--pv-space);margin:0 0 26px;padding:0}.kpi{min-width:0;padding:16px;background:var(--pv-surface);border-radius:var(--pv-radius)}.kpi dt{font-size:var(--pv-text);color:var(--pv-muted);margin-bottom:7px}.kpi dd{margin:0;font-size:30px;font-variant-numeric:tabular-nums;letter-spacing:-.035em;font-weight:600;white-space:normal;overflow-wrap:normal}.kpi small{font-size:var(--pv-text);font-weight:400;color:var(--pv-muted);letter-spacing:0}.kpi>span{display:block;color:var(--pv-muted);font-size:var(--pv-text);line-height:1.4;margin-top:5px}.measured dd{color:var(--pv-line)}
+  .kpis{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--pv-space);margin:0 0 26px;padding:0}.kpi{min-width:0;padding:16px;background:var(--pv-surface);border-radius:var(--pv-radius)}.kpi dt{font-size:var(--pv-text);color:var(--pv-muted);margin-bottom:7px}.kpi dd{margin:0;font-size:1.875rem;font-variant-numeric:tabular-nums;letter-spacing:-.035em;font-weight:600;white-space:normal;overflow-wrap:normal}.kpi small{font-size:var(--pv-text);font-weight:400;color:var(--pv-muted);letter-spacing:0}.kpi>span{display:block;color:var(--pv-muted);font-size:var(--pv-text);line-height:1.4;margin-top:5px}.measured dd{color:var(--pv-line)}
   .chart-heading{display:flex;justify-content:space-between;align-items:baseline;gap:8px}h3{font-size:var(--pv-text);font-weight:600;margin:0}.chart-heading>span{font-size:var(--pv-text);color:var(--pv-muted)}.legend{display:flex;flex-wrap:wrap;gap:8px 16px;margin:12px 0 8px;color:var(--pv-muted);font-size:var(--pv-text);line-height:1.4}.legend span{display:inline-flex;align-items:center;gap:6px}.legend i{display:inline-block;width:18px;flex-shrink:0}.forecast-key{border-top:3px solid var(--pv-line)}.history-key{border-top:2px dashed var(--pv-archive)}.actual-key{height:8px;background:var(--pv-actual);border:1px solid var(--primary-text-color,#202b32)}.chart{display:block;width:100%;height:auto;overflow:visible}.grid{stroke:var(--divider-color,#e4e8eb);stroke-width:1}.axis{fill:var(--pv-muted);font-size:11px}.axis tspan{font-size:10px}.forecast-line{stroke:var(--pv-line);stroke-width:2.5;fill:none;stroke-linejoin:round}.history-line{stroke:var(--pv-archive);stroke-width:2;stroke-dasharray:5 4;fill:none}.actual-bar{fill:var(--pv-actual);fill-opacity:.25;stroke:var(--pv-actual);stroke-width:1}.now{stroke:var(--pv-muted);stroke-width:1;stroke-dasharray:2 4}.now-label{font-size:11px;fill:var(--pv-muted)}.gap{fill:var(--pv-muted);opacity:.09}.empty-plot{font-size:var(--pv-text);fill:var(--pv-muted)}.chart-note{font-size:var(--pv-text);color:var(--pv-muted);text-align:right;margin:0 0 17px;overflow-wrap:anywhere}
-  .notices{padding:9px 11px;margin:0 0 16px;background:var(--pv-surface);border-radius:var(--pv-radius)}.notices p{font-size:var(--pv-text);line-height:1.5;color:var(--pv-muted);margin:3px 0}.placeholder{min-height:540px;font-size:14px;line-height:1.6;color:var(--pv-muted);padding:28px 0}
+  .notices{padding:9px 11px;margin:0 0 16px;background:var(--pv-surface);border-radius:var(--pv-radius)}.notices p{font-size:var(--pv-text);line-height:1.5;color:var(--pv-muted);margin:3px 0}.placeholder{min-height:540px;font-size:0.875rem;line-height:1.6;color:var(--pv-muted);padding:28px 0}
   .reset-button{min-height:44px;padding:10px 15px;border-radius:var(--pv-radius);border:1px solid var(--divider-color,#dce3e6);background:var(--card-background-color,#fff);color:var(--primary-color,#007c91);font:inherit;font-size:var(--pv-text);margin-bottom:16px;cursor:pointer}
-  details{border-top:1px solid var(--divider-color,#e4e8eb)}summary{min-height:48px;padding:15px 0;font-size:var(--pv-text);font-weight:500;cursor:pointer;line-height:1.5}summary span{font-size:var(--pv-text);color:var(--pv-muted);display:block;font-weight:400;margin-top:4px}.hint{font-size:var(--pv-text);line-height:1.6;color:var(--pv-muted);margin:0 0 14px}.report-label{display:flex;align-items:center;gap:12px;margin:0 0 12px}.report-metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin:12px 0 16px}.report-metrics dt{font-size:var(--pv-text);color:var(--pv-muted)}.report-metrics dd{margin:4px 0 0;font-size:19px}.report-metrics small{font-size:var(--pv-text);color:var(--pv-muted)}
+  details{border-top:1px solid var(--divider-color,#e4e8eb)}summary{min-height:48px;padding:15px 0;font-size:var(--pv-text);font-weight:500;cursor:pointer;line-height:1.5}summary span{font-size:var(--pv-text);color:var(--pv-muted);display:block;font-weight:400;margin-top:4px}.hint{font-size:var(--pv-text);line-height:1.6;color:var(--pv-muted);margin:0 0 14px}.report-label{display:flex;align-items:center;gap:12px;margin:0 0 12px}.report-metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin:12px 0 16px}.report-metrics dt{font-size:var(--pv-text);color:var(--pv-muted)}.report-metrics dd{margin:4px 0 0;font-size:1.1875rem}.report-metrics small{font-size:var(--pv-text);color:var(--pv-muted)}
   table{border-collapse:collapse;width:100%;table-layout:fixed;font-size:var(--pv-text);margin-bottom:12px}th,td{padding:9px 3px;border-bottom:1px solid var(--divider-color,#e4e8eb);text-align:right;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}th:first-child{width:34%;text-align:left}thead th{font-size:var(--pv-text);font-weight:500;color:var(--pv-muted)}tbody th{font-weight:400;font-size:var(--pv-text)}.until{display:block;color:var(--pv-muted);font-size:var(--pv-text);margin-top:3px}.sr-only{position:absolute;clip:rect(0,0,0,0);width:1px;height:1px;overflow:hidden}
-  @container (max-width:460px){.kpis{grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--pv-space)}.kpi{padding:12px}.kpi dd{font-size:30px}.body{padding:18px 16px 6px}.controls{gap:10px;margin-top:20px}.day-switch button{padding:0 12px}h2{font-size:24px}.badge{font-size:var(--pv-text)}.legend{column-gap:12px}}
-  .daily-tendencies{display:grid;gap:8px;font-size:14px}.daily-tendencies>div{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}.daily-tendencies dd{margin:0}
-  #planning-input-notice:empty{display:none}#planning-form{display:grid;gap:12px;margin-bottom:8px}#planning-form label{display:grid;gap:5px;min-width:0}#planning-form select{width:100%}#planning-form input{font:inherit;font-size:14px;min-height:42px;width:100%;padding:8px 10px;border:1px solid var(--pv-muted);border-radius:var(--pv-radius);background:var(--card-background-color,#fff);color:var(--primary-text-color,#202b32)}input:focus-visible{outline:3px solid var(--primary-color,#007c91);outline-offset:3px}#planning-calculate{margin:2px 0 4px}.feature-result{font-size:14px;line-height:1.7;margin:0 0 12px;overflow-wrap:anywhere}.feature-result strong{font-size:18px}.hint strong{color:var(--primary-text-color,#202b32)}
+  @container (max-width:460px){.kpis{grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--pv-space)}.kpi{padding:12px}.kpi dd{font-size:1.875rem}.body{padding:18px 16px 6px}.controls{gap:10px;margin-top:20px}.day-switch button{padding:0 12px}h2{font-size:1.5rem}.badge{font-size:var(--pv-text)}.legend{column-gap:12px}}
+  .daily-tendencies{display:grid;gap:8px;font-size:0.875rem}.daily-tendencies>div{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}.daily-tendencies dd{margin:0}
+  #planning-input-notice:empty{display:none}#planning-form{display:grid;gap:12px;margin-bottom:8px}#planning-form label{display:grid;gap:5px;min-width:0}#planning-form select{width:100%}#planning-form input{font:inherit;font-size:0.875rem;min-height:44px;width:100%;padding:8px 10px;border:1px solid var(--pv-muted);border-radius:var(--pv-radius);background:var(--card-background-color,#fff);color:var(--primary-text-color,#202b32)}input:focus-visible{outline:3px solid var(--primary-color,#007c91);outline-offset:3px}#planning-calculate{margin:2px 0 4px}.feature-result{font-size:0.875rem;line-height:1.7;margin:0 0 12px;overflow-wrap:anywhere}.feature-result strong{font-size:1.125rem}.hint strong{color:var(--primary-text-color,#202b32)}
   .section-nav{display:flex;flex-wrap:wrap;gap:var(--pv-space);margin:0 0 24px}.section-nav button{font:inherit;font-size:var(--pv-text);min-height:44px;padding:8px 12px;border:1px solid var(--pv-muted);border-radius:var(--pv-radius);background:transparent;color:var(--primary-text-color,#202b32);cursor:pointer}.section-nav button:hover{background:var(--pv-surface)}
-  .section-heading{font-size:18px;margin:0 0 16px;scroll-margin-top:76px}.section-heading:focus-visible{outline:3px solid var(--primary-color,#007c91);outline-offset:4px}.metric-heading{font-weight:500;color:var(--pv-muted);margin:0 0 8px;line-height:1.5}.overview-metrics{display:grid;gap:var(--pv-space)}.overview-metrics>section{min-width:0}.overview-metrics .kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.task-section{border-top:1px solid var(--pv-border);padding-top:24px;margin-top:24px}.task-section>details:last-child{margin-bottom:8px}
+  .section-heading{font-size:1.125rem;margin:0 0 16px;scroll-margin-top:76px}.section-heading:focus-visible{outline:3px solid var(--primary-color,#007c91);outline-offset:4px}.metric-heading{font-weight:500;color:var(--pv-muted);margin:0 0 8px;line-height:1.5}.overview-metrics{display:grid;gap:var(--pv-space)}.overview-metrics>section{min-width:0}.overview-metrics .kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.task-section{border-top:1px solid var(--pv-border);padding-top:24px;margin-top:24px}.task-section>details:last-child{margin-bottom:8px}
   @container (min-width:720px){.overview-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
   .selected-interval{fill:var(--primary-color,#007c91);fill-opacity:.1;stroke:var(--primary-text-color,#202b32);stroke-width:1;stroke-dasharray:3 3}.chart:focus-visible{outline:3px solid var(--primary-color,#007c91);outline-offset:4px}.interval-detail{padding:16px;margin:12px 0;background:var(--pv-surface);border-radius:var(--pv-radius)}.interval-detail h3{line-height:1.6}.interval-values{display:grid;gap:12px;margin:12px 0}.interval-values dt{font-size:var(--pv-text);color:var(--pv-muted)}.interval-values dd{margin:4px 0 0;font-size:var(--pv-text);font-variant-numeric:tabular-nums}.interval-values dd span{display:block}.interval-controls{display:flex;flex-wrap:wrap;gap:8px}.interval-controls button{min-width:44px;min-height:44px;padding:8px 12px;border:1px solid var(--pv-muted);border-radius:var(--pv-radius);font:inherit;font-size:var(--pv-text);color:var(--primary-text-color,#202b32);background:var(--card-background-color,#fff);cursor:pointer}
+  .table-scroll{max-width:100%;overflow:auto;margin-bottom:12px}.table-scroll table{min-width:30rem}.table-scroll:focus-visible,h2:focus-visible{outline:3px solid var(--primary-color,#007c91);outline-offset:3px}
+  button,select,input{min-width:44px;min-height:44px}button,summary,label,.hint,.notices,.interval-detail{overflow-wrap:anywhere}
+  @container (max-width:22rem){.overview-metrics .kpis{grid-template-columns:minmax(0,1fr)}.overview-metrics .kpi-wide{grid-column:auto}.report-metrics{grid-template-columns:minmax(0,1fr)}.day-switch{flex-shrink:1;max-width:100%;flex-wrap:wrap}.kpi dd{overflow-wrap:anywhere}}
+  @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
   :host{container-type:inline-size}
   .header>div,.chart-section{min-width:0}.header{flex-wrap:wrap}.chart-heading{flex-wrap:wrap}.badge{color:var(--pv-muted)}.badge.warning{color:var(--primary-text-color,#202b32);border-color:currentColor}
   .kpi-wide{grid-column:span 2}.kpi dd small{display:inline-block;white-space:nowrap}.report-metrics dd{overflow-wrap:anywhere}.legend{row-gap:10px}.chart-note{line-height:1.6;text-align:left}.notices{padding:12px 16px}.hint{margin-top:8px}.day-switch{flex-shrink:0}
   @container (min-width:720px){.kpis{grid-template-columns:repeat(4,minmax(0,1fr))}.report-metrics{grid-template-columns:repeat(4,minmax(0,1fr))}}
 
 `;
+
+/** Gleiche Bedienelemente bleiben verbunden: Fokus, Cursor und native Auswahl
+ * gehören dem Browser. Nur tatsächlich geänderte Knoten/Attribute aktualisieren. */
+function updateChildren(parent, desired, focused) {
+  const key = (node) => node.nodeType === 1 ? node.id || node.getAttribute("data-day") || node.getAttribute("data-notice") || node.getAttribute("aria-labelledby") || node.getAttribute("aria-label") || "" : "";
+  const compatible = (a, b) => a.nodeType === b.nodeType && a.nodeName === b.nodeName && key(a) === key(b);
+  let cursor = parent.firstChild;
+  for (const next of [...desired.childNodes]) {
+    let current = cursor;
+    while (current && !compatible(current, next)) current = current.nextSibling;
+    if (!current) {
+      current = next.cloneNode(true);
+      parent.insertBefore(current, cursor);
+    } else {
+      if (current !== cursor) parent.insertBefore(current, cursor);
+      if (current.nodeType === 3) {
+        if (current.data !== next.data) current.data = next.data;
+      } else if (current.nodeType === 1) {
+        // Die Optionen einer geöffneten nativen Auswahl erst nach Verlassen ändern.
+        // Entfernte Ansichten selbst werden weiterhin sofort entfernt.
+        if (current === focused && current.localName === "select") {
+          cursor = current.nextSibling;
+          continue;
+        }
+        for (const attr of [...current.attributes]) {
+          if (current.localName === "details" && attr.name === "open") continue;
+          if (!next.hasAttribute(attr.name)) current.removeAttribute(attr.name);
+        }
+        for (const attr of [...next.attributes]) {
+          if (current === focused && attr.name === "value") continue;
+          if (current.getAttribute(attr.name) !== attr.value) current.setAttribute(attr.name, attr.value);
+        }
+        updateChildren(current, next, focused);
+        if (current !== focused && ["input", "select"].includes(current.localName) && current.value !== next.value) current.value = next.value;
+      }
+    }
+    cursor = current.nextSibling;
+  }
+  while (cursor) { const next = cursor.nextSibling; cursor.remove(); cursor = next; }
+}
 
 const ElementBase = globalThis.HTMLElement ?? class {};
 export class PvForecastCard extends ElementBase {
@@ -620,6 +664,9 @@ export class PvForecastCard extends ElementBase {
     });
     this.shadowRoot.addEventListener("input", (event) => {
       if (event.target.id === "planning-duration") this._updatePlanningInput("duration_minutes", event.target.value);
+    });
+    this.shadowRoot.addEventListener("focusout", (event) => {
+      if (event.target.localName === "select") queueMicrotask(() => { if (this._connected) this._render(); });
     });
     this.shadowRoot.addEventListener("submit", (event) => {
       if (event.target.id === "planning-form") { event.preventDefault(); this._calculatePlanning(); }
@@ -748,6 +795,7 @@ export class PvForecastCard extends ElementBase {
     this._planningDirty = true;
     const notice = this.shadowRoot?.getElementById("planning-input-notice");
     if (notice) notice.textContent = PLANNING_CHANGED_HINT;
+    this._announceInteraction();
   }
 
   _calculatePlanning() {
@@ -790,6 +838,34 @@ export class PvForecastCard extends ElementBase {
     });
   }
 
+  _announceInteraction() {
+    let live = this.shadowRoot.getElementById("interaction-status");
+    if (!live) {
+      live = document.createElement("div"); live.id = "interaction-status"; live.className = "sr-only";
+      live.setAttribute("role", "status"); live.setAttribute("aria-atomic", "true"); this.shadowRoot.append(live);
+    }
+    if (this._announcedInterval !== this._selectedInterval) {
+      const hadInterval = Boolean(this._announcedInterval);
+      this._announcedInterval = this._selectedInterval;
+      const detail = this.shadowRoot.getElementById("interval-detail");
+      if (detail) {
+        const values = [...detail.querySelectorAll("dl>div")].map((row) => `${row.querySelector("dt").textContent}: ${row.querySelector("dd").textContent}`).join(". ");
+        live.textContent = `${detail.querySelector("h3").innerText.replaceAll("\n", " ")}. ${values}`;
+      } else if (hadInterval) live.textContent = "Intervallauswahl geschlossen.";
+    }
+    const planning = JSON.stringify([this._planningDirty, this._planning?.status, this._planning?.message, this._planning?.data?.status, this._planning?.data?.start, this._planning?.data?.end]);
+    if (planning !== this._announcedPlanning) {
+      this._announcedPlanning = planning;
+      if (this._planningDirty) live.textContent = PLANNING_CHANGED_HINT;
+      else if (this._planning) live.textContent = this._planning.status === "loading" ? "Zeitfenster wird berechnet." : this._planning.message || (this._planning.data?.status === "available" ? "Solarzeitfenster verfügbar. Die Empfehlung steht unter der Auswahl." : "Planung aktualisiert. Das Ergebnis steht unter der Auswahl.");
+    }
+    const report = JSON.stringify([this._reportDays, this._report?.status, this._report?.message]);
+    if (report !== this._announcedReport) {
+      this._announcedReport = report;
+      if (this._reportOpen && this._report) live.textContent = this._report.message || `Archivbericht für ${this._reportDays} Tage verfügbar.`;
+    }
+  }
+
   _render() {
     if (!this.shadowRoot || !this._config) return;
     if (this._selectedInterval && !tableRows(this._state).some((row) => intervalKey(row) === this._selectedInterval)) this._selectedInterval = null;
@@ -798,6 +874,8 @@ export class PvForecastCard extends ElementBase {
     for (let node = this; node; node = node.parentNode || node.host) {
       if (typeof node.scrollTop === "number") scrollPositions.push([node, node.scrollTop, node.scrollLeft]);
     }
+    for (const node of this.shadowRoot.querySelectorAll(".table-scroll")) scrollPositions.push([node, node.scrollTop, node.scrollLeft]);
+    const existingDetails = new Set(this.shadowRoot.querySelectorAll("details"));
     const focused = this.shadowRoot.activeElement;
     const focusId = focused?.id;
     const focusDay = focused?.dataset?.day;
@@ -813,7 +891,9 @@ export class PvForecastCard extends ElementBase {
     }
     let content = this.shadowRoot.getElementById("card-content");
     if (!content) { content = document.createElement("div"); content.id = "card-content"; this.shadowRoot.append(content, live); }
-    content.innerHTML = `<style>${styles}</style><ha-card><div class="body" aria-busy="${Boolean(this._selectionPending)}">${renderContent(this._config, this._state ? { ...this._state, selectionPending: this._selectionPending } : null, this._width, this._report, this._reportDays, { inputs: this._planningInputs, result: this._planning, dirty: this._planningDirty }, this._selectedInterval)}</div></ha-card>`;
+    const template = document.createElement("template");
+    template.innerHTML = `<style>${styles}</style><ha-card><div class="body" aria-busy="${Boolean(this._selectionPending)}">${renderContent(this._config, this._state ? { ...this._state, selectionPending: this._selectionPending } : null, this._width, this._report, this._reportDays, { inputs: this._planningInputs, result: this._planning, dirty: this._planningDirty }, this._selectedInterval)}</div></ha-card>`;
+    updateChildren(content, template.content, focused);
     const announcement = dataNotices(this._state).map((item) => `${item.level}: ${item.title}`).join(". ");
     if (announcement !== this._dataAnnouncement) {
       this._dataAnnouncement = announcement;
@@ -821,14 +901,21 @@ export class PvForecastCard extends ElementBase {
     }
     const values = this.shadowRoot.getElementById("values");
     const report = this.shadowRoot.getElementById("report");
-    if (values) values.open = this._valuesOpen;
-    if (report) report.open = this._reportOpen;
+    if (values && !existingDetails.has(values)) values.open = this._valuesOpen;
+    if (report && !existingDetails.has(report)) report.open = this._reportOpen;
     for (const [id, open] of [["outlook", this._outlookOpen], ["uncertainty", this._uncertaintyOpen], ["planning", this._planningOpen]]) {
       const section = this.shadowRoot.getElementById(id);
-      if (section) section.open = open;
+      if (section && !existingDetails.has(section)) section.open = open;
     }
-    if (focusId) this.shadowRoot.getElementById(focusId)?.focus({ preventScroll: true });
-    else if (focusDay) this.shadowRoot.querySelector(`[data-day="${focusDay}"]`)?.focus({ preventScroll: true });
+    if (focused && !focused.isConnected) {
+      const target = this.shadowRoot.getElementById(focusId)
+        || (focusDay && this.shadowRoot.querySelector(`[data-day="${focusDay}"]`))
+        || this.shadowRoot.getElementById("reset-roof")
+        || this.shadowRoot.getElementById("roof")
+        || this.shadowRoot.querySelector("h2");
+      target?.focus({ preventScroll: true });
+    }
+    this._announceInteraction();
     for (const [node, top, left] of scrollPositions) { node.scrollTop = top; node.scrollLeft = left; }
   }
 }
