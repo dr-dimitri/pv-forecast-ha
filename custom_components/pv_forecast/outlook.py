@@ -8,7 +8,12 @@ from math import fsum, isfinite
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from .card_data import _project_intervals, _window_energy
+from .forecast_intervals import (
+    project_intervals as _project_intervals,
+)
+from .forecast_intervals import (
+    window_energy as _window_energy,
+)
 from .measurements import SourceHistory, _has_energy_in_window, aggregate_energy
 from .models import ForecastResult
 

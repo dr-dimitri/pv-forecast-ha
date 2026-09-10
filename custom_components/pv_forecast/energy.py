@@ -12,8 +12,8 @@ from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
-from .card_data import _project_intervals
 from .const import CONF_TIME_ZONE, DOMAIN
+from .forecast_intervals import project_intervals as _project_intervals
 
 if TYPE_CHECKING:
     from homeassistant.components.energy.types import SolarForecastType

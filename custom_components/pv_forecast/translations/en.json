@@ -834,6 +834,10 @@
         "planning": {
           "name": "Solarzeitfenster",
           "description": "Laufdauer in ganzen Minuten, frühester Start und spätestes Ende mit UTC-Offset; optional bisheriger Start. Die Planung gilt für die Gesamtanlage."
+        },
+        "window": {
+          "name": "Prognose für ein Zeitfenster",
+          "description": "Optional start/end mit UTC-Offset und step_minutes (5/15/30/60). Liefert Gesamtenergie und mittlere AC-Leistung; maximal 336 Schritte. Fehlende oder veraltete Daten bleiben unbekannt."
         }
       }
     },
@@ -928,6 +932,9 @@
     },
     "invalid_planning_window": {
       "message": "Der Planungszeitraum oder die Laufdauer ist ungültig."
+    },
+    "invalid_forecast_window": {
+      "message": "Das Prognosefenster benötigt eindeutige Start-/Endzeitpunkte mit UTC-Offset und ein späteres Ende. Optional sind 5, 15, 30 oder 60 ganze Minuten mit exakt teilbarer Dauer und höchstens 336 Schritten zulässig."
     }
   },
   "entity": {

@@ -553,3 +553,9 @@ Die Integration kann mehrfach eingerichtet werden. Jede logische Anlage erhält 
 ## Optionales Horizontprofil
 
 Unter **Konfigurieren → Horizontprofil je Dach (experimentell)** lassen sich 12 oder 24 Höhenwinkel hinterlegen. Das Modell schätzt zeitabhängig blockiertes Direktlicht für einen entfernten Horizont der gesamten Dachfläche und erhält einen diffusen Rest. Eine Verbesserung mit echten Messdaten ist noch nicht belegt. Eingabeformat, Modellgrenzen und Vergleich zur Kalibrierung: [Horizontprofil](docs/horizontprofil.md).
+
+Für eigene Automationen liefert `get_forecast` optional die Energie eines frei
+gewählten UTC-Zeitfensters und mittlere Leistung in 5-/15-/30-/60-Minuten-Schritten.
+[Beispiele und Fehlerprüfung](docs/stundenprognose.md#frei-gewähltes-energie--und-leistungsfenster)
+erklären Drei-Stunden-Abfragen, Raster und die Unterscheidung zwischen Nullertrag
+und fehlenden Daten.

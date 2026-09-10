@@ -111,3 +111,61 @@ Tagesgrenzen. Die Dachwerte stammen aus denselben bereits geclippten Beiträgen.
 Alte Forecast-Tage werden nicht unter dem aktuellen Datum ausgegeben. Diese
 Ansicht löst keinen weiteren Wetterabruf aus und wird nicht in Sensorattributen
 vervielfacht. Details zur Darstellung stehen in der [Kartenanleitung](karte.md).
+
+## Frei gewähltes Energie- und Leistungsfenster
+
+`get_forecast` kann mit `window` zusätzlich ein halb offenes Fenster `[start,end)`
+auswerten. Beide Grenzen brauchen einen UTC-Offset oder `Z`. Der Start bleibt
+unverändert, auch mit Sekundenanteilen. Ohne `step_minutes` werden nur Summe und
+Abdeckung geliefert; mit 5, 15, 30 oder 60 ganzen Minuten entsteht ein am Start
+verankertes Raster. Die Dauer muss exakt teilbar sein, maximal 336 Schritte und
+höchstens der konfigurierte lokale Prognosehorizont sind erlaubt.
+
+```yaml
+# HA-Scriptsequenz: drei Stunden ab einem gemeinsamen aktuellen Zeitpunkt lesen.
+sequence:
+  - variables:
+      pv_start: "{{ utcnow().isoformat() }}"
+  - action: pv_forecast.get_forecast
+    data:
+      config_entry_id: DEINE_ANLAGEN_ID
+      window:
+        start: "{{ pv_start }}"
+        end: "{{ (as_datetime(pv_start) + timedelta(hours=3)).isoformat() }}"
+    response_variable: pv
+  - condition: template
+    value_template: >-
+      {{ pv.window.schema_version == 1 and pv.window.status == 'available'
+         and pv.window.energy_kwh is not none }}
+  # Eigene Folgeaktionen erst nach dieser Prüfung bewusst ergänzen.
+```
+
+Für sechs Stunden in 30-Minuten-Schritten dieselbe Anfrage mit `hours=6` und
+`step_minutes: 30` im `window` verwenden. Das erzeugt zwölf Intervalle mit
+`start`, `end`, `energy_kwh` und `mean_ac_power_kw`. Ein einstündiger Wert von
+2 kWh liefert in jeder halben Stunde 1 kWh bei 2 kW mittlerer Leistung.
+
+Die Antwort `window` hat eine eigene `schema_version: 1`, `scope: total`,
+`start`, `end`, `as_of`, den echten `fetched_at`, `timezone`, `status`, `reason`,
+`coverage`, `quality_flags`, `energy_kwh` und `mean_ac_power_kw`. `intervals`
+erscheint nur bei angefragtem Raster. Die Energieerhaltung gegenüber der direkten
+Fenstersumme wird mit relativer Toleranz 1e-12 und absoluter Toleranz 1e-9 kWh geprüft.
+
+`available` mit **0 kWh** ist eine vollständige Nullprognose. `unavailable` liefert
+`null` für Energie/Leistung und keine numerischen Rasterwerte. Gründe sind
+`outside_forecast`, `incomplete_forecast`, `stale_forecast` und `input_fallbacks`.
+Fehlgeschlagene Abrufe, fehlende/zukünftige Abrufzeit oder ein Alter über 60 Minuten
+sperren die Verwendung. Nur Lücken/Qualitätsmängel im angefragten Fenster blockieren
+dieses. Niemals fehlende Werte durch `float(0)` ersetzen.
+
+Die Annahme `constant_interval_mean_power` bezeichnet die konstante mittlere
+Leistung innerhalb der vorhandenen Wetterintervalle, keine feinere Wetterauflösung.
+`uncertainty` bleibt `unavailable` mit `unsupported_horizon`; PV-Ertrag allein ist
+kein verfügbarer Überschuss. `window` und `planning` können gemeinsam gelesen werden.
+`roof_id` gilt weiterhin nur für die Kartenansicht: das Fenster ist ausdrücklich
+die Gesamtanlage. Die normale Prognoseantwort und der bisherige
+[EMHASS-Adapter](solarzeitfenster.md) bleiben kompatibel. Keine Abfrage fordert
+neue Wetterdaten an oder installiert Schaltaktionen.
+
+Der Aufruf verwendet den nativen Vertrag für
+[HA-Aktionen mit Antwortdaten](https://developers.home-assistant.io/docs/dev_101_services/).
