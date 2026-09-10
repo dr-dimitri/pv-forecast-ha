@@ -92,19 +92,18 @@ sich auf die gespeicherte Anlagenzeitzone, auch wenn dein Browser woanders ist.
 
 - **Aktuelle Prognose:** die gemeinsame berechnete Energie in kWh je angezeigtem
   UTC-Intervall. Die Linie ist durchgezogen.
-- **Jeweils 1 Stunde vorher:** rechtzeitig archivierte Prognosen mit festem
-  Vorlauf. Die gestrichelte Linie hat pro Intervall einen eigenen Stichtag;
-  sie ist keine gemeinsam am Vortag ausgegebene Tageskurve. Ohne rechtzeitige
-  Archivierung bleiben die betreffenden Stücke leer.
-- **Gemessen:** genau belegte Energiemengen aus bestätigten, disjunkten
-  AC-PV-Messquellen. Unvollständige Stunden werden nicht interpoliert. Ein
-  erfasster Tagesanteil wird ausdrücklich als unvollständig bezeichnet.
+- **Tatsächlich produziert:** vollständig belegte Energiemengen aus bestätigten,
+  disjunkten AC-PV-Messquellen, als durchgezogene Produktionslinie.
+- **Unvollständig erfasst:** nur belegte Teilmengen, gestrichelt in derselben
+  Produktionsfarbe. Die vollständige Stundenmenge bleibt unbekannt.
+
+Die zusätzliche Archivkurve entfällt im Tagesdiagramm. Feste Archivprognosen
+bleiben in Intervallwerten, Details und der separaten Archivansicht verfügbar.
 
 Dachmesswerte und Dacharchive sind bislang nicht zugeordnet. In der Dachansicht
 werden deshalb ausschließlich ihre tatsächlich berechneten Prognosen gezeigt;
 Gesamtmessungen werden nicht nach Dachgröße verteilt. Ohne Messquelle bleibt
-die Karte als reine Prognoseansicht nutzbar. Ohne Archiv fehlen die historische
-Linie und belastbare Fehlerkennzahlen. Eine gültig gemessene Null ist etwas
+die Karte als reine Prognoseansicht nutzbar. Ohne Archiv fehlen archivierte Prognosewerte und belastbare Fehlerkennzahlen. Eine gültig gemessene Null ist etwas
 anderes als eine Datenlücke.
 
 Die erste Kartenfassung verwendet ausschließlich eine Energieachse in kWh je

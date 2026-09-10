@@ -378,8 +378,9 @@ visuellen Editor ohne YAML einrichten.
 Sie zeigt vier Tageskennzahlen, Heute/Morgen und Gesamt-/Dachauswahl, eine
 Energiekurve sowie freiwillig erfasste Messungen und feste Archivprognosen.
 Messlücken werden nicht aufgefüllt; ohne zugeordnete Dachmessung bleibt diese
-in der Dachansicht fehlend. Die historische Linie **„Jeweils 1 Stunde vorher“**
-verwendet pro Intervall einen eigenen festen Stichtag. Die Karte verwendet die
+in der Dachansicht fehlend. Das Tagesdiagramm unterscheidet **„Tatsächlich produziert“** (durchgezogen)
+und **„Unvollständig erfasst“** (gestrichelt). Feste Archivprognosen bleiben
+in den Details und der separaten Archivansicht verfügbar. Die Karte verwendet die
 Anlagenzeitzone und unterscheidet wiederholte Stunden bei Zeitumstellungen.
 
 [Installation, Bedienung und Grenzen der Karte](docs/karte.md) beschreiben auch

@@ -64,9 +64,17 @@ test("Positive Teilmengen versetzter Messungen bleiben sichtbar und ausdrücklic
   assert.equal(rows[8].actual_observed, 0.81);
   const html = renderContent({ config_entry_id: "demo-plant", day: "today" }, state);
   assert.match(html, /class="actual-line actual-partial-line"/);
-  assert.match(html, /0,81 · teilweise erfasst/);
+  assert.match(html, /0,81 · unvollständig erfasst/);
   assert.match(html, /nur belegte Teilmengen/);
-  assert.match(renderIntervalDetails(state, key), /0,81 kWh · teilweise erfasst; vollständige Menge unbekannt/);
+  assert.match(html, /Unvollständig erfasst/);
+  assert.match(html, /Tatsächlich produziert/);
+  assert.doesNotMatch(html, /class="history-line"/);
+  assert.doesNotMatch(html, /class="history-key"/);
+  // Unsichtbare Archivwerte dürfen die Diagrammachse nicht mehr verändern.
+  const chart = html.match(/<svg id="interval-chart"[\s\S]*?<\/svg>/)[0];
+  for (const item of state.history.data.current_targets.intervals) item.energy_kwh = 10000;
+  assert.equal(renderContent({}, state).match(/<svg id="interval-chart"[\s\S]*?<\/svg>/)[0], chart);
+  assert.match(renderIntervalDetails(state, key), /0,81 kWh · unvollständig erfasst; vollständige Menge unbekannt/);
   // Alte Backendantworten und unvollständige Werte ohne Teilsumme bleiben leer.
   for (const item of state.measurement.data.total_intervals) delete item.observed_energy_kwh;
   assert.doesNotMatch(renderContent({}, state), /class="actual-line actual-partial-line"/);
