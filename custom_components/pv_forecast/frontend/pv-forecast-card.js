@@ -916,8 +916,12 @@ export class PvForecastCard extends ElementBase {
       const section = this.shadowRoot.getElementById(id);
       if (section && !existingDetails.has(section)) section.open = open;
     }
-    if (focused && !focused.isConnected) {
-      const target = this.shadowRoot.getElementById(focusId)
+    // Auch das Verschieben eines verbundenen Vorfahren kann den Browserfokus
+    // lösen. Nur bei tatsächlichem Verlust fokussieren, damit native Auswahlen
+    // und unveränderte Eingaben weiterhin unberührt bleiben.
+    if (focused && this.shadowRoot.activeElement !== focused) {
+      const target = (focused.isConnected ? focused : null)
+        || this.shadowRoot.getElementById(focusId)
         || (focusDay && this.shadowRoot.querySelector(`[data-day="${focusDay}"]`))
         || this.shadowRoot.getElementById("reset-roof")
         || this.shadowRoot.getElementById("roof")
