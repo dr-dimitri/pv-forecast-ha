@@ -862,6 +862,21 @@ class HistoryArchive:
             for entity, registry in sorted(sources, key=str)
         )
 
+    def day_view(
+        self, now: datetime, active_configuration_id: str, **selection
+    ) -> dict[str, Any]:
+        """Historische Darstellung ausschließlich aus bestehenden Belegen bilden."""
+        from .history_view import build_archive_day_view
+
+        return build_archive_day_view(
+            tuple(self.records.values()),
+            now,
+            active_configuration_id,
+            self.timezone.key,
+            retention_truncated=self.retention_truncated,
+            **selection,
+        )
+
     def current_targets(
         self, now: datetime, configuration_id: str | None = None
     ) -> dict[str, Any]:

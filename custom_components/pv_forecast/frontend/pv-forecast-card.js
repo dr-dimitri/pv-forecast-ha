@@ -64,11 +64,13 @@ export class SharedReadCache {
     this.onVisibility = () => { this._cancelTimer(); if (!this.document?.hidden) this._tick(); };
   }
 
-  request(key, loader) {
+  request(key, loader, force = false) {
     const previous = this.requests.get(key);
-    if (previous && this.now() - previous.at < REFRESH_MS) return previous.promise;
+    if (previous && (previous.pending || (!force && this.now() - previous.at < REFRESH_MS))) return previous.promise;
     const promise = Promise.resolve().then(loader);
-    this.requests.set(key, { at: this.now(), promise });
+    const request = { at: this.now(), promise, pending: true };
+    promise.then(() => { request.pending = false; }, () => { request.pending = false; });
+    this.requests.set(key, request);
     if (this.requests.size > 64) this.requests.delete(this.requests.keys().next().value);
     return promise;
   }
@@ -244,7 +246,7 @@ export function selectedSeries(state) {
   return {
     forecast: view.intervals.filter((item) => overlap(item, view)),
     history: view.roof_id ? [] : (state.history?.data?.current_targets?.intervals ?? []).filter((item) => overlap(item, view)),
-    actual: view.roof_id || view.day !== "today" ? [] : (state.measurement?.data?.total_intervals ?? []).filter((item) => overlap(item, view)),
+    actual: view.roof_id || (view.day !== "today" && !view.historical) ? [] : (state.measurement?.data?.total_intervals ?? []).filter((item) => overlap(item, view)),
   };
 }
 
@@ -287,7 +289,7 @@ export function renderIntervalDetails(state, key) {
   const detail = intervalDetails(state, key);
   if (!detail) return '<button id="chart-explore" class="reset-button" data-interval-action="first">Intervalle erkunden</button><p id="chart-help" class="hint">Tippe auf den Verlauf oder wähle ein Intervall mit den Pfeiltasten. Die Tabelle enthält dieselben Werte.</p>';
   const view = state.forecast.data;
-  return `<section id="interval-detail" data-start="${escapeHtml(detail.start)}" data-end="${escapeHtml(detail.end)}" class="interval-detail" aria-label="Ausgewähltes Intervall"><h3>${escapeHtml(plantStamp(detail.start, view.timezone))}<br>bis ${escapeHtml(plantStamp(detail.end, view.timezone))}</h3><p class="hint">${escapeHtml(view.timezone)} · kWh je tatsächlichem Intervall</p><dl class="interval-values">${Object.entries({ forecast: "Aktuelle Prognose", history: ARCHIVE_LABEL, actual: "Messung" }).map(([name, label]) => {
+  return `<section id="interval-detail" data-start="${escapeHtml(detail.start)}" data-end="${escapeHtml(detail.end)}" class="interval-detail" aria-label="Ausgewähltes Intervall"><h3>${escapeHtml(plantStamp(detail.start, view.timezone))}<br>bis ${escapeHtml(plantStamp(detail.end, view.timezone))}</h3><p class="hint">${escapeHtml(view.timezone)} · kWh je tatsächlichem Intervall</p><dl class="interval-values">${Object.entries({ ...(view.historical ? {} : { forecast: "Aktuelle Prognose" }), history: view.historical ? view.label : ARCHIVE_LABEL, actual: "Messung" }).map(([name, label]) => {
     const source = detail.sources[name];
     return `<div><dt>${label}</dt><dd>${source.status === "complete" ? `${energyText(source.energy_kwh)} kWh · vollständig` : source.status === "incomplete" ? "— · unvollständig" : "— · nicht vorhanden"}${source.quality_flags.length ? '<span class="hint">Qualitätsmarkierungen vorhanden</span>' : ""}</dd></div>`;
   }).join("")}</dl><div class="interval-controls"><button id="interval-prev" data-interval-action="previous" aria-label="Vorheriges Intervall">Zurück</button><button id="interval-next" data-interval-action="next" aria-label="Nächstes Intervall">Weiter</button><button id="interval-close" data-interval-action="close">Schließen</button></div><p id="chart-help" class="hint">Pfeiltasten: Intervall wechseln. Escape: Detailansicht schließen.</p></section>`;
@@ -320,7 +322,7 @@ function renderChart(state, width, selectedKey) {
   const selected = tableRows(state).find((row) => intervalKey(row) === selectedKey);
   const highlight = selected ? `<rect class="selected-interval" x="${x(selected.start)}" y="${top}" width="${x(selected.end) - x(selected.start)}" height="${bottom - top}"/>` : "";
   return `<svg id="interval-chart" class="chart" viewBox="0 0 ${width} 242" tabindex="0" role="group" aria-roledescription="Interaktives Diagramm" aria-labelledby="chart-title" aria-describedby="chart-description chart-help">
-    <title id="chart-title">Energie je Intervall in kWh</title><desc id="chart-description">Aktuelle Prognose durchgezogen, ${ARCHIVE_LABEL} gestrichelt, Messwerte als Rechtecke. Fehlende Werte bleiben leer. Alle Werte stehen auch in der Tabelle.</desc>
+    <title id="chart-title">Energie je Intervall in kWh</title><desc id="chart-description">${view.historical ? "Archivierte Prognose: " + escapeHtml(view.label) : "Aktuelle Prognose durchgezogen, " + ARCHIVE_LABEL} gestrichelt, Messwerte als Rechtecke. Fehlende Werte bleiben leer. Alle Werte stehen auch in der Tabelle.</desc>
     <defs><clipPath id="plot-clip"><rect x="${left}" y="0" width="${width - left - 12}" height="${bottom + 2}"/></clipPath></defs>
     ${grid}<g clip-path="url(#plot-clip)">${gaps}${highlight}${actual}${paths(series.history, "history-line")}${paths(series.forecast, "forecast-line", "is_complete")}${now}</g><g aria-hidden="true" class="hour-ticks">${hourTicks}</g>${ticks}
     ${values.length ? "" : `<text class="empty-plot" x="${width / 2}" y="100" text-anchor="middle">Noch keine Intervallwerte</text>`}
@@ -526,7 +528,59 @@ export function renderDailyTendencies(view) {
   return `<section aria-label="Mehrtagesaussicht"><h3>Mehrtagesaussicht</h3><dl class="daily-tendencies">${view.daily_forecasts.map((day) => `<div><dt>${escapeHtml(day.date)}${day.tendency ? " · Tendenz" : ""}</dt><dd>${energyText(day.energy_kwh)} kWh${day.quality_flags?.length ? " · Eingabewerte eingeschränkt" : ""}</dd></div>`).join("")}</dl><p class="hint">Datierte Werte des angezeigten Prognosestands. Die Prognosegüte späterer Tage ist noch nicht gemessen; ein belastbares Erfahrungsband fehlt. Zeitfenster können über den gesamten geladenen Zeitraum geplant werden.</p></section>`;
 }
 
-export function renderContent(config, state, width = 600, report = null, reportDays = 7, planningUI = {}, selectedKey = null) {
+
+export function shiftArchiveDate(value, days) {
+  return new Date(Date.parse(`${value}T12:00:00Z`) + days * 86400000).toISOString().slice(0, 10);
+}
+
+function plantDateISO(value, timezone) {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat("en", { timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date(value)).map((item) => [item.type, item.value]));
+  return `${parts.year}-${parts.month}-${parts.day}`;
+}
+
+export function historicalState(day) {
+  return {
+    forecast: { data: { ...day, historical: true, day: "history", roof_id: null, intervals: [] } },
+    history: { data: { current_targets: { intervals: day.intervals } } },
+    measurement: { data: { total_intervals: day.intervals.map((item) => ({ start: item.start, end: item.end, energy_kwh: item.measurement?.energy_kwh, energy_complete: item.measurement?.complete === true })) } },
+  };
+}
+
+function archiveIds(html) {
+  return html.replace(/id="([^"]+)"/g, (_, id) => `id="archive-${id}"`)
+    .replace(/aria-(labelledby|describedby)="([^"]+)"/g, (_, kind, ids) => `aria-${kind}="${ids.split(" ").map((id) => `archive-${id}`).join(" ")}"`)
+    .replaceAll("url(#", "url(#archive-").replaceAll("data-interval-action", "data-archive-interval-action");
+}
+
+export async function readArchiveDay(hass, selection, entry, cache, force = false) {
+  const data = { config_entry_id: entry, day_view: { ...selection } };
+  const response = await cache.request(JSON.stringify(["get_history", data]), () => readService(hass, "get_history", data), force);
+  const day = response.day_view;
+  if (day?.schema_version !== 1 || day.scope !== "total" || day.date !== selection.date || day.horizon !== selection.horizon || (selection.configuration_id && day.configuration_id !== selection.configuration_id) || !validInterval(day) || !Array.isArray(day.intervals) || day.intervals.length > 50) throw new Error(UPDATE_HINT);
+  formatPlantTime(day.start, day.timezone);
+  return day;
+}
+
+export function renderArchiveDay(ui, width = 600) {
+  const selection = ui.selection ?? {};
+  const day = ui.result?.data;
+  const contexts = ui.contexts ?? day?.contexts ?? [];
+  const context = contexts.find((item) => item.configuration_id === selection.configuration_id) ?? contexts.find((item) => item.active);
+  const bounds = context ?? {};
+  const status = day?.status === "unavailable" ? "Archivansicht nicht verfügbar. Speicherstatus, Konfiguration und Quellen prüfen." : day?.status === "empty" ? "Für diesen Tag fehlen archivierte Stände." : day?.status === "partial" ? "Der Tag ist nur teilweise archiviert. Fehlende Intervalle bleiben leer." : "";
+  let chart = "";
+  if (day && day.status !== "unavailable") {
+    const state = historicalState(day);
+    const selected = day.intervals.find((item) => intervalKey(item) === ui.selected);
+    const provenance = selected ? `<p class="hint">Stichtag ${escapeHtml(plantStamp(selected.cutoff, day.timezone))}<br>Wetterabruf ${escapeHtml(plantStamp(selected.fetched_at, day.timezone))}<br>Beobachtet ${escapeHtml(plantStamp(selected.observed_at, day.timezone))}<br>Bewertet ${escapeHtml(plantStamp(selected.measurement?.assessed_at, day.timezone))} · ${selected.measurement?.previous_revision_count ?? 0} frühere Bewertungen${selected.measurement?.revised ? " · Messung revidiert" : ""}<br>Ursprüngliches Messfenster ${escapeHtml(plantStamp(selected.source_start, day.timezone))} bis ${escapeHtml(plantStamp(selected.source_end, day.timezone))}: ${energyText(selected.measurement?.whole_interval_energy_kwh)} kWh${selected.measurement?.reasons?.includes("measurement_boundary") ? " · positive Randmessung nicht anteilig geteilt" : ""}</p>` : "";
+    chart = `<p class="hint">Historischer Tag ${escapeHtml(day.date)} · ${escapeHtml(day.timezone)}<br>Kontext ${escapeHtml(day.configuration_id)}<br>${day.running ? "Archiv erfasst aktuell" : "Archivierung pausiert"}${day.retention_truncated ? " · Aufbewahrung wurde gekürzt" : ""}</p><div class="legend"><span><i class="history-key"></i>${escapeHtml(day.label)}</span><span><i class="actual-key"></i>Archivierte Messung</span></div>${archiveIds(renderChart(state, width, ui.selected))}${archiveIds(renderIntervalDetails(state, ui.selected))}${provenance}
+      <dl class="interval-values">${Object.entries({ daily_previous_18: "Tagesprognose · 18 Uhr am Vortag", daily_same_06: "Tagesprognose · 06 Uhr am Zieltag" }).map(([key, title]) => `<div><dt>${title}</dt><dd>${energyText(day.daily_forecasts?.[key]?.energy_kwh)} kWh</dd></div>`).join("")}<div><dt>Vollständig belegte Tagesmessung</dt><dd>${energyText(day.daily_measurement?.energy_kwh)} kWh</dd></div></dl><p class="hint">Stundenstände haben jeweils einen eigenen Stichtag. Ihre Summe ist keine ursprünglich ausgegebene Tageskurve. Aktuelle Lernfaktoren und Erfahrungsbänder werden nicht rückwirkend angewendet.</p>
+      <details id="archive-values"><summary>Historische Intervallwerte</summary><div class="table-scroll" tabindex="0" role="region" aria-label="Historische Intervallwerte"><table><thead><tr><th>Beginn</th><th>Ende</th><th>Prognose kWh</th><th>Messung kWh</th><th>Stichtag</th><th>Bewertung</th></tr></thead><tbody>${day.intervals.map((item) => `<tr><td>${escapeHtml(plantStamp(item.start, day.timezone))}</td><td>${escapeHtml(plantStamp(item.end, day.timezone))}</td><td>${energyText(item.energy_kwh)}</td><td>${energyText(item.measurement?.energy_kwh)}</td><td>${escapeHtml(plantStamp(item.cutoff, day.timezone))}</td><td>${item.measurement?.revised ? "Revidiert · " : ""}${escapeHtml(plantStamp(item.measurement?.assessed_at, day.timezone))}</td></tr>`).join("")}</tbody></table></div></details>`;
+  }
+  return `<details id="archive-day"><summary id="archive-day-toggle">Archivtag erkunden <span>Historische Gesamtanlage</span></summary><div class="archive-controls"><label>Abgeschlossener Tag<input id="archive-date" type="date" value="${escapeHtml(selection.date ?? "")}" min="${escapeHtml(bounds.min_date ?? "")}" max="${escapeHtml(bounds.max_date ?? "")}"></label><label>Vergleichsgrundlage<select id="archive-context"><option value="">Aktuelle Anlage</option>${contexts.filter((item) => !item.active).map((item) => `<option value="${escapeHtml(item.configuration_id)}" ${selection.configuration_id === item.configuration_id ? "selected" : ""}>${escapeHtml(item.timezone)} · ${escapeHtml(item.configuration_id.slice(0, 12))}</option>`).join("")}</select></label><label>Vorlauf<select id="archive-horizon"><option value="hourly_1h" ${selection.horizon !== "hourly_3h" ? "selected" : ""}>Jeweils 1 Stunde vorher</option><option value="hourly_3h" ${selection.horizon === "hourly_3h" ? "selected" : ""}>Jeweils 3 Stunden vorher</option></select></label></div><div class="interval-controls"><button id="archive-prev" data-archive-nav="-1" ${bounds.min_date && selection.date <= bounds.min_date ? "disabled" : ""}>Vorheriger Tag</button><button id="archive-next" data-archive-nav="1" ${bounds.max_date && selection.date >= bounds.max_date ? "disabled" : ""}>Nächster Tag</button><button id="archive-refresh" data-archive-refresh>Aktualisieren</button></div><p class="hint" role="status">${escapeHtml(ui.result?.message ?? (ui.result?.status === "loading" ? "Archivtag wird gelesen …" : status))}</p>${chart}</details>`;
+}
+
+export function renderContent(config, state, width = 600, report = null, reportDays = 7, planningUI = {}, selectedKey = null, archiveUI = {}) {
   const forecast = state?.forecast;
   const view = forecast?.data;
   const title = config.title || view?.plant_name || "PV-Prognose";
@@ -553,10 +607,11 @@ export function renderContent(config, state, width = 600, report = null, reportD
     ${view.roof_id ? "" : `<section class="task-section" aria-labelledby="planning-heading"><h3 class="section-heading" id="planning-heading" tabindex="-1">Planen</h3><p class="hint">Heutige Tagesaussicht und ein passendes Solarzeitfenster finden.</p>${renderOutlook(state)}${renderPlanning(state, planningUI)}</section>`}
     <section class="task-section" aria-labelledby="comparison-heading"><h3 class="section-heading" id="comparison-heading" tabindex="-1">Vergleichen</h3><p class="hint">${view.roof_id ? "Prognoseintervalle dieser Dachfläche nachlesen." : "Prognose, belegte Messung und die bisherige Prognosegüte einordnen."}</p>
     ${view.roof_id ? "" : renderUncertainty(state)}${renderTable(state)}
-    ${view.roof_id ? "" : `<details id="report"><summary id="report-toggle">Prognosegüte im Archiv <span>Gesamtanlage</span></summary><label class="report-label">Zeitraum<select id="report-days"><option value="7" ${reportDays === 7 ? "selected" : ""}>7 Tage</option><option value="30" ${reportDays === 30 ? "selected" : ""}>30 Tage</option></select></label>${renderReport(report ?? (state.history?.status === "ready" && reportDays === 7 ? state.history : null), reportDays)}</details>`}</section>`;
+    ${view.roof_id ? "" : `<details id="report"><summary id="report-toggle">Prognosegüte im Archiv <span>Gesamtanlage</span></summary><label class="report-label">Zeitraum<select id="report-days"><option value="7" ${reportDays === 7 ? "selected" : ""}>7 Tage</option><option value="30" ${reportDays === 30 ? "selected" : ""}>30 Tage</option></select></label>${renderReport(report ?? (state.history?.status === "ready" && reportDays === 7 ? state.history : null), reportDays)}</details>${renderArchiveDay(archiveUI, width)}`}</section>`;
 }
 
 const styles = `
+  #archive-day .hint{overflow-wrap:anywhere}.archive-controls{display:grid;gap:12px;margin:16px 0}.archive-controls label{display:grid;gap:6px;min-width:0}.archive-controls input{box-sizing:border-box;max-width:100%;min-width:0;min-height:44px;font:inherit;color:var(--primary-text-color);background:var(--card-background-color);border:1px solid var(--pv-muted);border-radius:8px;padding:8px}.archive-controls input:focus-visible{outline:3px solid var(--primary-color);outline-offset:3px}
   :host{display:block;--pv-space:8px;--pv-muted:color-mix(in srgb,var(--secondary-text-color,#64717a) 85%,var(--primary-text-color,#202b32));--pv-radius:12px;--pv-text:.875rem;--pv-surface:var(--secondary-background-color,#f2f5f6);--pv-border:var(--divider-color,#e4e8eb);--pv-line:var(--primary-color,#007c91);--pv-archive:var(--secondary-text-color,#636b73);--pv-actual:color-mix(in srgb,var(--accent-color,#b88424) 55%,var(--primary-text-color,#202b32));color:var(--primary-text-color,#202b32);font-family:var(--paper-font-body1_-_font-family,Roboto,system-ui,sans-serif)}
   *{box-sizing:border-box}ha-card{display:block;background:var(--ha-card-background,var(--card-background-color,#fff));border-radius:var(--ha-card-border-radius,16px);border:var(--ha-card-border-width,1px) solid var(--ha-card-border-color,var(--divider-color,#e4e8eb));box-shadow:var(--ha-card-box-shadow,none);overflow:hidden} .body{padding:22px 22px 8px;min-width:0}
   .header{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}.eyebrow{font-size:var(--pv-text);font-weight:700;letter-spacing:.14em;color:var(--pv-muted);margin:0 0 6px}h2{font-size:1.625rem;font-weight:600;letter-spacing:-.025em;line-height:1.25;margin:0;overflow-wrap:anywhere}.subtitle{color:var(--pv-muted);font-size:var(--pv-text);margin:6px 0 0;overflow-wrap:anywhere}.badge{font-size:var(--pv-text);border:1px solid var(--divider-color,#e4e8eb);padding:5px 8px;border-radius:20px;white-space:nowrap}.warning{color:var(--warning-color,#956400)}
@@ -649,6 +704,8 @@ export class PvForecastCard extends ElementBase {
     this._selectedInterval = null;
     this._reportDays = 7;
     this._reportOpen = false;
+    this._archiveOpen = false;
+    this._archiveGeneration = 0;
     this._valuesOpen = false;
     this._outlookOpen = false;
     this._uncertaintyOpen = false;
@@ -656,6 +713,19 @@ export class PvForecastCard extends ElementBase {
     if (!this.attachShadow) return;
     this.attachShadow({ mode: "open" });
     this.shadowRoot.addEventListener("click", (event) => {
+      const archiveAction = event.target.closest?.("[data-archive-interval-action]")?.dataset.archiveIntervalAction;
+      if (archiveAction) { this._chooseArchiveInterval(archiveAction); return; }
+      const archiveChart = event.target.closest?.("#archive-interval-chart");
+      if (archiveChart && this._archiveDay?.data) {
+        const state = historicalState(this._archiveDay.data), rect = archiveChart.getBoundingClientRect();
+        const { left } = plotGeometry(state.forecast.data, this._width);
+        const row = intervalAtPosition(state, ((event.clientX - rect.left) * this._width / rect.width - left) / (this._width - left - 12));
+        if (row) { this._archiveSelected = intervalKey(row); this._render(); }
+        return;
+      }
+      const nav = event.target.closest?.("[data-archive-nav]")?.dataset.archiveNav;
+      if (nav && this._archiveSelection?.date) { this._archiveSelection.date = shiftArchiveDate(this._archiveSelection.date, Number(nav)); this._loadArchiveDay(); return; }
+      if (event.target.closest?.("[data-archive-refresh]")) { this._loadArchiveDay(true); return; }
       const action = event.target.closest?.("[data-interval-action]")?.dataset.intervalAction;
       if (action) { this._chooseInterval(action); return; }
       const chart = event.target.closest?.("#interval-chart");
@@ -674,12 +744,26 @@ export class PvForecastCard extends ElementBase {
       if (day && day !== this._config.day) { this._config = { ...this._config, day }; this._bind(); }
     });
     this.shadowRoot.addEventListener("keydown", (event) => {
+      if (event.target.id === "archive-interval-chart" || event.target.closest?.("#archive-interval-detail")) {
+        const action = ({ ArrowLeft: "previous", ArrowRight: "next", Home: "first", End: "last", Enter: "first", " ": "first", Escape: "close" })[event.key];
+        if (action) { event.preventDefault(); this._chooseArchiveInterval(action); }
+        return;
+      }
       const inChart = event.target.id === "interval-chart";
       const inDetails = event.target.closest?.("#interval-detail");
       const action = event.key === "Escape" ? "close" : inChart ? ({ ArrowLeft: "previous", ArrowRight: "next", Home: "first", End: "last", Enter: "first", " ": "first" })[event.key] : null;
       if (action && (inChart || inDetails)) { event.preventDefault(); this._chooseInterval(action); }
     });
     this.shadowRoot.addEventListener("change", (event) => {
+      const archiveField = { "archive-date": "date", "archive-horizon": "horizon", "archive-context": "configuration_id" }[event.target.id];
+      if (archiveField) {
+        this._archiveSelection = { ...this._archiveSelection, [archiveField]: event.target.value || undefined };
+        if (archiveField === "configuration_id") {
+          const context = this._archiveContexts?.find((item) => item.configuration_id === event.target.value) ?? this._archiveContexts?.find((item) => item.active);
+          if (context && (this._archiveSelection.date < context.min_date || this._archiveSelection.date > context.max_date)) this._archiveSelection.date = context.max_date;
+        }
+        this._loadArchiveDay(); return;
+      }
       if (event.target.id === "roof") { this._config = { ...this._config, roof_id: event.target.value || undefined }; this._bind(); }
       if (event.target.id === "report-days") { this._reportDays = Number(event.target.value); this._bindReport(); this._render(); }
       const field = { "planning-earliest": "earliest_start", "planning-latest": "latest_end" }[event.target.id];
@@ -697,6 +781,11 @@ export class PvForecastCard extends ElementBase {
     this.shadowRoot.addEventListener("toggle", (event) => {
       // Nur das aktuelle Element darf bei einem Neuaufbau seinen Zustand melden.
       if (!event.target.isConnected) return;
+      if (event.target.id === "archive-day") {
+        this._archiveOpen = event.target.open;
+        if (this._archiveOpen && !this._archiveDay) this._loadArchiveDay();
+        else if (!this._archiveOpen) { this._archiveGeneration++; if (this._archiveDay?.status === "loading") this._archiveDay = null; }
+      }
       if (event.target.id === "values") this._valuesOpen = event.target.open;
       if (event.target.id === "outlook") this._outlookOpen = event.target.open;
       if (event.target.id === "uncertainty") this._uncertaintyOpen = event.target.open;
@@ -706,6 +795,35 @@ export class PvForecastCard extends ElementBase {
         this._bindReport();
       }
     }, true);
+  }
+
+  async _loadArchiveDay(force = false) {
+    const generation = ++this._archiveGeneration;
+    if (!this._connected || this._visible === false || globalThis.document?.hidden || !this._archiveOpen || this._config?.roof_id || !this._archiveSelection?.date) return;
+    const selection = { ...this._archiveSelection }, entry = this._config.config_entry_id;
+    this._archiveDay = { status: "loading" }; this._archiveSelected = null; this._render();
+    try {
+      const data = await readArchiveDay(this._hass, selection, entry, connectionCache(this._hass), force);
+      if (generation === this._archiveGeneration && globalThis.document?.hidden) { this._archiveDay = null; return; }
+      if (generation !== this._archiveGeneration || !this._connected || !this._archiveOpen || this._visible === false) return;
+      this._archiveDay = { status: "ready", data }; this._archiveContexts = data.contexts;
+    } catch (error) {
+      if (generation === this._archiveGeneration && globalThis.document?.hidden) { this._archiveDay = null; return; }
+      if (generation !== this._archiveGeneration || !this._connected || !this._archiveOpen || this._visible === false) return;
+      this._archiveDay = sourceError(error, "Archivtag");
+      if (this._archiveDay.reason === "permission") this._archiveContexts = [];
+    }
+    this._render();
+  }
+
+  _chooseArchiveInterval(action) {
+    if (!this._archiveDay?.data) return;
+    const rows = tableRows(historicalState(this._archiveDay.data));
+    if (!rows.length) return;
+    const current = rows.findIndex((row) => intervalKey(row) === this._archiveSelected);
+    const index = action === "last" ? rows.length - 1 : action === "first" || current < 0 ? 0 : Math.max(0, Math.min(rows.length - 1, current + (action === "previous" ? -1 : 1)));
+    this._archiveSelected = action === "close" ? null : intervalKey(rows[index]); this._render();
+    if (action === "first" || action === "close") this.shadowRoot.getElementById("archive-interval-chart")?.focus({ preventScroll: true });
   }
 
   _chooseInterval(action) {
@@ -723,6 +841,7 @@ export class PvForecastCard extends ElementBase {
     if (!config?.config_entry_id || typeof config.config_entry_id !== "string") throw new Error("Bitte eine PV-Anlage auswählen.");
     if (config.day && !["today", "tomorrow"].includes(config.day)) throw new Error("Der Prognosetag muss Heute oder Morgen sein.");
     if (this._config?.config_entry_id !== config.config_entry_id) {
+      this._archiveGeneration++; this._archiveDay = null; this._archiveSelection = null; this._archiveContexts = [];
       this._state = null;
       this._planning = null;
       this._planningInputs = null;
@@ -767,6 +886,7 @@ export class PvForecastCard extends ElementBase {
   }
 
   disconnectedCallback() {
+    this._archiveGeneration++;
     this._connected = false;
     this._unsubscribe?.(); this._unsubscribe = null;
     this._unsubscribeReport?.(); this._unsubscribeReport = null;
@@ -777,6 +897,8 @@ export class PvForecastCard extends ElementBase {
   }
 
   _bind() {
+    this._archiveGeneration++;
+    if (this._archiveDay?.status === "loading") this._archiveDay = null;
     this._unsubscribe?.(); this._unsubscribe = null;
     this._unsubscribeReport?.(); this._unsubscribeReport = null;
     this._unsubscribePlanning?.(); this._unsubscribePlanning = null;
@@ -793,6 +915,7 @@ export class PvForecastCard extends ElementBase {
       this._selectionPending = false;
       this._state = selectViewDay(state, this._config.day);
       this._render();
+      if (this._archiveOpen && !this._archiveDay) this._loadArchiveDay();
     });
     this._bindReport();
     this._bindPlanning();
@@ -907,6 +1030,7 @@ export class PvForecastCard extends ElementBase {
       const now = millis(this._state.forecast.data.as_of);
       this._planningInputs = { duration_minutes: "120", earliest_start: choices.find((value) => millis(value) >= now) ?? choices[0], latest_end: choices.at(-1) };
     }
+    if (!this._archiveSelection && this._state?.forecast?.data) this._archiveSelection = { date: shiftArchiveDate(plantDateISO(this._state.forecast.data.today_start, this._state.forecast.data.timezone), -1), horizon: "hourly_1h" };
     let live = this.shadowRoot.getElementById("data-status");
     if (!live) {
       live = document.createElement("div"); live.id = "data-status"; live.className = "sr-only";
@@ -915,7 +1039,7 @@ export class PvForecastCard extends ElementBase {
     let content = this.shadowRoot.getElementById("card-content");
     if (!content) { content = document.createElement("div"); content.id = "card-content"; this.shadowRoot.append(content, live); }
     const template = document.createElement("template");
-    template.innerHTML = `<style>${styles}</style><ha-card><div class="body" aria-busy="${Boolean(this._selectionPending)}">${renderContent(this._config, this._state ? { ...this._state, selectionPending: this._selectionPending } : null, this._width, this._report, this._reportDays, { inputs: this._planningInputs, result: this._planning, dirty: this._planningDirty }, this._selectedInterval)}</div></ha-card>`;
+    template.innerHTML = `<style>${styles}</style><ha-card><div class="body" aria-busy="${Boolean(this._selectionPending)}">${renderContent(this._config, this._state ? { ...this._state, selectionPending: this._selectionPending } : null, this._width, this._report, this._reportDays, { inputs: this._planningInputs, result: this._planning, dirty: this._planningDirty }, this._selectedInterval, { selection: this._archiveSelection, result: this._archiveDay, contexts: this._archiveContexts, selected: this._archiveSelected })}</div></ha-card>`;
     updateChildren(content, template.content, focused);
     const announcement = dataNotices(this._state).map((item) => `${item.level}: ${item.title}`).join(". ");
     if (announcement !== this._dataAnnouncement) {
@@ -926,7 +1050,7 @@ export class PvForecastCard extends ElementBase {
     const report = this.shadowRoot.getElementById("report");
     if (values && !existingDetails.has(values)) values.open = this._valuesOpen;
     if (report && !existingDetails.has(report)) report.open = this._reportOpen;
-    for (const [id, open] of [["outlook", this._outlookOpen], ["uncertainty", this._uncertaintyOpen], ["planning", this._planningOpen]]) {
+    for (const [id, open] of [["archive-day", this._archiveOpen], ["outlook", this._outlookOpen], ["uncertainty", this._uncertaintyOpen], ["planning", this._planningOpen]]) {
       const section = this.shadowRoot.getElementById(id);
       if (section && !existingDetails.has(section)) section.open = open;
     }

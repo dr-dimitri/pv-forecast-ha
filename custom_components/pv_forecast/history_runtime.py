@@ -726,6 +726,26 @@ class ArchiveManager:
         return result
 
     @callback
+    def day_view(self, now: datetime, **selection) -> dict[str, Any]:
+        """Datierte Archivansicht ohne neue Erfassung oder schwere Bandberechnung."""
+        result = self._archive.day_view(now, _configuration_id(self.entry), **selection)
+        result.update(
+            enabled=self.enabled,
+            running=self.running,
+            storage_error=self._storage_error,
+        )
+        if self._storage_error is not None or not self.loaded:
+            result.update(
+                status="unavailable",
+                reason=(
+                    "storage_unavailable"
+                    if self._storage_error
+                    else "archive_not_loaded"
+                ),
+            )
+        return result
+
+    @callback
     def current_targets(self, now: datetime) -> dict[str, Any]:
         """Aktuelle feste Prognoseintervalle ohne neue Erfassung zurückgeben."""
 

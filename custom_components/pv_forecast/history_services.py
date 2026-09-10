@@ -40,6 +40,7 @@ _HISTORY_SCHEMA = vol.Schema(
         **_BASE_SCHEMA,
         vol.Optional("include_records", default=False): cv.boolean,
         vol.Optional("current_targets", default=False): cv.boolean,
+        vol.Optional("day_view"): object,
     }
 )
 _EXPORT_SCHEMA = vol.Schema(
@@ -54,6 +55,23 @@ def async_setup_history_services(hass: HomeAssistant) -> None:
     async def async_get_history(call: ServiceCall) -> ServiceResponse:
         manager = await _async_get_archive(hass, call)
         now = dt_util.utcnow()
+        day_view = None
+        if "day_view" in call.data:
+            try:
+                selection = vol.Schema(
+                    {
+                        vol.Required("date"): str,
+                        vol.Optional("configuration_id"): str,
+                        vol.Optional("horizon", default="hourly_1h"): vol.In(
+                            ("hourly_1h", "hourly_3h")
+                        ),
+                    }
+                )(call.data["day_view"])
+                day_view = manager.day_view(now, **selection)
+            except (ValueError, TypeError, vol.Invalid) as err:
+                raise ServiceValidationError(
+                    translation_domain=DOMAIN, translation_key="invalid_archive_day"
+                ) from err
         result = manager.snapshot(
             call.data["days"],
             now,
@@ -61,7 +79,10 @@ def async_setup_history_services(hass: HomeAssistant) -> None:
         )
         if call.data["current_targets"]:
             result["current_targets"] = manager.current_targets(now)
-        result["uncertainty"] = manager.experience_bands(now)
+        if day_view is None:
+            result["uncertainty"] = manager.experience_bands(now)
+        else:
+            result["day_view"] = day_view
         return result
 
     async def async_export_history(call: ServiceCall) -> ServiceResponse:
