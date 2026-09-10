@@ -207,6 +207,12 @@ async def test_upstream_permissions_gap_and_changed_helper(hass):
                 start, start + timedelta(minutes=21), start + timedelta(minutes=21)
             )
             assert result["total_energy"]["complete"] is False
+            # Die 0,3 kWh des Helfers über die stille 18-Minuten-Lücke fehlen
+            # bewusst in der Messsumme; nur zwei beobachtete Minuten bleiben.
+            assert result["total_energy"]["energy_kwh"] == pytest.approx(
+                2 / 60, abs=0.0001
+            )
+            assert "derived_measurement_gap" in result["total_energy"]["quality_flags"]
             helper = hass.config_entries.async_get_entry(sources[0]["helper_entry_id"])
             with patch(
                 "homeassistant.config_entries.ConfigEntries.async_reload",
@@ -390,3 +396,36 @@ async def test_source_deletion_blocks_measurement_identity(hass):
         assert sensor.entity_id in manager.entity_ids
     finally:
         await manager.async_stop()
+
+
+@pytest.mark.parametrize("interval_minutes", [1, 5])
+async def test_native_helper_power_step_is_an_estimate(hass, interval_minutes):
+    """Zwei Leistungspunkte liefern die Trapezfläche, keinen exakten Gerätezähler."""
+    start = datetime(2026, 9, 9, 10, tzinfo=UTC)
+    with freeze_time(start, real_asyncio=True) as clock:
+        _, sensor = ksem(hass)
+        hass.states.async_set(sensor.entity_id, 0, POWER)
+        sources = await async_resolve_measurement_helpers(hass, [draft(sensor)])
+        manager = MeasurementManager(hass, _entry(hass, sources))
+        await manager.async_start()
+        try:
+            beginning = start + timedelta(minutes=1)
+            clock.move_to(beginning)
+            hass.states.async_set(sensor.entity_id, 0, POWER)
+            await hass.async_block_till_done()
+            end = beginning + timedelta(minutes=interval_minutes)
+            clock.move_to(end)
+            hass.states.async_set(sensor.entity_id, 6000, POWER)
+            await hass.async_block_till_done()
+            result = manager.snapshot(beginning, end, end)["total_energy"]
+            # Die unbekannte Form des realen Leistungsanstiegs ist nicht belegt.
+            # Der Helfer setzt zwischen 0 und 6 kW im Mittel 3 kW an.
+            expected_kwh = 3 * interval_minutes / 60
+            assert float(hass.states.get(sources[0]["entity_id"]).state) == (
+                pytest.approx(expected_kwh)
+            )
+            assert result["energy_kwh"] == pytest.approx(expected_kwh)
+            assert result["energy_complete"] is True
+            assert "derived_energy" in result["quality_flags"]
+        finally:
+            await manager.async_stop()

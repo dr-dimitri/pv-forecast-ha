@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   ARCHIVE_LABEL, REFRESH_MS, PvForecastCard, SharedReadCache, connectionCache, energyText,
-  formatPlantTime, hourMarkers, loadView, planningChoices, plotGeometry, renderContent, renderOutlook, renderPlanning, renderReport, renderUncertainty, renderUnderperformance,
+  formatPlantTime, hourMarkers, intervalKey, loadView, planningChoices, plotGeometry, renderContent, renderIntervalDetails, renderOutlook, renderPlanning, renderReport, renderUncertainty, renderUnderperformance,
   selectedSeries, seriesPaths, tableRows, validateView,
 } from "../../custom_components/pv_forecast/frontend/pv-forecast-card.js";
 import { fixture, fixtureHass } from "./fixtures.mjs";
@@ -851,4 +851,53 @@ test("Halbstündige Zeitumstellung verschiebt Stundenstriche nicht auf halbe Uhr
     assert.ok(markers.some((instant, index) => index && Date.parse(instant) - Date.parse(markers[index - 1]) === 5_400_000));
     assert.equal(Date.parse(markers.at(-1)), Date.parse(view.end));
   }
+});
+
+test("Abgeleitete und gemischte Ist-Energie bleibt numerisch unverändert und erkennbar", async () => {
+  for (const energy of [0, 36]) {
+    for (const complete of [true, false]) {
+      const { state } = await load();
+      state.measurement.data.total_energy = { energy_kwh: energy, energy_complete: complete, source_count: 2, quality_flags: ["derived_energy", ...(complete ? [] : ["incomplete"])] };
+      const before = structuredClone(state);
+      const html = renderContent(config, state, 360);
+      assert.match(html, new RegExp(`Ist heute</dt><dd>${energy} <small>kWh</small>`));
+      assert.match(html, /enthält berechnete Energie/);
+      assert.match(html, /kein exakter Energiezählerstand/);
+      assert.match(html, /denselben Tag, Endzeitpunkt und AC-Messumfang/);
+      assert.doesNotMatch(html, /Tatsächlich produziert/);
+      assert.match(html, complete ? /Seit Tagesbeginn/ : /Unvollständig erfasst/);
+      assert.deepEqual(state, before);
+    }
+  }
+});
+
+test("Herkunftshinweis bewahrt Ausfälle und verschwindet ohne lesbare Messdaten", async () => {
+  const { state } = await load();
+  state.measurement.data.total_energy.quality_flags = ["derived_energy"];
+  state.measurement.retained = true;
+  assert.match(renderContent(config, state), /Letzter Messstand · Aktualisierung fehlgeschlagen · enthält berechnete Energie/);
+  state.measurement = { status: "error", reason: "permission" };
+  assert.doesNotMatch(renderContent(config, state), /enthält berechnete Energie|Ertrag enthält berechnete Energie/);
+});
+
+test("Aktuelle Messherkunft wird nach Standortwechsel nicht aus alten Anteilen abgeleitet", async () => {
+  const { state } = await load();
+  state.measurement.data.total_energy.quality_flags = ["derived_energy"];
+  state.measurement.data.current_location_total_energy = { energy_kwh: 2, energy_complete: true, quality_flags: [] };
+  assert.doesNotMatch(renderContent(config, state), /enthält berechnete Energie|Ertrag enthält berechnete Energie/);
+  state.measurement.data.current_location_total_energy.quality_flags = ["derived_energy"];
+  assert.match(renderContent(config, state), /enthält berechnete Energie/);
+  state.forecast.data.roof_id = "south";
+  assert.doesNotMatch(renderContent(config, state), /enthält berechnete Energie|Ertrag enthält berechnete Energie/);
+});
+
+
+test("Intervall und Säule kennzeichnen auch gemischte Energie als teilweise berechnet", async () => {
+  const { state } = await load("derived-energy");
+  const interval = selectedSeries(state).actual.find((item) => item.energy_kwh > 0);
+  const details = renderIntervalDetails(state, intervalKey(interval));
+  assert.match(details, /Enthält aus Leistung berechnete Energie/);
+  assert.match(renderContent(config, state), /kWh mit aus Leistung berechnetem Anteil/);
+  const direct = await load("sunny");
+  assert.doesNotMatch(renderContent(config, direct.state), /berechnete Energie|berechnetem Anteil/);
 });
