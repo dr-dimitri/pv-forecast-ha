@@ -20,16 +20,29 @@ const server=http.createServer((req,res)=>{const file=path.resolve(root,'.'+new 
       await card.locator('.raw-line').waitFor();
       await card.locator('#interval-chart').focus();await page.keyboard.press('Home');await page.keyboard.press('ArrowRight');
       await card.locator('#interval-detail').getByText('Grundmodell ohne Selbstkalibrierung',{exact:true}).waitFor();
+      await card.locator('#roof').selectOption('south');
+      await page.waitForFunction(()=>document.querySelector('pv-forecast-card')._state?.forecast?.data?.roof_id==='south');
+      assert.equal(await card.locator('.raw-line').count(),0);
+      await card.locator('#interval-chart').tap();
+      await card.locator('#interval-detail').waitFor();
+      assert.equal(await card.locator('#interval-detail').getByText('Grundmodell ohne Selbstkalibrierung',{exact:true}).count(),0);
+      await card.locator('#interval-chart').focus();await page.keyboard.press('Home');await page.keyboard.press('ArrowRight');
+      assert.equal(await card.evaluate(c=>c.shadowRoot.activeElement?.id),'interval-chart');
+      await card.locator('#roof').selectOption('');
+      await card.locator('.raw-line').waitFor();
+      assert.equal(await card.locator('#raw-toggle').isChecked(),true);
+      await card.locator('#interval-chart').focus();await page.keyboard.press('Home');
+      await card.locator('#interval-detail').getByText('Grundmodell ohne Selbstkalibrierung',{exact:true}).waitFor();
       await card.locator('[data-day="tomorrow"]').click();
       await page.waitForFunction(()=>{const c=document.querySelector('pv-forecast-card');return c._state?.forecast.envelope?.explanation?.start===c._state?.forecast.data.start&&c._state?.forecast.data.day==='tomorrow';});
       await card.locator('#explanation').evaluate(e=>e.scrollIntoView({block:'start'}));
       assert.equal(await card.evaluate(card=>[...card.shadowRoot.querySelectorAll('#explanation *')].some(e=>e.checkVisibility()&&e.getBoundingClientRect().right>card.getBoundingClientRect().right+1)),false);
-      await page.screenshot({path:`docs/images/ui-133-360-${theme}.png`});
+      await page.screenshot({path:path.join(process.env.PV_SCREENSHOT_DIR||'docs/images',`ui-133-360-${theme}.png`)});
       await card.locator('#raw-toggle').uncheck();await card.locator('#explanation-toggle').click();
       const count=await page.evaluate(()=>demo.calls.filter(c=>c.service_data.include_explanation).length);
       await page.evaluate(()=>{document.querySelector('pv-forecast-card')._bind();});
       assert.equal(await page.evaluate(()=>demo.calls.filter(c=>c.service_data.include_explanation).length),count);
-      assert.deepEqual(errors,[]);await page.close();console.log(`360 ${theme}: Erklärung, Grundmodell, Tageswechsel und Tastatur bestanden.`);
+      assert.deepEqual(errors,[]);await page.close();console.log(`360 ${theme}: Erklärung, Grundmodell, Dach-/Tageswechsel, Touch und Tastatur bestanden.`);
     }
   } finally {await browser.close();server.close();}
 })().catch(error=>{console.error(error);server.close();process.exitCode=1;});
