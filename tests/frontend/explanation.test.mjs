@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {loadView, renderContent, renderExplanation, currentExplanation, selectedSeries, SharedReadCache, PvForecastCard} from "../../custom_components/pv_forecast/frontend/pv-forecast-card.js";
+import {loadView, renderContent, renderExplanation, currentExplanation, selectedSeries, tableRows, intervalKey, SharedReadCache, PvForecastCard} from "../../custom_components/pv_forecast/frontend/pv-forecast-card.js";
 import {fixtureHass} from "./fixtures.mjs";
 const config={config_entry_id:"demo-plant",day:"today"};
 async function load(options={}) {
@@ -49,3 +49,28 @@ test("Dachansicht hat keine Gesamtbilanz; Kurvenwerte werden nicht im Browser be
   assert.equal(selectedSeries({...state,showRaw:true}).raw,undefined);
   assert.ok(PvForecastCard.getConfigForm().schema.some(item=>item.name==="show_raw_forecast"));
 });
+
+for (const mode of ["available", "roof", "missing", "unavailable", "wrong_day", "wrong_version"]) {
+  test(`Intervallauswahl mit Grundmodell-Präferenz bleibt bedienbar: ${mode}`, async () => {
+    const options = { ...config, show_raw_forecast: true };
+    const { state } = await load(mode === "roof" ? { roof_id: "south" } : { include_explanation: true });
+    if (mode === "missing") delete state.forecast.envelope.explanation;
+    if (mode === "unavailable") state.forecast.envelope.explanation = { ...state.forecast.envelope.explanation, status: "unavailable", raw_intervals: undefined };
+    if (mode === "wrong_day") state.forecast.envelope.explanation.date = "2020-01-01";
+    if (mode === "wrong_version") state.forecast.envelope.explanation.schema_version = 2;
+    const key = intervalKey(tableRows(state)[0]);
+    const html = renderContent(options, state, 360, null, 7, {}, key);
+    const details = html.match(/<section id="interval-detail"[\s\S]*?<\/section>/)[0];
+    assert.match(details, /Aktuelle Prognose/);
+    assert.match(details, /id="interval-next"/);
+    if (mode === "available") assert.match(details, /Grundmodell ohne Selbstkalibrierung/);
+    else assert.doesNotMatch(details, /Grundmodell ohne Selbstkalibrierung/);
+    if (mode === "roof") assert.doesNotMatch(html, /Grundmodell ohne Selbstkalibrierung|class="raw-line"/);
+    assert.equal(options.show_raw_forecast, true);
+
+    const restored = await load({ include_explanation: true });
+    const returned = renderContent(options, restored.state, 360, null, 7, {}, intervalKey(tableRows(restored.state)[0]));
+    assert.match(returned, /class="raw-line"/);
+    assert.match(returned.match(/<section id="interval-detail"[\s\S]*?<\/section>/)[0], /Grundmodell ohne Selbstkalibrierung/);
+  });
+}
