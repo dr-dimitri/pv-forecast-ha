@@ -30,7 +30,7 @@ from custom_components.pv_forecast.const import (
 )
 from custom_components.pv_forecast.coordinator import PvForecastCoordinator
 
-from .helpers import persisted_roof, weather
+from .helpers import configure_options, persisted_roof, weather
 
 
 @pytest.fixture(autouse=True)
@@ -120,8 +120,8 @@ async def test_options_saved_during_reload_trigger_consistent_followup(
         await paused.wait()
         assert entry.state is ConfigEntryState.SETUP_IN_PROGRESS
         options = await hass.config_entries.options.async_init(entry.entry_id)
-        options = await hass.config_entries.options.async_configure(
-            options["flow_id"], {"next_step_id": "add_roof"}
+        options = await configure_options(
+            hass, options["flow_id"], {"next_step_id": "add_roof"}
         )
         result = await hass.config_entries.options.async_configure(
             options["flow_id"],
@@ -198,8 +198,8 @@ async def test_last_roof_deletion_keeps_loaded_runtime_without_reload(hass) -> N
         entities = _entity_ids(hass, entry)
         with patch.object(hass.config_entries, "async_reload") as reload_entry:
             result = await hass.config_entries.options.async_init(entry.entry_id)
-            result = await hass.config_entries.options.async_configure(
-                result["flow_id"], {"next_step_id": "remove_roof"}
+            result = await configure_options(
+                hass, result["flow_id"], {"next_step_id": "remove_roof"}
             )
             result = await hass.config_entries.options.async_configure(
                 result["flow_id"], {CONF_ROOF_ID: "only"}

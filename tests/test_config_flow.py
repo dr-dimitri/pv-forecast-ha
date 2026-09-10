@@ -49,7 +49,7 @@ from custom_components.pv_forecast.geocoding import (
 )
 from custom_components.pv_forecast.models import GeocodedLocation
 
-from .helpers import persisted_roof
+from .helpers import configure_options, persisted_roof
 
 LOCATION = {CONF_LATITUDE: 52.52, CONF_LONGITUDE: 13.41}
 ROOF_FORM = {
@@ -146,7 +146,6 @@ async def test_german_config_flow_translations_are_loaded(hass, language: str) -
     "key",
     [
         "component.pv_forecast.config.step.summary.description",
-        "component.pv_forecast.options.step.init.description",
         "component.pv_forecast.options.step.add_roof.description",
         "component.pv_forecast.options.step.edit_roof.description",
         "component.pv_forecast.options.step.remove_roof.description",
@@ -315,16 +314,12 @@ async def test_all_config_and_options_forms_are_serializable(hass) -> None:
 
     for action in ("add_roof", "system"):
         step = await hass.config_entries.options.async_init(entry.entry_id)
-        step = await hass.config_entries.options.async_configure(
-            step["flow_id"], {"next_step_id": action}
-        )
+        step = await configure_options(hass, step["flow_id"], {"next_step_id": action})
         _assert_form_is_serializable(step)
 
     for action in ("edit_roof", "remove_roof"):
         step = await hass.config_entries.options.async_init(entry.entry_id)
-        step = await hass.config_entries.options.async_configure(
-            step["flow_id"], {"next_step_id": action}
-        )
+        step = await configure_options(hass, step["flow_id"], {"next_step_id": action})
         _assert_form_is_serializable(step)
         step = await hass.config_entries.options.async_configure(
             step["flow_id"], {CONF_ROOF_ID: "first"}
@@ -870,7 +865,7 @@ async def test_duplicate_roof_names_are_rejected(hass) -> None:
         ROOF_FORM | {CONF_NAME: " südDACH "},
     )
     assert result["type"] is FlowResultType.FORM
-    assert result["errors"] == {"base": "duplicate_roof_name"}
+    assert result["errors"] == {"name": "duplicate_roof_name"}
 
 
 @pytest.mark.asyncio
@@ -897,9 +892,9 @@ async def test_flow_internal_validation_errors_are_localized(hass) -> None:
     result = await flow.async_step_roof(ROOF_FORM | {CONF_AZIMUTH: "ungültig"})
     assert result["errors"] == {"base": "invalid_roof"}
     result = await flow.async_step_system({CONF_INVERTER_MAX_POWER_KW: -1})
-    assert result["errors"] == {"base": "invalid_inverter"}
+    assert result["errors"] == {"inverter_max_power_kw": "invalid_inverter"}
     result = await flow.async_step_system({CONF_INVERTER_MAX_POWER_KW: "ungültig"})
-    assert result["errors"] == {"base": "invalid_inverter"}
+    assert result["errors"] == {"inverter_max_power_kw": "invalid_inverter"}
 
 
 @pytest.mark.asyncio
@@ -980,17 +975,10 @@ async def test_options_flow_menu_offers_removal_of_last_roof(hass) -> None:
     result = await hass.config_entries.options.async_init(entry.entry_id)
     assert result["type"] is FlowResultType.MENU
     assert set(result["menu_options"]) == {
-        "add_roof",
-        "edit_roof",
-        "remove_roof",
-        "horizon_profile",
-        "system",
-        "inverter_groups",
-        "forecast_horizon",
+        "plant_options",
         "measurements",
-        "history",
-        "calibration",
         "dashboard",
+        "advanced_options",
     }
     assert "Süddach" in result["description_placeholders"]["roofs"]
 
@@ -1010,14 +998,10 @@ async def test_options_flow_menu_hides_edit_and_remove_without_roofs(hass) -> No
     result = await hass.config_entries.options.async_init(entry.entry_id)
     assert result["type"] is FlowResultType.MENU
     assert set(result["menu_options"]) == {
-        "add_roof",
-        "system",
-        "inverter_groups",
-        "forecast_horizon",
+        "plant_options",
         "measurements",
-        "history",
-        "calibration",
         "dashboard",
+        "advanced_options",
     }
     assert result["description_placeholders"]["roofs"] == ""
 
@@ -1039,20 +1023,13 @@ async def test_options_flow_add_roof_does_not_touch_existing_roofs(hass) -> None
     entry.add_to_hass(hass)
     result = await hass.config_entries.options.async_init(entry.entry_id)
     assert set(result["menu_options"]) == {
-        "add_roof",
-        "edit_roof",
-        "remove_roof",
-        "horizon_profile",
-        "system",
-        "inverter_groups",
-        "forecast_horizon",
+        "plant_options",
         "measurements",
-        "history",
-        "calibration",
         "dashboard",
+        "advanced_options",
     }
-    result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {"next_step_id": "add_roof"}
+    result = await configure_options(
+        hass, result["flow_id"], {"next_step_id": "add_roof"}
     )
     assert result["step_id"] == "add_roof"
     assert result["data_schema"]({})[CONF_NAME] == "Dachfläche 2"
@@ -1095,8 +1072,8 @@ async def test_options_flow_edit_roof_preserves_other_roofs_and_stable_id(
     )
     entry.add_to_hass(hass)
     result = await hass.config_entries.options.async_init(entry.entry_id)
-    result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {"next_step_id": "edit_roof"}
+    result = await configure_options(
+        hass, result["flow_id"], {"next_step_id": "edit_roof"}
     )
     assert result["step_id"] == "edit_roof"
     result = await hass.config_entries.options.async_configure(
@@ -1132,8 +1109,8 @@ async def test_options_flow_preserves_exact_azimuth_when_saving_defaults(hass) -
     )
     entry.add_to_hass(hass)
     result = await hass.config_entries.options.async_init(entry.entry_id)
-    result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {"next_step_id": "edit_roof"}
+    result = await configure_options(
+        hass, result["flow_id"], {"next_step_id": "edit_roof"}
     )
     result = await hass.config_entries.options.async_configure(
         result["flow_id"], {CONF_ROOF_ID: "stable_id"}
@@ -1226,18 +1203,18 @@ async def test_options_flow_rejects_duplicate_names_on_add_and_edit(hass) -> Non
     entry.add_to_hass(hass)
 
     result = await hass.config_entries.options.async_init(entry.entry_id)
-    result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {"next_step_id": "add_roof"}
+    result = await configure_options(
+        hass, result["flow_id"], {"next_step_id": "add_roof"}
     )
     result = await hass.config_entries.options.async_configure(
         result["flow_id"], ROOF_FORM_SINGLE | {CONF_NAME: "süddach"}
     )
     assert result["type"] is FlowResultType.FORM
-    assert result["errors"] == {"base": "duplicate_roof_name"}
+    assert result["errors"] == {"name": "duplicate_roof_name"}
 
     result = await hass.config_entries.options.async_init(entry.entry_id)
-    result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {"next_step_id": "edit_roof"}
+    result = await configure_options(
+        hass, result["flow_id"], {"next_step_id": "edit_roof"}
     )
     result = await hass.config_entries.options.async_configure(
         result["flow_id"], {CONF_ROOF_ID: "second"}
@@ -1246,7 +1223,7 @@ async def test_options_flow_rejects_duplicate_names_on_add_and_edit(hass) -> Non
         result["flow_id"], ROOF_FORM_SINGLE | {CONF_NAME: "Süddach"}
     )
     assert result["type"] is FlowResultType.FORM
-    assert result["errors"] == {"base": "duplicate_roof_name"}
+    assert result["errors"] == {"name": "duplicate_roof_name"}
 
     # Umbenennen auf den eigenen, unveränderten Namen bleibt weiterhin erlaubt.
     result = await hass.config_entries.options.async_configure(
@@ -1274,20 +1251,13 @@ async def test_options_flow_removing_roof_requires_confirmation(hass) -> None:
     entry.add_to_hass(hass)
     result = await hass.config_entries.options.async_init(entry.entry_id)
     assert set(result["menu_options"]) == {
-        "add_roof",
-        "edit_roof",
-        "remove_roof",
-        "horizon_profile",
-        "system",
-        "inverter_groups",
-        "forecast_horizon",
+        "plant_options",
         "measurements",
-        "history",
-        "calibration",
         "dashboard",
+        "advanced_options",
     }
-    result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {"next_step_id": "remove_roof"}
+    result = await configure_options(
+        hass, result["flow_id"], {"next_step_id": "remove_roof"}
     )
     result = await hass.config_entries.options.async_configure(
         result["flow_id"], {CONF_ROOF_ID: "second"}
@@ -1302,8 +1272,8 @@ async def test_options_flow_removing_roof_requires_confirmation(hass) -> None:
     assert declined["type"] is FlowResultType.MENU
     assert declined["step_id"] == "init"
 
-    result = await hass.config_entries.options.async_configure(
-        declined["flow_id"], {"next_step_id": "remove_roof"}
+    result = await configure_options(
+        hass, declined["flow_id"], {"next_step_id": "remove_roof"}
     )
     result = await hass.config_entries.options.async_configure(
         result["flow_id"], {CONF_ROOF_ID: "second"}
@@ -1328,8 +1298,8 @@ async def test_options_flow_preserves_last_roof_and_explains_recovery(hass) -> N
     )
     entry.add_to_hass(hass)
     result = await hass.config_entries.options.async_init(entry.entry_id)
-    result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {"next_step_id": "remove_roof"}
+    result = await configure_options(
+        hass, result["flow_id"], {"next_step_id": "remove_roof"}
     )
     result = await hass.config_entries.options.async_configure(
         result["flow_id"], {CONF_ROOF_ID: "only"}
@@ -1362,15 +1332,15 @@ async def test_options_flow_updates_inverter_limit_independently(hass) -> None:
     )
     entry.add_to_hass(hass)
     result = await hass.config_entries.options.async_init(entry.entry_id)
-    result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {"next_step_id": "system"}
+    result = await configure_options(
+        hass, result["flow_id"], {"next_step_id": "system"}
     )
     assert result["step_id"] == "system"
 
     # Direkter Aufruf prüft die Validierung hinter dem numerischen Selector.
     options_flow = hass.config_entries.options._progress[result["flow_id"]]
     invalid = await options_flow.async_step_system({CONF_INVERTER_MAX_POWER_KW: -1})
-    assert invalid["errors"] == {"base": "invalid_inverter"}
+    assert invalid["errors"] == {"inverter_max_power_kw": "invalid_inverter"}
 
     result = await hass.config_entries.options.async_configure(
         result["flow_id"], {CONF_INVERTER_MAX_POWER_KW: 9}

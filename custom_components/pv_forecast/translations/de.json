@@ -41,7 +41,10 @@
         "data_description": {
           "system_efficiency": "Berücksichtigt pauschal Wechselrichter-, Leitungs-, Verschmutzungs- und sonstige Anlagenverluste. 90 % entsprechen 10 % Verlust. Der Wert kann später unter „Konfigurieren“ geändert werden.",
           "azimuth": "Himmelsrichtung als Schnellauswahl oder „Genauen Kompasswinkel verwenden“ wählen.",
-          "custom_azimuth": "Nur bei Auswahl des genauen Winkels verwendet. 0° = Nord, 90° = Ost, 180° = Süd, 270° = West. Erlaubt sind 0° bis unter 360°, auch mit Nachkommastellen; der Winkel wird nicht gerundet."
+          "custom_azimuth": "Nur bei Auswahl des genauen Winkels verwendet. 0° = Nord, 90° = Ost, 180° = Süd, 270° = West. Erlaubt sind 0° bis unter 360°, auch mit Nachkommastellen; der Winkel wird nicht gerundet.",
+          "installed_power_kwp": "Modulleistung unter Standardbedingungen, zum Beispiel 6,4 kWp laut Anlagenunterlagen. kWp beschreibt die Größe der Module; kWh ist deren Energieertrag.",
+          "tilt": "Winkel der Dachfläche: 0° = waagerecht, 90° = senkrecht. Zum Beispiel 30° für ein Schrägdach.",
+          "name": "Ein verständlicher Name, zum Beispiel „Garage Ost“."
         }
       },
       "system": {
@@ -51,12 +54,12 @@
           "inverter_max_power_kw": "Maximale AC-Wechselrichterleistung"
         },
         "data_description": {
-          "inverter_max_power_kw": "Leer lassen, wenn keine anlagenweite Begrenzung angewendet werden soll."
+          "inverter_max_power_kw": "AC-Ausgangsleistung in kW, zum Beispiel 8 kW laut Wechselrichterdatenblatt. kW ist momentane Leistung; 1 kW über eine Stunde entspricht 1 kWh Energie. Leer lassen für kein gemeinsames Limit."
         }
       },
       "summary": {
         "title": "Angaben prüfen und abschließen",
-        "description": "![Symbolbild: Zusammenfassung und Abschluss](data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMjggMTI4IiB3aWR0aD0iOTYiIGhlaWdodD0iOTYiPgogIDxyZWN0IHg9IjAiIHk9IjAiIHdpZHRoPSIxMjgiIGhlaWdodD0iMTI4IiByeD0iMjYiIGZpbGw9IiMwMTE3NDkiLz4KCiAgPGc+CiAgICA8Y2lyY2xlIGN4PSI1OCIgY3k9IjMwIiByPSIxMCIgZmlsbD0iI2ZjYjYwNyIvPgogICAgPGxpbmUgeDE9IjcyLjAiIHkxPSIzMC4wIiB4Mj0iNzguMCIgeTI9IjMwLjAiIHN0cm9rZT0iI2ZjYjYwNyIgc3Ryb2tlLXdpZHRoPSI0IiBzdHJva2UtbGluZWNhcD0icm91bmQiLz4KICAgIDxsaW5lIHgxPSI2Ny45IiB5MT0iMzkuOSIgeDI9IjcyLjEiIHkyPSI0NC4xIiBzdHJva2U9IiNmY2I2MDciIHN0cm9rZS13aWR0aD0iNCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgICA8bGluZSB4MT0iNTguMCIgeTE9IjQ0LjAiIHgyPSI1OC4wIiB5Mj0iNTAuMCIgc3Ryb2tlPSIjZmNiNjA3IiBzdHJva2Utd2lkdGg9IjQiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgogICAgPGxpbmUgeDE9IjQ4LjEiIHkxPSIzOS45IiB4Mj0iNDMuOSIgeTI9IjQ0LjEiIHN0cm9rZT0iI2ZjYjYwNyIgc3Ryb2tlLXdpZHRoPSI0IiBzdHJva2UtbGluZWNhcD0icm91bmQiLz4KICAgIDxsaW5lIHgxPSI0NC4wIiB5MT0iMzAuMCIgeDI9IjM4LjAiIHkyPSIzMC4wIiBzdHJva2U9IiNmY2I2MDciIHN0cm9rZS13aWR0aD0iNCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgICA8bGluZSB4MT0iNDguMSIgeTE9IjIwLjEiIHgyPSI0My45IiB5Mj0iMTUuOSIgc3Ryb2tlPSIjZmNiNjA3IiBzdHJva2Utd2lkdGg9IjQiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgogICAgPGxpbmUgeDE9IjU4LjAiIHkxPSIxNi4wIiB4Mj0iNTguMCIgeTI9IjEwLjAiIHN0cm9rZT0iI2ZjYjYwNyIgc3Ryb2tlLXdpZHRoPSI0IiBzdHJva2UtbGluZWNhcD0icm91bmQiLz4KICAgIDxsaW5lIHgxPSI2Ny45IiB5MT0iMjAuMSIgeDI9IjcyLjEiIHkyPSIxNS45IiBzdHJva2U9IiNmY2I2MDciIHN0cm9rZS13aWR0aD0iNCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgICAKICA8L2c+CiAgPGc+CiAgICA8cmVjdCB4PSIyNiIgeT0iNTYiIHdpZHRoPSI1NiIgaGVpZ2h0PSIzMCIgcng9IjUiIGZpbGw9IiMwZTc3ZWEiLz4KICAgIDxsaW5lIHgxPSI0NC43IiB5MT0iNTYiIHgyPSI0NC43IiB5Mj0iODYiIHN0cm9rZT0iIzAxMTc0OSIgc3Ryb2tlLXdpZHRoPSIzIi8+CiAgICA8bGluZSB4MT0iNjMuMyIgeTE9IjU2IiB4Mj0iNjMuMyIgeTI9Ijg2IiBzdHJva2U9IiMwMTE3NDkiIHN0cm9rZS13aWR0aD0iMyIvPgogICAgPGxpbmUgeDE9IjI2IiB5MT0iNzEuMCIgeDI9IjgyIiB5Mj0iNzEuMCIgc3Ryb2tlPSIjMDExNzQ5IiBzdHJva2Utd2lkdGg9IjMiLz4KICAgIDxyZWN0IHg9IjUwLjAiIHk9Ijg2IiB3aWR0aD0iOCIgaGVpZ2h0PSI5IiBmaWxsPSIjMGU3N2VhIi8+CiAgICA8bGluZSB4MT0iNDAuMCIgeTE9Ijk1IiB4Mj0iNjguMCIgeTI9Ijk1IiBzdHJva2U9IiMwZTc3ZWEiIHN0cm9rZS13aWR0aD0iNCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgPC9nPgogIDxnPgogICAgPGNpcmNsZSBjeD0iOTgiIGN5PSI4NiIgcj0iMTciIGZpbGw9IiMwMTE3NDkiIHN0cm9rZT0iIzBkY2JiYSIgc3Ryb2tlLXdpZHRoPSI0Ii8+CiAgICA8cGF0aCBkPSJNIDkwIDg2IEwgOTYgOTIgTCAxMDcgNzkiIHN0cm9rZT0iIzBkY2JiYSIgc3Ryb2tlLXdpZHRoPSI1IiBmaWxsPSJub25lIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiLz4KICA8L2c+PC9zdmc+)\n\nBitte prüfe die vollständige Konfiguration.\n\n**Anlage:** {plant_name}\n\n**Standort:** {location}\n\n**Standortquelle:** {location_source}\n\n**Breitengrad:** {latitude}\n\n**Längengrad:** {longitude}\n\n**Zeitzone:** {timezone}\n\n**Dachflächen** (installierte Leistung · Ausrichtung · Neigung · Wirkungsgrad)\n{roofs}\n\n**Maximale Wechselrichterleistung:** {inverter}\n\nDu kannst die Einrichtung jetzt abschließen oder gezielt zu einem Abschnitt zurückkehren.\n\n**PV-Dashboard:** {dashboard}",
+        "description": "![Symbolbild: Zusammenfassung und Abschluss](data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMjggMTI4IiB3aWR0aD0iOTYiIGhlaWdodD0iOTYiPgogIDxyZWN0IHg9IjAiIHk9IjAiIHdpZHRoPSIxMjgiIGhlaWdodD0iMTI4IiByeD0iMjYiIGZpbGw9IiMwMTE3NDkiLz4KCiAgPGc+CiAgICA8Y2lyY2xlIGN4PSI1OCIgY3k9IjMwIiByPSIxMCIgZmlsbD0iI2ZjYjYwNyIvPgogICAgPGxpbmUgeDE9IjcyLjAiIHkxPSIzMC4wIiB4Mj0iNzguMCIgeTI9IjMwLjAiIHN0cm9rZT0iI2ZjYjYwNyIgc3Ryb2tlLXdpZHRoPSI0IiBzdHJva2UtbGluZWNhcD0icm91bmQiLz4KICAgIDxsaW5lIHgxPSI2Ny45IiB5MT0iMzkuOSIgeDI9IjcyLjEiIHkyPSI0NC4xIiBzdHJva2U9IiNmY2I2MDciIHN0cm9rZS13aWR0aD0iNCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgICA8bGluZSB4MT0iNTguMCIgeTE9IjQ0LjAiIHgyPSI1OC4wIiB5Mj0iNTAuMCIgc3Ryb2tlPSIjZmNiNjA3IiBzdHJva2Utd2lkdGg9IjQiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgogICAgPGxpbmUgeDE9IjQ4LjEiIHkxPSIzOS45IiB4Mj0iNDMuOSIgeTI9IjQ0LjEiIHN0cm9rZT0iI2ZjYjYwNyIgc3Ryb2tlLXdpZHRoPSI0IiBzdHJva2UtbGluZWNhcD0icm91bmQiLz4KICAgIDxsaW5lIHgxPSI0NC4wIiB5MT0iMzAuMCIgeDI9IjM4LjAiIHkyPSIzMC4wIiBzdHJva2U9IiNmY2I2MDciIHN0cm9rZS13aWR0aD0iNCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgICA8bGluZSB4MT0iNDguMSIgeTE9IjIwLjEiIHgyPSI0My45IiB5Mj0iMTUuOSIgc3Ryb2tlPSIjZmNiNjA3IiBzdHJva2Utd2lkdGg9IjQiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgogICAgPGxpbmUgeDE9IjU4LjAiIHkxPSIxNi4wIiB4Mj0iNTguMCIgeTI9IjEwLjAiIHN0cm9rZT0iI2ZjYjYwNyIgc3Ryb2tlLXdpZHRoPSI0IiBzdHJva2UtbGluZWNhcD0icm91bmQiLz4KICAgIDxsaW5lIHgxPSI2Ny45IiB5MT0iMjAuMSIgeDI9IjcyLjEiIHkyPSIxNS45IiBzdHJva2U9IiNmY2I2MDciIHN0cm9rZS13aWR0aD0iNCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgICAKICA8L2c+CiAgPGc+CiAgICA8cmVjdCB4PSIyNiIgeT0iNTYiIHdpZHRoPSI1NiIgaGVpZ2h0PSIzMCIgcng9IjUiIGZpbGw9IiMwZTc3ZWEiLz4KICAgIDxsaW5lIHgxPSI0NC43IiB5MT0iNTYiIHgyPSI0NC43IiB5Mj0iODYiIHN0cm9rZT0iIzAxMTc0OSIgc3Ryb2tlLXdpZHRoPSIzIi8+CiAgICA8bGluZSB4MT0iNjMuMyIgeTE9IjU2IiB4Mj0iNjMuMyIgeTI9Ijg2IiBzdHJva2U9IiMwMTE3NDkiIHN0cm9rZS13aWR0aD0iMyIvPgogICAgPGxpbmUgeDE9IjI2IiB5MT0iNzEuMCIgeDI9IjgyIiB5Mj0iNzEuMCIgc3Ryb2tlPSIjMDExNzQ5IiBzdHJva2Utd2lkdGg9IjMiLz4KICAgIDxyZWN0IHg9IjUwLjAiIHk9Ijg2IiB3aWR0aD0iOCIgaGVpZ2h0PSI5IiBmaWxsPSIjMGU3N2VhIi8+CiAgICA8bGluZSB4MT0iNDAuMCIgeTE9Ijk1IiB4Mj0iNjguMCIgeTI9Ijk1IiBzdHJva2U9IiMwZTc3ZWEiIHN0cm9rZS13aWR0aD0iNCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgPC9nPgogIDxnPgogICAgPGNpcmNsZSBjeD0iOTgiIGN5PSI4NiIgcj0iMTciIGZpbGw9IiMwMTE3NDkiIHN0cm9rZT0iIzBkY2JiYSIgc3Ryb2tlLXdpZHRoPSI0Ii8+CiAgICA8cGF0aCBkPSJNIDkwIDg2IEwgOTYgOTIgTCAxMDcgNzkiIHN0cm9rZT0iIzBkY2JiYSIgc3Ryb2tlLXdpZHRoPSI1IiBmaWxsPSJub25lIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiLz4KICA8L2c+PC9zdmc+)\n\nBitte prüfe die vollständige Konfiguration.\n\n**Anlage:** {plant_name}\n\n**Standort:** {location}\n\n**Standortquelle:** {location_source}\n\n**Breitengrad:** {latitude}\n\n**Längengrad:** {longitude}\n\n**Zeitzone:** {timezone}\n\n**Dachflächen** (installierte Leistung · Ausrichtung · Neigung · Wirkungsgrad)\n{roofs}\n\n**Maximale Wechselrichterleistung:** {inverter}\n\nDu kannst die Einrichtung jetzt abschließen oder gezielt zu einem Abschnitt zurückkehren.\n\n**PV-Dashboard:** {dashboard}\n\n**Freiwillige Einrichtung**\n{optional}\n\n„Einrichtung abschließen“ speichert Standort, Dachflächen und die gewählten Optionen. Falls bestätigt, wird dabei ein Integral-Helfer angelegt; er bleibt als eigener HA-Helfer erhalten. Rücksprünge bewahren unabhängige Eingaben. Schließen ohne Abschluss speichert diese Einrichtung nicht.",
         "menu_options": {
           "finish": "Einrichtung abschließen",
           "edit_location": "Standort ändern",
@@ -74,8 +77,8 @@
         }
       },
       "measurements": {
-        "title": "Echte PV-Messquellen (optional)",
-        "description": "{sources}\n\nOrdne vorhandene Home-Assistant-Sensoren zu. Die Prognose funktioniert auch ohne Messquelle. Energie wird je Quelle ausgewertet; Leistung wird nur gelesen. Eine gemeinsame Gesamtquelle und ihre Teilzähler dürfen nicht gleichzeitig als Energiequellen verwendet werden.",
+        "title": "PV-Erzeugung (optional)",
+        "description": "{sources}\n\nFüge ein bereits eingerichtetes KSEM über den Geräteassistenten hinzu oder ordne vorhandene PV-Sensoren manuell zu. Ohne Messquelle bleibt die Prognose nutzbar. Gesamtzähler und Teilzähler dürfen nicht dieselbe Energie doppelt erfassen.\n\nDie Auswahl bleibt ein Entwurf bis „Einrichtung abschließen“. „Fertig“ führt zur Zusammenfassung zurück.",
         "menu_options": {
           "add_measurement": "PV-Erzeugung hinzufügen",
           "edit_measurement": "Messquelle bearbeiten",
@@ -98,7 +101,8 @@
           "scope": "Zum Beispiel „Gesamtanlage, AC-Ausgang ohne Batterie“ oder „Wechselrichter Garage“. Der Name und die Einheit eines Sensors beweisen seine Messgrenze nicht.",
           "kind": "Fortlaufende und tägliche Energiezähler benötigen Wh/kWh und total oder total_increasing. Leistung benötigt W/kW und measurement. Für vollständige Tagesberichte und Lernen verwende einen fortlaufenden AC-Ertragszähler oder den KSEM-Assistenten. Ein täglicher Reset allein belegt den endgültigen Vortagsertrag nicht.",
           "max_interval_minutes": "Danach gilt die Zeitabdeckung als lückenhaft. Ein Summenertrag über eine Lücke wird nicht auf Stunden verteilt.",
-          "derived_energy": "Ein Integral-Helfer wird, soweit erkennbar, automatisch markiert. Seine Ausgangsmessung und Lücken begrenzen die Aussagekraft."
+          "derived_energy": "Ein Integral-Helfer wird, soweit erkennbar, automatisch markiert. Seine Ausgangsmessung und Lücken begrenzen die Aussagekraft.",
+          "entity_id": "Ein AC-Ertragszähler liefert Energie in Wh/kWh; ein Leistungssensor liefert W/kW. Für das vorhandene KSEM ist der Geräteassistent einfacher."
         }
       },
       "confirm_measurement": {
@@ -256,7 +260,7 @@
       },
       "add_measurement": {
         "title": "PV-Erzeugung hinzufügen",
-        "description": "Wähle ein bereits eingerichtetes Gerät. Den passenden Messwert ordnen wir automatisch zu. Fehlt dein Gerät, richte zuerst seine Integration ein und prüfe, ob sie aktuelle Leistungswerte liefert. Andere Sensoren kannst du selbst auswählen.",
+        "description": "{devices}\n\nEs werden ausschließlich vorhandene lokale Sensoren gelesen. Mit der Auswahl wird noch kein Helfer angelegt. Bestätige im nächsten Schritt die tatsächliche AC-PV-Messgrenze.",
         "data": {
           "device": "Gerät oder Messquelle"
         }
@@ -318,30 +322,19 @@
   "options": {
     "step": {
       "init": {
-        "title": "Anlage bearbeiten",
-        "description": "![Symbolbild: Anlage bearbeiten](data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMjggMTI4IiB3aWR0aD0iOTYiIGhlaWdodD0iOTYiPgogIDxyZWN0IHg9IjAiIHk9IjAiIHdpZHRoPSIxMjgiIGhlaWdodD0iMTI4IiByeD0iMjYiIGZpbGw9IiMwMTE3NDkiLz4KCiAgPGc+CiAgICA8Y2lyY2xlIGN4PSI1OCIgY3k9IjMwIiByPSIxMCIgZmlsbD0iI2ZjYjYwNyIvPgogICAgPGxpbmUgeDE9IjcyLjAiIHkxPSIzMC4wIiB4Mj0iNzguMCIgeTI9IjMwLjAiIHN0cm9rZT0iI2ZjYjYwNyIgc3Ryb2tlLXdpZHRoPSI0IiBzdHJva2UtbGluZWNhcD0icm91bmQiLz4KICAgIDxsaW5lIHgxPSI2Ny45IiB5MT0iMzkuOSIgeDI9IjcyLjEiIHkyPSI0NC4xIiBzdHJva2U9IiNmY2I2MDciIHN0cm9rZS13aWR0aD0iNCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgICA8bGluZSB4MT0iNTguMCIgeTE9IjQ0LjAiIHgyPSI1OC4wIiB5Mj0iNTAuMCIgc3Ryb2tlPSIjZmNiNjA3IiBzdHJva2Utd2lkdGg9IjQiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgogICAgPGxpbmUgeDE9IjQ4LjEiIHkxPSIzOS45IiB4Mj0iNDMuOSIgeTI9IjQ0LjEiIHN0cm9rZT0iI2ZjYjYwNyIgc3Ryb2tlLXdpZHRoPSI0IiBzdHJva2UtbGluZWNhcD0icm91bmQiLz4KICAgIDxsaW5lIHgxPSI0NC4wIiB5MT0iMzAuMCIgeDI9IjM4LjAiIHkyPSIzMC4wIiBzdHJva2U9IiNmY2I2MDciIHN0cm9rZS13aWR0aD0iNCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgICA8bGluZSB4MT0iNDguMSIgeTE9IjIwLjEiIHgyPSI0My45IiB5Mj0iMTUuOSIgc3Ryb2tlPSIjZmNiNjA3IiBzdHJva2Utd2lkdGg9IjQiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgogICAgPGxpbmUgeDE9IjU4LjAiIHkxPSIxNi4wIiB4Mj0iNTguMCIgeTI9IjEwLjAiIHN0cm9rZT0iI2ZjYjYwNyIgc3Ryb2tlLXdpZHRoPSI0IiBzdHJva2UtbGluZWNhcD0icm91bmQiLz4KICAgIDxsaW5lIHgxPSI2Ny45IiB5MT0iMjAuMSIgeDI9IjcyLjEiIHkyPSIxNS45IiBzdHJva2U9IiNmY2I2MDciIHN0cm9rZS13aWR0aD0iNCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgICAKICA8L2c+CiAgPGc+CiAgICA8cmVjdCB4PSIyNiIgeT0iNTYiIHdpZHRoPSI1NiIgaGVpZ2h0PSIzMCIgcng9IjUiIGZpbGw9IiMwZTc3ZWEiLz4KICAgIDxsaW5lIHgxPSI0NC43IiB5MT0iNTYiIHgyPSI0NC43IiB5Mj0iODYiIHN0cm9rZT0iIzAxMTc0OSIgc3Ryb2tlLXdpZHRoPSIzIi8+CiAgICA8bGluZSB4MT0iNjMuMyIgeTE9IjU2IiB4Mj0iNjMuMyIgeTI9Ijg2IiBzdHJva2U9IiMwMTE3NDkiIHN0cm9rZS13aWR0aD0iMyIvPgogICAgPGxpbmUgeDE9IjI2IiB5MT0iNzEuMCIgeDI9IjgyIiB5Mj0iNzEuMCIgc3Ryb2tlPSIjMDExNzQ5IiBzdHJva2Utd2lkdGg9IjMiLz4KICAgIDxyZWN0IHg9IjUwLjAiIHk9Ijg2IiB3aWR0aD0iOCIgaGVpZ2h0PSI5IiBmaWxsPSIjMGU3N2VhIi8+CiAgICA8bGluZSB4MT0iNDAuMCIgeTE9Ijk1IiB4Mj0iNjguMCIgeTI9Ijk1IiBzdHJva2U9IiMwZTc3ZWEiIHN0cm9rZS13aWR0aD0iNCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgPC9nPgogIDxnPgogICAgPGxpbmUgeDE9IjExMS4wIiB5MT0iOTAuMCIgeDI9IjExNy4wIiB5Mj0iOTAuMCIgc3Ryb2tlPSIjMGRjYmJhIiBzdHJva2Utd2lkdGg9IjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgogICAgPGxpbmUgeDE9IjEwNy4yIiB5MT0iOTkuMiIgeDI9IjExMS40IiB5Mj0iMTAzLjQiIHN0cm9rZT0iIzBkY2JiYSIgc3Ryb2tlLXdpZHRoPSI1IiBzdHJva2UtbGluZWNhcD0icm91bmQiLz4KICAgIDxsaW5lIHgxPSI5OC4wIiB5MT0iMTAzLjAiIHgyPSI5OC4wIiB5Mj0iMTA5LjAiIHN0cm9rZT0iIzBkY2JiYSIgc3Ryb2tlLXdpZHRoPSI1IiBzdHJva2UtbGluZWNhcD0icm91bmQiLz4KICAgIDxsaW5lIHgxPSI4OC44IiB5MT0iOTkuMiIgeDI9Ijg0LjYiIHkyPSIxMDMuNCIgc3Ryb2tlPSIjMGRjYmJhIiBzdHJva2Utd2lkdGg9IjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgogICAgPGxpbmUgeDE9Ijg1LjAiIHkxPSI5MC4wIiB4Mj0iNzkuMCIgeTI9IjkwLjAiIHN0cm9rZT0iIzBkY2JiYSIgc3Ryb2tlLXdpZHRoPSI1IiBzdHJva2UtbGluZWNhcD0icm91bmQiLz4KICAgIDxsaW5lIHgxPSI4OC44IiB5MT0iODAuOCIgeDI9Ijg0LjYiIHkyPSI3Ni42IiBzdHJva2U9IiMwZGNiYmEiIHN0cm9rZS13aWR0aD0iNSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgICA8bGluZSB4MT0iOTguMCIgeTE9Ijc3LjAiIHgyPSI5OC4wIiB5Mj0iNzEuMCIgc3Ryb2tlPSIjMGRjYmJhIiBzdHJva2Utd2lkdGg9IjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgogICAgPGxpbmUgeDE9IjEwNy4yIiB5MT0iODAuOCIgeDI9IjExMS40IiB5Mj0iNzYuNiIgc3Ryb2tlPSIjMGRjYmJhIiBzdHJva2Utd2lkdGg9IjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgogICAgCiAgICA8Y2lyY2xlIGN4PSI5OCIgY3k9IjkwIiByPSIxMSIgZmlsbD0iIzAxMTc0OSIgc3Ryb2tlPSIjMGRjYmJhIiBzdHJva2Utd2lkdGg9IjQiLz4KICAgIDxjaXJjbGUgY3g9Ijk4IiBjeT0iOTAiIHI9IjQiIGZpbGw9IiMwZGNiYmEiLz4KICA8L2c+PC9zdmc+)\n\n**Dachflächen** (installierte Leistung · Ausrichtung · Neigung · Wirkungsgrad)\n{roofs}\n\n**Maximale Wechselrichterleistung:** {inverter}\n\nWähle eine Aktion.",
+        "title": "PV-Anlage konfigurieren",
+        "description": "**Dachflächen** (installierte Leistung · Ausrichtung · Neigung · Wirkungsgrad)\n{roofs}\n\n**Maximale Wechselrichterleistung:** {inverter}\n\n{optional}\n\nWähle einen Bereich. Änderungen werden erst am Abschluss des jeweiligen Dialogs gespeichert. Beim Schließen ohne Abschluss bleiben die bisherigen Einstellungen erhalten.",
         "menu_options": {
-          "add_roof": "Dachfläche hinzufügen",
-          "edit_roof": "Dachfläche bearbeiten",
-          "remove_roof": "Dachfläche entfernen",
-          "system": "Wechselrichterleistung ändern",
-          "measurements": "PV-Erzeugung und Messquellen",
-          "history": "Prognosearchiv und Soll-Ist-Vergleich (optional)",
-          "calibration": "Selbstkalibrierung (optional)",
-          "inverter_groups": "AC-Wechselrichtergruppen zuordnen",
-          "forecast_horizon": "Prognosehorizont",
-          "horizon_profile": "Horizontprofil je Dach (experimentell)",
-          "dashboard": "PV-Dashboard einrichten"
+          "plant_options": "Anlage",
+          "measurements": "PV-Erzeugung",
+          "dashboard": "Dashboard",
+          "advanced_options": "Erweiterte Funktionen"
         },
         "menu_option_descriptions": {
-          "add_roof": "Erfasst eine zusätzliche Dachfläche, ohne die vorhandenen zu verändern.",
-          "edit_roof": "Bearbeitet eine einzelne bestehende Dachfläche gezielt.",
-          "remove_roof": "Entfernt eine Dachfläche nach ausdrücklicher Bestätigung.",
-          "system": "Ändert die maximale AC-Wechselrichterleistung der Gesamtanlage.",
-          "measurements": "Vorhandene PV-Zähler zuordnen und lokale Messkopien verwalten.",
-          "history": "Rechtzeitige Prognosen lokal archivieren, vergleichen und bewusst exportieren.",
-          "calibration": "Einen begrenzten Anlagenfaktor beobachten, prüfen und bewusst anwenden.",
-          "inverter_groups": "Dächer einer tatsächlichen gemeinsamen AC-Leistungsgrenze zuordnen."
+          "plant_options": "Dachflächen und maximale Wechselrichterleistung bearbeiten.",
+          "measurements": "Vorhandenes KSEM auswählen oder PV-Sensoren manuell zuordnen. Optional.",
+          "dashboard": "Eigene PV-Seite einrichten oder deren Titel ändern.",
+          "advanced_options": "Archiv, Kalibrierung, Prognosehorizont, AC-Gruppen und experimentelles Horizontprofil."
         }
       },
       "add_roof": {
@@ -358,7 +351,10 @@
         "data_description": {
           "system_efficiency": "Berücksichtigt alle pauschalen Anlagenverluste. 90 % Wirkungsgrad entsprechen 10 % Verlust.",
           "azimuth": "Himmelsrichtung als Schnellauswahl oder „Genauen Kompasswinkel verwenden“ wählen.",
-          "custom_azimuth": "Nur bei Auswahl des genauen Winkels verwendet. 0° = Nord, 90° = Ost, 180° = Süd, 270° = West. Erlaubt sind 0° bis unter 360°, auch mit Nachkommastellen; der Winkel wird nicht gerundet."
+          "custom_azimuth": "Nur bei Auswahl des genauen Winkels verwendet. 0° = Nord, 90° = Ost, 180° = Süd, 270° = West. Erlaubt sind 0° bis unter 360°, auch mit Nachkommastellen; der Winkel wird nicht gerundet.",
+          "installed_power_kwp": "Modulleistung unter Standardbedingungen, zum Beispiel 6,4 kWp laut Anlagenunterlagen. kWp beschreibt die Größe der Module; kWh ist deren Energieertrag.",
+          "tilt": "Winkel der Dachfläche: 0° = waagerecht, 90° = senkrecht. Zum Beispiel 30° für ein Schrägdach.",
+          "name": "Ein verständlicher Name, zum Beispiel „Garage Ost“."
         }
       },
       "edit_roof": {
@@ -382,7 +378,10 @@
         "data_description": {
           "system_efficiency": "Berücksichtigt alle pauschalen Anlagenverluste. 90 % Wirkungsgrad entsprechen 10 % Verlust; ein höherer Wert erhöht die prognostizierte Energie.",
           "azimuth": "Himmelsrichtung als Schnellauswahl oder „Genauen Kompasswinkel verwenden“ wählen.",
-          "custom_azimuth": "Nur bei Auswahl des genauen Winkels verwendet. 0° = Nord, 90° = Ost, 180° = Süd, 270° = West. Erlaubt sind 0° bis unter 360°, auch mit Nachkommastellen; der Winkel wird nicht gerundet."
+          "custom_azimuth": "Nur bei Auswahl des genauen Winkels verwendet. 0° = Nord, 90° = Ost, 180° = Süd, 270° = West. Erlaubt sind 0° bis unter 360°, auch mit Nachkommastellen; der Winkel wird nicht gerundet.",
+          "installed_power_kwp": "Modulleistung unter Standardbedingungen, zum Beispiel 6,4 kWp laut Anlagenunterlagen. kWp beschreibt die Größe der Module; kWh ist deren Energieertrag.",
+          "tilt": "Winkel der Dachfläche: 0° = waagerecht, 90° = senkrecht. Zum Beispiel 30° für ein Schrägdach.",
+          "name": "Ein verständlicher Name, zum Beispiel „Garage Ost“."
         }
       },
       "remove_roof": {
@@ -406,12 +405,12 @@
           "inverter_max_power_kw": "Maximale AC-Wechselrichterleistung"
         },
         "data_description": {
-          "inverter_max_power_kw": "Leer lassen, um die Begrenzung zu entfernen."
+          "inverter_max_power_kw": "AC-Ausgangsleistung in kW, zum Beispiel 8 kW laut Wechselrichterdatenblatt. kW ist momentane Leistung; 1 kW über eine Stunde entspricht 1 kWh Energie. Leer lassen für kein gemeinsames Limit."
         }
       },
       "measurements": {
-        "title": "Echte PV-Messquellen (optional)",
-        "description": "{sources}\n\nOrdne vorhandene Home-Assistant-Sensoren zu. Die Prognose funktioniert auch ohne Messquelle. Energie wird je Quelle ausgewertet; Leistung wird nur gelesen. Eine gemeinsame Gesamtquelle und ihre Teilzähler dürfen nicht gleichzeitig als Energiequellen verwendet werden.",
+        "title": "PV-Erzeugung (optional)",
+        "description": "{sources}\n\nFüge ein bereits eingerichtetes KSEM über den Geräteassistenten hinzu oder ordne vorhandene PV-Sensoren manuell zu. Ohne Messquelle bleibt die Prognose nutzbar. Gesamtzähler und Teilzähler dürfen nicht dieselbe Energie doppelt erfassen.\n\n„Fertig“ speichert die bestätigten Quellen. Ein notwendiger Integral-Helfer entsteht erst dabei und bleibt nach Entfernen der PV-Zuordnung als eigener HA-Helfer erhalten. Schließen ohne „Fertig“ verwirft den Entwurf.",
         "menu_options": {
           "add_measurement": "PV-Erzeugung hinzufügen",
           "edit_measurement": "Messquelle bearbeiten",
@@ -434,7 +433,8 @@
           "scope": "Zum Beispiel „Gesamtanlage, AC-Ausgang ohne Batterie“ oder „Wechselrichter Garage“. Der Name und die Einheit eines Sensors beweisen seine Messgrenze nicht.",
           "kind": "Fortlaufende und tägliche Energiezähler benötigen Wh/kWh und total oder total_increasing. Leistung benötigt W/kW und measurement. Für vollständige Tagesberichte und Lernen verwende einen fortlaufenden AC-Ertragszähler oder den KSEM-Assistenten. Ein täglicher Reset allein belegt den endgültigen Vortagsertrag nicht.",
           "max_interval_minutes": "Danach gilt die Zeitabdeckung als lückenhaft. Ein Summenertrag über eine Lücke wird nicht auf Stunden verteilt.",
-          "derived_energy": "Ein Integral-Helfer wird, soweit erkennbar, automatisch markiert. Seine Ausgangsmessung und Lücken begrenzen die Aussagekraft."
+          "derived_energy": "Ein Integral-Helfer wird, soweit erkennbar, automatisch markiert. Seine Ausgangsmessung und Lücken begrenzen die Aussagekraft.",
+          "entity_id": "Ein AC-Ertragszähler liefert Energie in Wh/kWh; ein Leistungssensor liefert W/kW. Für das vorhandene KSEM ist der Geräteassistent einfacher."
         }
       },
       "confirm_measurement": {
@@ -688,7 +688,7 @@
       },
       "add_measurement": {
         "title": "PV-Erzeugung hinzufügen",
-        "description": "Wähle ein bereits eingerichtetes Gerät. Den passenden Messwert ordnen wir automatisch zu. Fehlt dein Gerät, richte zuerst seine Integration ein und prüfe, ob sie aktuelle Leistungswerte liefert. Andere Sensoren kannst du selbst auswählen.",
+        "description": "{devices}\n\nEs werden ausschließlich vorhandene lokale Sensoren gelesen. Mit der Auswahl wird noch kein Helfer angelegt. Bestätige im nächsten Schritt die tatsächliche AC-PV-Messgrenze.",
         "data": {
           "device": "Gerät oder Messquelle"
         }
@@ -705,6 +705,29 @@
       "measurement_save": {
         "title": "Energiezähler noch nicht eingerichtet",
         "description": "Die Messquelle oder ihr Energiehelfer konnte nicht bereitgestellt werden. Prüfe, ob das Gerät aktuelle Werte liefert und die Integral-Integration verfügbar ist. Deine Eingaben bleiben erhalten. Mit „Absenden“ versuchst du das Speichern erneut; du kannst die Einrichtung auch abbrechen."
+      },
+      "plant_options": {
+        "title": "Anlage",
+        "description": "Bearbeite gezielt eine Dachfläche oder das gemeinsame AC-Limit. Unabhängige Angaben bleiben erhalten.",
+        "menu_options": {
+          "add_roof": "Dachfläche hinzufügen",
+          "edit_roof": "Dachfläche bearbeiten",
+          "remove_roof": "Dachfläche entfernen",
+          "system": "Wechselrichterleistung ändern",
+          "init": "Zurück zur Übersicht"
+        }
+      },
+      "advanced_options": {
+        "title": "Erweiterte Funktionen",
+        "description": "Diese Funktionen sind optional. Für die einfache Prognose ist hier keine Änderung nötig. Beobachtungs- und experimentelle Funktionen behalten ihre jeweiligen Grenzen.",
+        "menu_options": {
+          "history": "Prognosearchiv und Soll-Ist-Vergleich (optional)",
+          "calibration": "Selbstkalibrierung (optional)",
+          "forecast_horizon": "Prognosehorizont",
+          "inverter_groups": "AC-Wechselrichtergruppen zuordnen",
+          "horizon_profile": "Horizontprofil je Dach (experimentell)",
+          "init": "Zurück zur Übersicht"
+        }
       }
     },
     "error": {
@@ -777,6 +800,13 @@
       "options": {
         "acknowledge": "Hinweis quittieren; Lernen bleibt pausiert",
         "clear": "Hinweis und Referenzen löschen; neu beginnen"
+      }
+    },
+    "measurement_kind": {
+      "options": {
+        "total": "Fortlaufender Energiezähler",
+        "daily": "Täglich zurückgesetzter Energiezähler",
+        "power": "Momentane Leistung (keine Energieintegration)"
       }
     }
   },
@@ -949,7 +979,17 @@
     "measurement_manual": "Anderen Sensor selbst auswählen",
     "measurement_whole_plant": "Gesamte PV-Anlage (AC, ohne Batterie)",
     "measurement_automatic_energy": "Energiezähler wird beim Speichern eingerichtet",
-    "measurement_helper_name": "PV-Ertrag · {device}"
+    "measurement_helper_name": "PV-Ertrag · {device}",
+    "optional_summary": "**PV-Messquellen:** {sources} gewählt · **Archiv:** {history} · **Dashboard:** {dashboard}",
+    "option_on": "aktiviert",
+    "option_off": "aus (optional)",
+    "measurement_kind_total": "Fortlaufender Energiezähler",
+    "measurement_kind_daily": "Täglich zurückgesetzter Energiezähler",
+    "measurement_kind_power": "Momentane Leistung (keine Energieintegration)",
+    "measurement_none": "Keine Messquelle gewählt. Die Prognose ist vollständig nutzbar.",
+    "measurement_devices_found": "Bereits eingerichtete, unterstützte Geräte stehen mit ihrem Namen zur Auswahl. Der KSEM-Assistent verwendet das vorhandene AC-Summenregister.",
+    "measurement_devices_missing": "Kein unterstütztes Gerät gefunden. Für KOSTAL KSEM muss zuerst dessen Integration in Home Assistant eingerichtet sein. Du kannst stattdessen vorhandene PV-Sensoren manuell auswählen oder die Zuordnung überspringen.",
+    "measurement_skip": "Jetzt überspringen: zurück zur Messquellenübersicht"
   },
   "issues": {
     "dashboard_update": {
