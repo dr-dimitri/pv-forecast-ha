@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   ARCHIVE_LABEL, REFRESH_MS, PvForecastCard, SharedReadCache, connectionCache, energyText,
-  formatPlantTime, loadView, planningChoices, plotGeometry, renderContent, renderOutlook, renderPlanning, renderReport, renderUncertainty, renderUnderperformance,
+  formatPlantTime, hourMarkers, loadView, planningChoices, plotGeometry, renderContent, renderOutlook, renderPlanning, renderReport, renderUncertainty, renderUnderperformance,
   selectedSeries, seriesPaths, tableRows, validateView,
 } from "../../custom_components/pv_forecast/frontend/pv-forecast-card.js";
 import { fixture, fixtureHass } from "./fixtures.mjs";
@@ -816,4 +816,39 @@ test("Ein wartender Tageswechsel bezeichnet den noch sichtbaren Verlauf mit sein
   assert.match(html, /Energie im Tagesverlauf · Heute/);
   assert.match(html, /Auswahl wird geladen/);
   assert.doesNotMatch(html, /Energie im Tagesverlauf · Morgen/);
+});
+
+for (const [scenario, count] of [["sunny", 25], ["spring", 24], ["fold", 26], ["kolkata", 25], ["empty", 25]]) test(`${scenario}: Stundenstriche passen zur lokalen Zeit und bleiben ohne Messwerte sichtbar`, async () => {
+  const { state } = await load(scenario);
+  const view = state.forecast.data;
+  const markers = hourMarkers(view);
+  assert.equal(markers.length, count);
+  assert.equal(Date.parse(markers[0]), Date.parse(view.start));
+  assert.equal(Date.parse(markers.at(-1)), Date.parse(view.end));
+  assert.ok(markers.every((instant) => formatPlantTime(instant, view.timezone, false).endsWith(":00")));
+  const labels = markers.map((instant) => formatPlantTime(instant, view.timezone));
+  if (scenario === "spring") assert.ok(labels.every((label) => !label.startsWith("02:00")));
+  if (scenario === "fold") assert.deepEqual(labels.filter((label) => label.startsWith("02:00")), ["02:00 UTC+02:00", "02:00 UTC+01:00"]);
+  const html = renderContent(config, state, 328);
+  const lines = [...html.matchAll(/<line class="hour-tick" x1="([^"]+)" x2="([^"]+)" y1="([^"]+)" y2="([^"]+)"\/>/g)];
+  assert.equal(lines.length, count);
+  const geometry = plotGeometry(view, 328);
+  lines.forEach((line, index) => {
+    assert.equal(Number(line[1]), geometry.x(markers[index]));
+    assert.equal(line[1], line[2], "Senkrechter Strich");
+    assert.equal(Number(line[3]), geometry.bottom);
+    assert.equal(Number(line[4]) - Number(line[3]), 5, "Kurze Markierung unter der Achse");
+  });
+});
+
+test("Halbstündige Zeitumstellung verschiebt Stundenstriche nicht auf halbe Uhrzeiten", () => {
+  for (const view of [
+    { start: "2026-04-04T13:00:00Z", end: "2026-04-05T13:30:00Z", timezone: "Australia/Lord_Howe" },
+    { start: "2026-10-03T13:30:00Z", end: "2026-10-04T13:00:00Z", timezone: "Australia/Lord_Howe" },
+  ]) {
+    const markers = hourMarkers(view);
+    assert.ok(markers.every((instant) => formatPlantTime(instant, view.timezone, false).endsWith(":00")));
+    assert.ok(markers.some((instant, index) => index && Date.parse(instant) - Date.parse(markers[index - 1]) === 5_400_000));
+    assert.equal(Date.parse(markers.at(-1)), Date.parse(view.end));
+  }
 });

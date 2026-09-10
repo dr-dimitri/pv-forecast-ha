@@ -105,8 +105,8 @@ function inspectCard(card) {
       if (contour < 2.99) findings.push({ kind: "control-contrast", element: label(element), contrast: contour });
     }
   }
-  for (const element of shadow.querySelectorAll(".forecast-line, .history-line, .actual-bar")) {
-    if (!visible(element)) continue;
+  for (const element of shadow.querySelectorAll(".forecast-line, .history-line, .actual-bar, .hour-tick")) {
+    if (!element.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true })) continue;
     const back = background(element);
     const contrast = ratio(blend(color(getComputedStyle(element).stroke), back), back);
     minimumLineContrast = Math.min(minimumLineContrast, contrast);
@@ -220,6 +220,17 @@ async function checkNavigation(page, card, test) {
 // Echte Browserereignisse prüfen die Auswahl unabhängig von Backendberechnungen.
 async function checkChart(page, card, test) {
   const chart = card.locator("#interval-chart");
+  const markers = await chart.locator(".hour-tick").evaluateAll((items) => items.map((item) => ({
+    x: item.x1.baseVal.value, endX: item.x2.baseVal.value,
+    height: item.y2.baseVal.value - item.y1.baseVal.value,
+  })));
+  assert.equal(markers.length, test.scenario === "fold" ? 26 : 25);
+  assert.ok(markers.every((item, index) => item.x === item.endX && item.height === 5 && (!index || item.x > markers[index - 1].x)));
+  if (prefix === "ui-127" && ["360-light", "360-dark"].includes(test.name)) {
+    const screenshot = `${prefix}-${test.name}-stunden.png`;
+    await chart.screenshot({ path: path.join(output, screenshot) });
+    fs.copyFileSync(path.join(output, screenshot), path.join(root, "docs/images", screenshot));
+  }
   const detail = card.locator("#interval-detail");
   const readDetail = () => detail.evaluate((element) => ({
     text: element.textContent.replace(/\s+/g, " ").trim(),
