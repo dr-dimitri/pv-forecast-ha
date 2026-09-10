@@ -198,6 +198,28 @@ die vollständige Erfassung bei `pv_forecast`. Eine vom nativen Helfer selbst
 beobachteter Ertrag übernommen. Ein echter AC-Ertragszähler ist vorzuziehen,
 wenn vorhanden: Er kann auch bei ausgefallenem Home Assistant weiterzählen.
 
+**Vergleich mit dem KOSTAL Solar Portal:** „Ist heute“ enthält beim KSEM-Assistenten
+**aus Leistung berechnete Energie**, keinen aus dem Portal übernommenen
+Energiezählerstand. Die Karte kennzeichnet diese Herkunft auch bei vollständiger
+Zeitabdeckung und bei einer Mischung mit echten Energiezählern. Die
+[HA-Trapezregel](https://www.home-assistant.io/integrations/integration/#trapezoidal)
+nähert den Leistungsverlauf zwischen Meldungen linear an. Seltene Meldungen und
+schnelle Wechsel, etwa bei durchziehenden Wolken, können die Summe sowohl erhöhen
+als auch verringern. Ein Sprung von 0 auf 6 kW innerhalb eines Fünfminutenintervalls
+wird beispielsweise mit 0,25 kWh bewertet; der tatsächliche Verlauf dazwischen
+ist durch diese zwei Werte nicht bestimmt. Daraus folgt keine feste Fehlerquote.
+
+Vergleiche denselben lokalen Tag bis zum gleichen Endzeitpunkt und dieselben
+Wechselrichter auf derselben AC-Messgrenze. Prüfe außerdem Batterieeinflüsse,
+doppelt zugeordnete Teil-/Gesamtzähler und den Verlauf des KSEM-Leistungssensors
+sowie seines Integral-Helfers in Home Assistant. Bei älteren Versionen ist auch
+die bereits behobene Übernahme von Energie aus langen Meldelücken
+([#105](https://github.com/dr-dimitri/pv-forecast-ha/issues/105)) relevant.
+Wettermodell, eingestellter Systemwirkungsgrad und Selbstkalibrierung verändern
+„Ist heute“ nicht. Eine konkrete Portalabweichung lässt sich ohne diese
+Vergleichsdaten nicht einem Rechenfehler zuordnen; ein pauschaler Korrekturfaktor
+für Messwerte ist nicht vorgesehen.
+
 Vor dem Speichern bleibt die Auswahl ein Entwurf. Abbruch legt keinen Helfer
 an. Bereits gespeicherte native Helfer bleiben beim Entfernen der Zuordnung
 oder von `pv_forecast` erhalten, weil andere Dashboards sie verwenden können;

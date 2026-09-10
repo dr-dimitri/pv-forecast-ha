@@ -594,6 +594,7 @@ async function main() {
       representative: (viewport === 360 && theme === "light") || (viewport === 768 && theme === "custom") || (viewport === 1440 && theme === "dark"),
     })));
     matrix.push(
+      ...["light", "dark"].map((theme) => ({ name: `360-derived-${theme}`, viewport: 360, cardWidth: 360, theme, scenario: "derived-energy" })),
       ...["light", "dark"].map((theme) => ({ name: `360-offset-${theme}`, viewport: 360, cardWidth: 360, theme, scenario: "offset-measurements" })),
       { name: "desktop-card360", viewport: 1440, cardWidth: 360, theme: "light" },
       { name: "360-long-large", viewport: 360, cardWidth: 360, theme: "light", stress: true },
