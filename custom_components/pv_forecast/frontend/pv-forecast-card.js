@@ -165,9 +165,10 @@ export async function loadView(hass, config, publish, active = () => true, cache
   const state = { loading: true, forecast: { status: "loading" }, measurement: { status: "idle" }, history: { status: "idle" } };
   publish({ ...state });
   try {
-    const data = await read("get_forecast", { config_entry_id: config.config_entry_id, include_view: true, day: "today", ...(config.roof_id ? { roof_id: config.roof_id } : {}) });
+    const data = await read("get_forecast", { config_entry_id: config.config_entry_id, include_view: true, day: config.include_explanation ? config.day : "today", ...(config.include_explanation ? { include_explanation: true } : {}), ...(config.roof_id ? { roof_id: config.roof_id } : {}) });
     if (!active()) return;
     view = validateView(data);
+    if (view.day !== "today" && view.day_views?.today) view = { ...view, ...view.day_views.today };
     state.forecast = { status: "ready", data: view, envelope: data };
   } catch (error) {
     const message = /roof_not_found/.test(`${error?.translation_key ?? ""} ${error?.code ?? ""}`) ? "Die ausgewählte Dachfläche ist nicht mehr vorhanden." : error instanceof Error && (error.message === UPDATE_HINT || error.message.startsWith("Die Prognoseansicht")) ? error.message : sourceError(error, "Prognosedaten").message;
@@ -245,6 +246,7 @@ export function selectedSeries(state) {
   if (!view) return { forecast: [], history: [], actual: [] };
   return {
     forecast: view.intervals.filter((item) => overlap(item, view)),
+    ...(state.showRaw && !view.roof_id && currentExplanation(state)?.status === "available" ? { raw: currentExplanation(state).raw_intervals.filter((item) => overlap(item, view)) } : {}),
     history: view.roof_id ? [] : (state.history?.data?.current_targets?.intervals ?? []).filter((item) => overlap(item, view)),
     actual: view.roof_id || (view.day !== "today" && !view.historical) ? [] : (state.measurement?.data?.total_intervals ?? []).filter((item) => overlap(item, view)),
   };
@@ -256,7 +258,7 @@ export function tableRows(state) {
   for (const [name, items] of Object.entries(series)) for (const item of items) {
     const key = `${millis(item.start)}/${millis(item.end)}`;
     if (!rows.has(key)) rows.set(key, { start: item.start, end: item.end });
-    const complete = name === "forecast" ? item.is_complete !== false : name === "actual" ? item.energy_complete === true : true;
+    const complete = ["forecast", "raw"].includes(name) ? item.is_complete !== false : name === "actual" ? item.energy_complete === true : true;
     rows.get(key)[name] = complete ? item.energy_kwh : null;
   }
   return [...rows.values()].sort((a, b) => millis(a.start) - millis(b.start) || millis(a.end) - millis(b.end));
@@ -279,7 +281,7 @@ export function intervalDetails(state, key) {
   const series = selectedSeries(state);
   return { ...row, sources: Object.fromEntries(Object.entries(series).map(([name, items]) => {
     const item = items.find((value) => millis(value.start) === millis(row.start) && millis(value.end) === millis(row.end));
-    const complete = item && (name === "forecast" ? item.is_complete !== false : name === "actual" ? item.energy_complete === true : true);
+    const complete = item && (["forecast", "raw"].includes(name) ? item.is_complete !== false : name === "actual" ? item.energy_complete === true : true);
     return [name, { status: !item ? "missing" : complete && finite(item.energy_kwh) ? "complete" : "incomplete", energy_kwh: complete && finite(item.energy_kwh) ? item.energy_kwh : null, quality_flags: item?.quality_flags ?? [] }];
   })) };
 }
@@ -289,7 +291,7 @@ export function renderIntervalDetails(state, key) {
   const detail = intervalDetails(state, key);
   if (!detail) return '<button id="chart-explore" class="reset-button" data-interval-action="first">Intervalle erkunden</button><p id="chart-help" class="hint">Tippe auf den Verlauf oder wähle ein Intervall mit den Pfeiltasten. Die Tabelle enthält dieselben Werte.</p>';
   const view = state.forecast.data;
-  return `<section id="interval-detail" data-start="${escapeHtml(detail.start)}" data-end="${escapeHtml(detail.end)}" class="interval-detail" aria-label="Ausgewähltes Intervall"><h3>${escapeHtml(plantStamp(detail.start, view.timezone))}<br>bis ${escapeHtml(plantStamp(detail.end, view.timezone))}</h3><p class="hint">${escapeHtml(view.timezone)} · kWh je tatsächlichem Intervall</p><dl class="interval-values">${Object.entries({ ...(view.historical ? {} : { forecast: "Aktuelle Prognose" }), history: view.historical ? view.label : ARCHIVE_LABEL, actual: "Messung" }).map(([name, label]) => {
+  return `<section id="interval-detail" data-start="${escapeHtml(detail.start)}" data-end="${escapeHtml(detail.end)}" class="interval-detail" aria-label="Ausgewähltes Intervall"><h3>${escapeHtml(plantStamp(detail.start, view.timezone))}<br>bis ${escapeHtml(plantStamp(detail.end, view.timezone))}</h3><p class="hint">${escapeHtml(view.timezone)} · kWh je tatsächlichem Intervall</p><dl class="interval-values">${Object.entries({ ...(view.historical ? {} : { forecast: "Aktuelle Prognose", ...(state.showRaw ? { raw: "Grundmodell ohne Selbstkalibrierung" } : {}) }), history: view.historical ? view.label : ARCHIVE_LABEL, actual: "Messung" }).map(([name, label]) => {
     const source = detail.sources[name];
     return `<div><dt>${label}</dt><dd>${source.status === "complete" ? `${energyText(source.energy_kwh)} kWh · vollständig` : source.status === "incomplete" ? "— · unvollständig" : "— · nicht vorhanden"}${source.quality_flags.length ? '<span class="hint">Qualitätsmarkierungen vorhanden</span>' : ""}</dd></div>`;
   }).join("")}</dl><div class="interval-controls"><button id="interval-prev" data-interval-action="previous" aria-label="Vorheriges Intervall">Zurück</button><button id="interval-next" data-interval-action="next" aria-label="Nächstes Intervall">Weiter</button><button id="interval-close" data-interval-action="close">Schließen</button></div><p id="chart-help" class="hint">Pfeiltasten: Intervall wechseln. Escape: Detailansicht schließen.</p></section>`;
@@ -322,9 +324,9 @@ function renderChart(state, width, selectedKey) {
   const selected = tableRows(state).find((row) => intervalKey(row) === selectedKey);
   const highlight = selected ? `<rect class="selected-interval" x="${x(selected.start)}" y="${top}" width="${x(selected.end) - x(selected.start)}" height="${bottom - top}"/>` : "";
   return `<svg id="interval-chart" class="chart" viewBox="0 0 ${width} 242" tabindex="0" role="group" aria-roledescription="Interaktives Diagramm" aria-labelledby="chart-title" aria-describedby="chart-description chart-help">
-    <title id="chart-title">Energie je Intervall in kWh</title><desc id="chart-description">${view.historical ? "Archivierte Prognose: " + escapeHtml(view.label) : "Aktuelle Prognose durchgezogen, " + ARCHIVE_LABEL} gestrichelt, Messwerte als Rechtecke. Fehlende Werte bleiben leer. Alle Werte stehen auch in der Tabelle.</desc>
+    <title id="chart-title">Energie je Intervall in kWh</title><desc id="chart-description">${view.historical ? "Archivierte Prognose: " + escapeHtml(view.label) : "Aktuelle Prognose durchgezogen, " + ARCHIVE_LABEL} gestrichelt, Messwerte als Rechtecke.${series.raw ? " Grundmodell ohne Selbstkalibrierung strichpunktiert." : ""} Fehlende Werte bleiben leer. Alle Werte stehen auch in der Tabelle.</desc>
     <defs><clipPath id="plot-clip"><rect x="${left}" y="0" width="${width - left - 12}" height="${bottom + 2}"/></clipPath></defs>
-    ${grid}<g clip-path="url(#plot-clip)">${gaps}${highlight}${actual}${paths(series.history, "history-line")}${paths(series.forecast, "forecast-line", "is_complete")}${now}</g><g aria-hidden="true" class="hour-ticks">${hourTicks}</g>${ticks}
+    ${grid}<g clip-path="url(#plot-clip)">${gaps}${highlight}${actual}${paths(series.history, "history-line")}${paths(series.raw ?? [], "raw-line", "is_complete")}${paths(series.forecast, "forecast-line", "is_complete")}${now}</g><g aria-hidden="true" class="hour-ticks">${hourTicks}</g>${ticks}
     ${values.length ? "" : `<text class="empty-plot" x="${width / 2}" y="100" text-anchor="middle">Noch keine Intervallwerte</text>`}
   </svg>`;
 }
@@ -397,7 +399,7 @@ function renderNotices(state) {
 function renderTable(state) {
   const view = state.forecast.data;
   const rows = tableRows(state);
-  return `<details id="values"><summary id="values-toggle">Intervallwerte anzeigen <span>${rows.length} Intervalle</span></summary><p class="hint">kWh je angegebenem Intervall. „—“ bedeutet fehlend; 0 ist ein gültiger Wert. Zeitangaben gelten für ${escapeHtml(view.timezone)}.</p><div class="table-scroll" tabindex="0" role="region" aria-label="Intervallwerte, horizontal scrollbar"><table><caption class="sr-only">Intervallenergie in kWh</caption><thead><tr><th scope="col">Zeit</th><th scope="col">Prognose</th><th scope="col">1 Stunde<br>vorher</th><th scope="col">Ist</th></tr></thead><tbody>${rows.map((row) => `<tr><th scope="row"><time datetime="${escapeHtml(row.start)}">${escapeHtml(formatPlantTime(row.start, view.timezone))}</time><span class="until">bis ${escapeHtml(formatPlantTime(row.end, view.timezone))}</span></th><td>${energyText(row.forecast)}</td><td>${energyText(row.history)}</td><td>${energyText(row.actual)}</td></tr>`).join("")}</tbody></table></div></details>`;
+  return `<details id="values"><summary id="values-toggle">Intervallwerte anzeigen <span>${rows.length} Intervalle</span></summary><p class="hint">kWh je angegebenem Intervall. „—“ bedeutet fehlend; 0 ist ein gültiger Wert. Zeitangaben gelten für ${escapeHtml(view.timezone)}.</p><div class="table-scroll" tabindex="0" role="region" aria-label="Intervallwerte, horizontal scrollbar"><table><caption class="sr-only">Intervallenergie in kWh</caption><thead><tr><th scope="col">Zeit</th><th scope="col">Prognose</th><th scope="col">1 Stunde<br>vorher</th><th scope="col">Ist</th>${state.showRaw && !view.roof_id ? '<th scope="col">Grundmodell ohne Selbstkalibrierung</th>' : ""}</tr></thead><tbody>${rows.map((row) => `<tr><th scope="row"><time datetime="${escapeHtml(row.start)}">${escapeHtml(formatPlantTime(row.start, view.timezone))}</time><span class="until">bis ${escapeHtml(formatPlantTime(row.end, view.timezone))}</span></th><td>${energyText(row.forecast)}</td><td>${energyText(row.history)}</td><td>${energyText(row.actual)}</td>${state.showRaw && !view.roof_id ? `<td>${energyText(row.raw)}</td>` : ""}</tr>`).join("")}</tbody></table></div></details>`;
 }
 
 function renderShortTerm(report) {
@@ -529,6 +531,31 @@ export function renderDailyTendencies(view) {
 }
 
 
+export function currentExplanation(state) {
+  const view = state?.forecast?.data, data = state?.forecast?.envelope?.explanation;
+  return data?.schema_version === 1 && data.scope === "total" && data.date === view?.date && data.timezone === view?.timezone && millis(data.start) === millis(view?.start) && millis(data.end) === millis(view?.end) ? data : null;
+}
+
+const explanationLabels = {
+  before_calibration_kwh: "Basis vor Selbstkalibrierung",
+  calibration_delta_kwh: "+ Beitrag des angewendeten Faktors",
+  group_clipping_kwh: "− Kürzung durch AC-Gruppen",
+  total_clipping_kwh: "− Zusätzliche Kürzung durch Anlagenlimit",
+  effective_kwh: "= Wirksame AC-Prognose",
+};
+function renderBalance(values) {
+  return `<dl class="interval-values">${Object.entries(explanationLabels).map(([key,label]) => `<div><dt>${label}</dt><dd>${energyText(values[key])} kWh</dd></div>`).join("")}</dl>`;
+}
+
+export function renderExplanation(state, selectedKey = null) {
+  if (state?.forecast?.data?.roof_id) return "";
+  const data = currentExplanation(state), view = state?.forecast?.data;
+  const available = data?.status === "available";
+  const selected = available ? data.intervals?.find(item => intervalKey(item) === selectedKey) : null;
+  const content = available ? `<p class="hint">${escapeHtml(data.date)} · Gesamtanlage · ${escapeHtml(data.timezone)}<br>Wetterabruf ${escapeHtml(plantStamp(data.fetched_at, data.timezone))} · ${data.origin === "restored" ? "Gespeicherter Stand" : "Live-Abruf"}${data.last_update_success ? data.stale ? " · veralteter Stand" : "" : " · letzte Aktualisierung fehlgeschlagen"}</p><p class="hint">Angewendeter Anlagenfaktor: ${energyText(data.factor)}</p>${renderBalance(data.totals)}<dl class="interval-values"><div><dt>Grundmodell nach AC-Grenzen</dt><dd>${energyText(data.totals.raw_model_kwh)} kWh</dd></div><div><dt>Wirksam minus Grundmodell nach AC-Grenzen</dt><dd>${energyText(data.totals.effective_minus_raw_kwh)} kWh · ${finite(data.totals.effective_minus_raw_percent) ? energyText(data.totals.effective_minus_raw_percent) + " %" : "Prozent nicht anwendbar"}</dd></div></dl>${selected ? `<h3>Ausgewähltes Intervall · ${escapeHtml(formatPlantTime(selected.start, data.timezone))}</h3>${renderBalance(selected)}` : ""}${data.quality_flags?.length || data.complete === false ? '<p class="hint">Die Wetterbasis enthält Qualitätsmarkierungen. Die Bilanz bestätigt keine Prognosegüte.</p>' : ""}` : `<p class="hint">${data ? "Für diesen Stand fehlt eine kompatible oder vollständig belegte Rohbasis. Es werden keine Einflüsse rückwärts aus der Endkurve geschätzt." : "Die Erklärung wird beim Öffnen aus derselben Prognosegeneration gelesen."}</p>`;
+  return `<details id="explanation"><summary id="explanation-toggle">Prognose erklärt <span>${view?.day === "tomorrow" ? "Morgen" : "Heute"} · Gesamtanlage</span></summary><label class="raw-toggle"><input id="raw-toggle" type="checkbox" ${state.showRaw ? "checked" : ""}>Grundmodell ohne Selbstkalibrierung anzeigen</label>${content}<p class="hint">Das Grundmodell enthält die Temperaturannahme, den eingestellten Systemwirkungsgrad, ${data?.assumptions?.includes("horizon_profile") ? "das aktive Horizontprofil und " : "gegebenenfalls ein Horizontprofil sowie "}die realen AC-Grenzen. Es verwendet Faktor 1 und ist keine verlustlose Modulproduktion.</p><p class="hint">Modellierte Einflüsse, keine gemessenen Geräteverluste oder nachgewiesene Verbesserung. Für Temperatur, Wirkungsgrad und Horizont wird keine separate kWh-Wirkung behauptet. Die Kurvenauswahl lässt sich auch im Karteneditor speichern.</p></details>`;
+}
+
 export function shiftArchiveDate(value, days) {
   return new Date(Date.parse(`${value}T12:00:00Z`) + days * 86400000).toISOString().slice(0, 10);
 }
@@ -581,6 +608,7 @@ export function renderArchiveDay(ui, width = 600) {
 }
 
 export function renderContent(config, state, width = 600, report = null, reportDays = 7, planningUI = {}, selectedKey = null, archiveUI = {}) {
+  state = state ? { ...state, showRaw: config.show_raw_forecast === true } : state;
   const forecast = state?.forecast;
   const view = forecast?.data;
   const title = config.title || view?.plant_name || "PV-Prognose";
@@ -600,7 +628,8 @@ export function renderContent(config, state, width = 600, report = null, reportD
     <nav class="section-nav" aria-label="Bereiche der PV-Karte"><button id="nav-overview" data-section="overview-heading">Übersicht</button>${view.roof_id ? "" : '<button id="nav-planning" data-section="planning-heading">Planen</button>'}<button id="nav-comparison" data-section="comparison-heading">Vergleichen</button></nav>
     <section aria-labelledby="overview-heading"><h3 class="section-heading" id="overview-heading" tabindex="-1">Tagesübersicht</h3>
     <div class="overview-metrics"><section aria-label="Tagesprognosen"><h3 class="metric-heading">Tagesprognosen</h3><dl class="kpis">${kpi("Heute", view.summary.today_kwh, view.stale || forecast.retained ? "Letzter Prognosestand" : "Tagesprognose")}${kpi("Morgen", view.summary.tomorrow_kwh, view.stale || forecast.retained ? "Letzter Prognosestand" : "Tagesprognose")}</dl></section><section aria-label="Heutiger Stand"><h3 class="metric-heading">Heutiger Stand · ${escapeHtml(formatPlantDate(view.today_start, view.timezone))}</h3><dl class="kpis">${kpi("Rest heute", view.summary.remaining_today_kwh, forecast.retained ? "Rest zum letzten Stand" : "Ab jetzt erwartet")}${kpi("Ist heute", view.roof_id ? null : actual, actualHint, actualComplete ? "measured" : "incomplete")}</dl></section></div>
-    <section class="chart-section" aria-label="Tagesverlauf"><div class="chart-heading"><h3>Energie im Tagesverlauf · ${view.day === "tomorrow" ? "Morgen" : "Heute"}</h3><span>kWh / Intervall</span></div><div class="legend"><span><i class="forecast-key"></i>Aktuelle Prognose</span><span><i class="history-key"></i>${ARCHIVE_LABEL}</span><span><i class="actual-key"></i>Ist</span></div>${renderChart(state, width, selectedKey)}${renderIntervalDetails(state, selectedKey)}<p class="chart-note">${escapeHtml(view.timezone)} · Ansicht ${escapeHtml(formatPlantTime(view.as_of, view.timezone))}<br>Wetterabruf ${escapeHtml(weatherStamp)}${forecast.envelope?.origin === "restored" ? "<br>Gespeicherter Stand · Aktualisierung fehlgeschlagen" : ""}${forecast.retained || measurement?.retained ? `<br>Letzte gelesene Ansicht: ${escapeHtml(plantStamp(view.as_of, view.timezone))}. Messfenster bis ${escapeHtml(plantStamp(measurement?.data?.end ?? measurement?.data?.outlook?.as_of ?? view.as_of, view.timezone))}.` : ""}</p></section>
+    <section class="chart-section" aria-label="Tagesverlauf"><div class="chart-heading"><h3>Energie im Tagesverlauf · ${view.day === "tomorrow" ? "Morgen" : "Heute"}</h3><span>kWh / Intervall</span></div><div class="legend"><span><i class="forecast-key"></i>Aktuelle Prognose</span><span><i class="history-key"></i>${ARCHIVE_LABEL}</span><span><i class="actual-key"></i>Ist</span>${state.showRaw && !view.roof_id && currentExplanation(state)?.status === "available" && !view.roof_id ? '<span><i class="raw-key"></i>Grundmodell ohne Selbstkalibrierung</span>' : ""}</div>${renderChart(state, width, selectedKey)}${renderIntervalDetails(state, selectedKey)}<p class="chart-note">${escapeHtml(view.timezone)} · Ansicht ${escapeHtml(formatPlantTime(view.as_of, view.timezone))}<br>Wetterabruf ${escapeHtml(weatherStamp)}${forecast.envelope?.origin === "restored" ? "<br>Gespeicherter Stand · Aktualisierung fehlgeschlagen" : ""}${forecast.retained || measurement?.retained ? `<br>Letzte gelesene Ansicht: ${escapeHtml(plantStamp(view.as_of, view.timezone))}. Messfenster bis ${escapeHtml(plantStamp(measurement?.data?.end ?? measurement?.data?.outlook?.as_of ?? view.as_of, view.timezone))}.` : ""}</p></section>
+    ${view.roof_id ? "" : renderExplanation(state, selectedKey)}
     ${renderNotices(state)}
     ${renderDailyTendencies(view)}
     ${view.roof_id ? "" : renderUnderperformance(state.history?.data?.underperformance)}</section>
@@ -611,6 +640,8 @@ export function renderContent(config, state, width = 600, report = null, reportD
 }
 
 const styles = `
+  .raw-key{border-top:3px dotted var(--primary-text-color)}.raw-line{stroke:var(--primary-text-color);stroke-width:2;stroke-dasharray:8 3 2 3;fill:none}.raw-toggle{display:flex;align-items:center;gap:10px;min-height:44px;margin:12px 0}.raw-toggle input{font:inherit;width:20px;height:20px;flex-shrink:0}.raw-toggle input:focus-visible{outline:3px solid var(--primary-color);outline-offset:3px}
+
   #archive-day .hint{overflow-wrap:anywhere}.archive-controls{display:grid;gap:12px;margin:16px 0}.archive-controls label{display:grid;gap:6px;min-width:0}.archive-controls input{box-sizing:border-box;max-width:100%;min-width:0;min-height:44px;font:inherit;color:var(--primary-text-color);background:var(--card-background-color);border:1px solid var(--pv-muted);border-radius:8px;padding:8px}.archive-controls input:focus-visible{outline:3px solid var(--primary-color);outline-offset:3px}
   :host{display:block;--pv-space:8px;--pv-muted:color-mix(in srgb,var(--secondary-text-color,#64717a) 85%,var(--primary-text-color,#202b32));--pv-radius:12px;--pv-text:.875rem;--pv-surface:var(--secondary-background-color,#f2f5f6);--pv-border:var(--divider-color,#e4e8eb);--pv-line:var(--primary-color,#007c91);--pv-archive:var(--secondary-text-color,#636b73);--pv-actual:color-mix(in srgb,var(--accent-color,#b88424) 55%,var(--primary-text-color,#202b32));color:var(--primary-text-color,#202b32);font-family:var(--paper-font-body1_-_font-family,Roboto,system-ui,sans-serif)}
   *{box-sizing:border-box}ha-card{display:block;background:var(--ha-card-background,var(--card-background-color,#fff));border-radius:var(--ha-card-border-radius,16px);border:var(--ha-card-border-width,1px) solid var(--ha-card-border-color,var(--divider-color,#e4e8eb));box-shadow:var(--ha-card-box-shadow,none);overflow:hidden} .body{padding:22px 22px 8px;min-width:0}
@@ -686,10 +717,11 @@ export class PvForecastCard extends ElementBase {
     return {
       schema: [
         { name: "config_entry_id", required: true, selector: { config_entry: { integration: "pv_forecast" } } },
+        { name: "show_raw_forecast", selector: { boolean: {} } },
         { name: "title", selector: { text: {} } },
         { name: "day", selector: { select: { options: [{ value: "today", label: "Heute" }, { value: "tomorrow", label: "Morgen" }], mode: "dropdown" } } },
       ],
-      computeLabel: (schema) => ({ config_entry_id: "PV-Anlage", title: "Titel (optional)", day: "Anfänglich angezeigter Tag" })[schema.name] ?? schema.name,
+      computeLabel: (schema) => ({ config_entry_id: "PV-Anlage", show_raw_forecast: "Grundmodell ohne Selbstkalibrierung anzeigen", title: "Titel (optional)", day: "Anfänglich angezeigter Tag" })[schema.name] ?? schema.name,
     };
   }
 
@@ -705,6 +737,7 @@ export class PvForecastCard extends ElementBase {
     this._reportDays = 7;
     this._reportOpen = false;
     this._archiveOpen = false;
+    this._explanationOpen = false;
     this._archiveGeneration = 0;
     this._valuesOpen = false;
     this._outlookOpen = false;
@@ -755,6 +788,7 @@ export class PvForecastCard extends ElementBase {
       if (action && (inChart || inDetails)) { event.preventDefault(); this._chooseInterval(action); }
     });
     this.shadowRoot.addEventListener("change", (event) => {
+      if (event.target.id === "raw-toggle") { this._config = { ...this._config, show_raw_forecast: event.target.checked }; this._bind(); return; }
       const archiveField = { "archive-date": "date", "archive-horizon": "horizon", "archive-context": "configuration_id" }[event.target.id];
       if (archiveField) {
         this._archiveSelection = { ...this._archiveSelection, [archiveField]: event.target.value || undefined };
@@ -781,6 +815,10 @@ export class PvForecastCard extends ElementBase {
     this.shadowRoot.addEventListener("toggle", (event) => {
       // Nur das aktuelle Element darf bei einem Neuaufbau seinen Zustand melden.
       if (!event.target.isConnected) return;
+      if (event.target.id === "explanation") {
+        const open = event.target.open;
+        if (open !== this._explanationOpen) { this._explanationOpen = open; this._bind(); }
+      }
       if (event.target.id === "archive-day") {
         this._archiveOpen = event.target.open;
         if (this._archiveOpen && !this._archiveDay) this._loadArchiveDay();
@@ -907,8 +945,9 @@ export class PvForecastCard extends ElementBase {
     this._report = null;
     if (!this._connected || this._visible === false || !this._hass || !this._config) return;
     const cache = connectionCache(this._hass);
-    const config = { ...this._config };
-    this._unsubscribe = cache.subscribe(JSON.stringify(["view", config.config_entry_id, config.roof_id ?? null]), (publish, active) => loadView(this._hass, { ...config, day: "today" }, publish, active, cache), (state) => {
+    const explain = !this._config.roof_id && (this._explanationOpen || this._config.show_raw_forecast === true);
+    const config = { ...this._config, day: explain ? this._config.day : "today", include_explanation: explain };
+    this._unsubscribe = cache.subscribe(JSON.stringify(["view", config.config_entry_id, config.roof_id ?? null, ...(explain ? ["explanation", config.day] : [])]), (publish, active) => loadView(this._hass, config, publish, active, cache), (state) => {
       if (!this._connected) return;
       // Bei einer laufenden Auswahl bleiben Bedienelemente und Tastaturfokus bestehen.
       if (state.forecast?.status === "loading" && this._state?.forecast?.data) return;
@@ -1050,7 +1089,7 @@ export class PvForecastCard extends ElementBase {
     const report = this.shadowRoot.getElementById("report");
     if (values && !existingDetails.has(values)) values.open = this._valuesOpen;
     if (report && !existingDetails.has(report)) report.open = this._reportOpen;
-    for (const [id, open] of [["archive-day", this._archiveOpen], ["outlook", this._outlookOpen], ["uncertainty", this._uncertaintyOpen], ["planning", this._planningOpen]]) {
+    for (const [id, open] of [["explanation", this._explanationOpen], ["archive-day", this._archiveOpen], ["outlook", this._outlookOpen], ["uncertainty", this._uncertaintyOpen], ["planning", this._planningOpen]]) {
       const section = this.shadowRoot.getElementById(id);
       if (section && !existingDetails.has(section)) section.open = open;
     }

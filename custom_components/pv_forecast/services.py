@@ -24,6 +24,7 @@ from homeassistant.util import dt as dt_util
 
 from .card_data import UnknownRoofError, build_forecast_view
 from .const import CONF_TIME_ZONE, DOMAIN
+from .explanation import explanation_view
 from .forecast_window import query_forecast_window
 from .models import ForecastResult
 from .planning import plan_solar_window
@@ -63,6 +64,7 @@ _GET_FORECAST_SCHEMA = vol.Schema(
     {
         vol.Required(CONF_CONFIG_ENTRY_ID): vol.All(cv.string, vol.Length(min=1)),
         vol.Optional("include_view", default=False): cv.boolean,
+        vol.Optional("include_explanation", default=False): cv.boolean,
         vol.Optional("day", default="today"): vol.In(("today", "tomorrow")),
         vol.Optional("roof_id"): vol.All(cv.string, vol.Length(min=1)),
         vol.Optional("planning"): _PLANNING_SCHEMA,
@@ -114,6 +116,18 @@ def async_setup_services(hass: HomeAssistant) -> None:
             coordinator.restored_at.isoformat() if coordinator.restored_at else None
         )
         now = dt_util.utcnow()
+        if call.data["include_explanation"]:
+            result["explanation"] = explanation_view(
+                coordinator.explanation,
+                coordinator.raw_data,
+                coordinator.data,
+                str(entry.data[CONF_TIME_ZONE]),
+                now,
+                coordinator.last_update_success_time,
+                coordinator.last_update_success,
+                day=call.data["day"],
+                origin=coordinator.origin,
+            )
         if "window" in call.data:
             try:
                 window = vol.Schema(

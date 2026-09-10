@@ -576,3 +576,8 @@ Anlage ist ein eingeschränkter Bericht verfügbar.
 Die [historische Tagesansicht](docs/prognosearchiv.md#einen-vergangenen-tag-erkunden)
 zeigt im Analysebereich einzelne abgeschlossene Archivtage mit eingefrorenen
 Stundenständen, ursprünglichem Kontext und belegten Archivmessungen.
+
+„Prognose erklärt“ macht den angewendeten Faktor und die beiden AC-Begrenzungen
+für die aktuelle Gesamtprognose nachvollziehbar. Die optionale Grundmodellkurve
+enthält bereits Temperaturannahme, Anwenderwirkungsgrad und reale AC-Grenzen.
+[Erklärung und Grenzen](docs/kalibrierung.md#angewendete-wirkung-nachvollziehen).

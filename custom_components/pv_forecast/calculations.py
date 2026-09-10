@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import math
 from collections.abc import Mapping, Sequence
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime, time, timedelta, tzinfo
 from itertools import pairwise
+from types import MappingProxyType
+from typing import Literal, overload
 
 from .const import DEFAULT_TEMPERATURE_COEFFICIENT, REFERENCE_TEMPERATURE_C
 from .horizon import validate_forecast_days
@@ -207,25 +209,60 @@ def validate_inverter_groups(
         identities.add(group.id)
 
 
+@dataclass(frozen=True, slots=True)
+class InverterLimitStages:
+    """Unveränderliche tatsächliche Ergebnisse beider AC-Begrenzungsstufen."""
+
+    grouped: Mapping[str, float]
+    effective: Mapping[str, float]
+
+
+@overload
 def apply_inverter_limits(
     dc_power_by_roof: Mapping[str, float],
     inverter_max_power_kw: float | None,
     groups: Sequence[AcInverterGroup] = (),
-) -> dict[str, float]:
+    *,
+    include_stages: Literal[False] = False,
+) -> dict[str, float]: ...
+
+
+@overload
+def apply_inverter_limits(
+    dc_power_by_roof: Mapping[str, float],
+    inverter_max_power_kw: float | None,
+    groups: Sequence[AcInverterGroup] = (),
+    *,
+    include_stages: Literal[True],
+) -> InverterLimitStages: ...
+
+
+def apply_inverter_limits(
+    dc_power_by_roof: Mapping[str, float],
+    inverter_max_power_kw: float | None,
+    groups: Sequence[AcInverterGroup] = (),
+    *,
+    include_stages: bool = False,
+) -> dict[str, float] | InverterLimitStages:
     """Zuerst reale AC-Gruppen, anschließend die gemeinsame AC-Grenze anwenden."""
 
-    if not groups:
-        return proportional_clipping(dc_power_by_roof, inverter_max_power_kw)
-    validate_inverter_groups(groups, tuple(dc_power_by_roof))
-    staged = dict(dc_power_by_roof)
-    for group in groups:
-        staged.update(
-            proportional_clipping(
-                {roof_id: staged[roof_id] for roof_id in sorted(group.roof_ids)},
-                group.max_power_kw,
+    staged = dc_power_by_roof
+    if groups:
+        validate_inverter_groups(groups, tuple(dc_power_by_roof))
+        staged = dict(dc_power_by_roof)
+        for group in groups:
+            staged.update(
+                proportional_clipping(
+                    {roof_id: staged[roof_id] for roof_id in sorted(group.roof_ids)},
+                    group.max_power_kw,
+                )
             )
+    effective = proportional_clipping(staged, inverter_max_power_kw)
+    if include_stages:
+        return InverterLimitStages(
+            MappingProxyType(dict(staged)), MappingProxyType(effective)
         )
-    return proportional_clipping(staged, inverter_max_power_kw)
+    return effective
 
 
 def calculate_forecast(

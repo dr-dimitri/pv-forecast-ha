@@ -855,6 +855,10 @@
         "window": {
           "name": "Prognose für ein Zeitfenster",
           "description": "Optional start/end mit UTC-Offset und step_minutes (5/15/30/60). Liefert Gesamtenergie und mittlere AC-Leistung; maximal 336 Schritte. Fehlende oder veraltete Daten bleiben unbekannt."
+        },
+        "include_explanation": {
+          "name": "Prognose erklären",
+          "description": "Die aktuelle Gesamtprognose des ausgewählten Tages mit Grundmodell, angewendeter Kalibrierung und AC-Begrenzung erklären."
         }
       }
     },
