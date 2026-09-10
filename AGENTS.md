@@ -529,7 +529,8 @@ Jede Umsetzung benötigt vor dem Merge ein Review des endgültigen Änderungssta
 Das gilt auch für reine Dokumentationsänderungen und Änderungen dieser
 Projektanweisungen. Review-Ergebnis und geprüften Commit im Pull Request
 nachvollziehbar festhalten; offene Review-Befunde vor dem Merge klären und
-erforderliche Korrekturen erneut prüfen lassen.
+erforderliche Korrekturen erneut prüfen lassen. Sofern nicht explizit anders 
+gewünscht kann das LLM das Review ohne weitere Nachfrage selbst durchführen.
 
 Nach erfolgreich abgeschlossenem Review und erfolgreichen verbindlichen
 Qualitätsprüfungen einschließlich der GitHub-CI darf der Pull Request
