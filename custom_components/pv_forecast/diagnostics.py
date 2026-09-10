@@ -35,6 +35,7 @@ if TYPE_CHECKING:
 _STORAGE_ERRORS = frozenset(
     {"storage_unavailable", "unsupported_version", "storage_limit"}
 )
+_CALIBRATION_MODES = frozenset({"off", "observe", "auto"})
 _CALIBRATION_STATUSES = frozenset(
     {
         "off",
@@ -45,6 +46,18 @@ _CALIBRATION_STATUSES = frozenset(
         "invalidated",
         "storage_unavailable",
         "prerequisites_missing",
+        "underperformance_paused",
+    }
+)
+_FORECAST_CACHE_STATUSES = frozenset(
+    {
+        "disabled",
+        "empty",
+        "available",
+        "unsupported_version",
+        "storage_limit",
+        "storage_unavailable",
+        "invalid_snapshot",
     }
 )
 
@@ -96,7 +109,7 @@ def _calibration_status(manager: CalibrationManager | None) -> dict[str, Any]:
     status = manager.snapshot()
     return {
         "available": True,
-        "mode": _allowed(status.get("mode"), frozenset({"off", "observe", "auto"})),
+        "mode": _allowed(status.get("mode"), _CALIBRATION_MODES),
         "status": _allowed(status.get("status"), _CALIBRATION_STATUSES),
         "storage_error": _allowed(status.get("storage_error"), _STORAGE_ERRORS),
         "prerequisites_met": manager.prerequisites_met,
@@ -199,17 +212,7 @@ async def async_get_config_entry_diagnostics(
     result["forecast_cache"] = {
         "status": _allowed(
             cache.status if cache else None,
-            frozenset(
-                {
-                    "disabled",
-                    "empty",
-                    "available",
-                    "unsupported_version",
-                    "storage_limit",
-                    "storage_unavailable",
-                    "invalid_snapshot",
-                }
-            ),
+            _FORECAST_CACHE_STATUSES,
         )
     }
     result["calibration"] = _calibration_status(runtime.calibration)

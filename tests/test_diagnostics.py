@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from copy import deepcopy
 from dataclasses import replace
 from datetime import UTC, date, datetime, time, timedelta
 from unittest.mock import patch
@@ -32,6 +33,9 @@ from custom_components.pv_forecast.const import (
     DOMAIN,
 )
 from custom_components.pv_forecast.diagnostics import async_get_config_entry_diagnostics
+from custom_components.pv_forecast.health import check_health
+from custom_components.pv_forecast.health_runtime import capture_health
+from custom_components.pv_forecast.history_runtime import _configuration_id
 
 from .helpers import persisted_roof, weather
 
@@ -268,6 +272,7 @@ async def test_status_allowlists_block_unknown_stored_texts(hass, forecast_clien
     runtime = entry.runtime_data
     runtime.measurements._storage_error = _SECRET
     runtime.history._storage_error = _SECRET
+    runtime.forecast_cache.status = _SECRET
     with patch.object(
         runtime.calibration,
         "snapshot",
@@ -284,6 +289,7 @@ async def test_status_allowlists_block_unknown_stored_texts(hass, forecast_clien
 
     assert result["measurements"]["storage_error"] == "unknown"
     assert result["history"]["storage_error"] == "unknown"
+    assert result["forecast_cache"]["status"] == "unknown"
     assert result["calibration"] == {
         "available": True,
         "mode": "unknown",
@@ -294,10 +300,8 @@ async def test_status_allowlists_block_unknown_stored_texts(hass, forecast_clien
     _assert_private(result)
 
 
-async def test_active_measurement_and_learning_only_expose_status(
-    hass, forecast_client
-):
-    """Aktive bestätigte Quellen liefern weder Zählerstände noch Quellidentitäten."""
+async def _load_learning(hass, mode="observe"):
+    """Eine Anlage mit echtem Archiv, bestätigter Messquelle und Lernen laden."""
 
     entry = _entry(hass)
     source_entity = "sensor.geheime_pv_erzeugung"
@@ -324,11 +328,20 @@ async def test_active_measurement_and_learning_only_expose_status(
                 }
             ],
             "history_enabled": True,
-            "calibration_mode": "observe",
+            "calibration_mode": mode,
         },
     )
     assert await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()
+    return entry
+
+
+async def test_active_measurement_and_learning_only_expose_status(
+    hass, forecast_client
+):
+    """Aktive bestätigte Quellen liefern weder Zählerstände noch Quellidentitäten."""
+
+    entry = await _load_learning(hass)
 
     result = await async_get_config_entry_diagnostics(hass, entry)
 
@@ -354,8 +367,52 @@ async def test_active_measurement_and_learning_only_expose_status(
         "prerequisites_met": True,
     }
     serialized = json.dumps(result)
-    assert source_entity not in serialized
+    assert "sensor.geheime_pv_erzeugung" not in serialized
     assert "12345.6789" not in serialized
+    _assert_private(result)
+    assert forecast_client.await_count == 1
+
+
+@pytest.mark.parametrize("mode", ["observe", "auto"])
+async def test_underperformance_pause_matches_health_without_event_export(
+    hass, forecast_client, mode
+):
+    """Der echte Lernstopp bleibt in beiden Lesewegen sichtbar und datensparsam."""
+
+    entry = await _load_learning(hass, mode)
+    runtime = entry.runtime_data
+    # Nur den vorhandenen Hinweiszustand setzen; die Erkennungsregel prüft #32.
+    event = {
+        "configuration_id": _configuration_id(entry),
+        "acknowledged": False,
+        "notified": False,
+        "accepted_factor": 0.9,
+        "id": _SECRET,
+        "created_at": _NOW.isoformat(),
+        "first_day": "2026-08-16",
+        "last_day": "2026-08-22",
+        "target_id": _SECRET,
+        "case_ids": [_SECRET],
+        "evidence": {"raw_energy_kwh": 12345.6789},
+    }
+    runtime.history._archive.underperformance["event"] = deepcopy(event)
+    assert runtime.history.learning_paused
+    assert runtime.calibration.snapshot()["status"] == "underperformance_paused"
+
+    findings = check_health(capture_health(hass, entry, _NOW), _NOW)
+    result = await async_get_config_entry_diagnostics(hass, entry)
+
+    assert [finding.code for finding in findings if finding.group == "calibration"] == [
+        "learning_underperformance_paused"
+    ]
+    assert result["calibration"] == {
+        "available": True,
+        "mode": mode,
+        "status": "underperformance_paused",
+        "storage_error": None,
+        "prerequisites_met": True,
+    }
+    assert runtime.history._archive.underperformance["event"] == event
     _assert_private(result)
     assert forecast_client.await_count == 1
 

@@ -116,6 +116,14 @@ class DuplicateRoofNameError(InvalidConfigurationError):
     """Eine Dachbezeichnung wird innerhalb der Anlage mehrfach verwendet."""
 
 
+class MissingCustomAzimuthError(InvalidConfigurationError):
+    """Bei freier Ausrichtung fehlt der zugehörige Kompasswinkel."""
+
+
+class InvalidCustomAzimuthError(InvalidConfigurationError):
+    """Der eingegebene freie Kompasswinkel liegt außerhalb des erlaubten Bereichs."""
+
+
 def _number_selector(
     *,
     minimum: float,
@@ -217,7 +225,7 @@ def _roof_schema(
         ),
         vol.Optional(
             CONF_CUSTOM_AZIMUTH,
-            **({"default": custom_azimuth} if custom_azimuth is not None else {}),
+            description={"suggested_value": custom_azimuth},
         ): _number_selector(minimum=0, maximum=360, step="any", unit="°"),
         vol.Required(CONF_TILT, default=values.get(CONF_TILT, 35.0)): _number_selector(
             minimum=0, maximum=90, step=1, unit="°"
@@ -313,7 +321,21 @@ def _persisted_roof(user_input: dict[str, Any], roof_id: str) -> dict[str, Any]:
 
     direction = str(user_input[CONF_AZIMUTH])
     if direction == ROOF_DIRECTION_CUSTOM:
-        azimuth = float(user_input[CONF_CUSTOM_AZIMUTH])
+        value = user_input.get(CONF_CUSTOM_AZIMUTH)
+        if value is None or (isinstance(value, str) and not value.strip()):
+            raise MissingCustomAzimuthError(
+                "Bitte einen genauen Kompasswinkel eingeben"
+            )
+        try:
+            azimuth = float(value)
+        except (TypeError, ValueError, OverflowError) as err:
+            raise InvalidCustomAzimuthError("Ungültiger Kompasswinkel") from err
+        if not math.isfinite(azimuth) or not 0 <= azimuth <= 360:
+            raise InvalidCustomAzimuthError(
+                "Kompasswinkel muss zwischen 0 und 360 liegen"
+            )
+        if azimuth == 360:
+            azimuth = 0.0
     elif direction in DIRECTION_TO_COMPASS_AZIMUTH:
         azimuth = DIRECTION_TO_COMPASS_AZIMUTH[direction]
     else:
@@ -813,6 +835,10 @@ class PvForecastConfigFlow(
                     self._roofs.append(roof)
             except DuplicateRoofNameError:
                 errors[CONF_NAME] = "duplicate_roof_name"
+            except MissingCustomAzimuthError:
+                errors[CONF_CUSTOM_AZIMUTH] = "required_custom_azimuth"
+            except InvalidCustomAzimuthError:
+                errors[CONF_CUSTOM_AZIMUTH] = "invalid_custom_azimuth"
             except (KeyError, TypeError, ValueError, InvalidConfigurationError):
                 errors["base"] = "invalid_roof"
             else:
@@ -1343,6 +1369,10 @@ class PvForecastOptionsFlow(
                 _ensure_unique_roof_name(roof, roofs)
             except DuplicateRoofNameError:
                 errors[CONF_NAME] = "duplicate_roof_name"
+            except MissingCustomAzimuthError:
+                errors[CONF_CUSTOM_AZIMUTH] = "required_custom_azimuth"
+            except InvalidCustomAzimuthError:
+                errors[CONF_CUSTOM_AZIMUTH] = "invalid_custom_azimuth"
             except (KeyError, TypeError, ValueError, InvalidConfigurationError):
                 errors["base"] = "invalid_roof"
             else:
@@ -1402,6 +1432,10 @@ class PvForecastOptionsFlow(
                 _ensure_unique_roof_name(roof, other_roofs)
             except DuplicateRoofNameError:
                 errors[CONF_NAME] = "duplicate_roof_name"
+            except MissingCustomAzimuthError:
+                errors[CONF_CUSTOM_AZIMUTH] = "required_custom_azimuth"
+            except InvalidCustomAzimuthError:
+                errors[CONF_CUSTOM_AZIMUTH] = "invalid_custom_azimuth"
             except (KeyError, TypeError, ValueError, InvalidConfigurationError):
                 errors["base"] = "invalid_roof"
             else:
