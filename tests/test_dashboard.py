@@ -15,7 +15,7 @@ from custom_components.pv_forecast.const import DOMAIN
 from custom_components.pv_forecast.dashboard import DashboardManager, dashboard_path
 from custom_components.pv_forecast.history_runtime import _configuration_id
 
-from .helpers import persisted_roof
+from .helpers import configure_options, persisted_roof
 from .test_config_flow import _advance_to_summary
 from .test_forecast_horizon import HorizonSession
 
@@ -224,8 +224,8 @@ async def test_options_enable_rename_disable_without_weather_reload_or_lost_opti
         (True, "Wieder aktiv"),
     ):
         result = await hass.config_entries.options.async_init(entry.entry_id)
-        result = await hass.config_entries.options.async_configure(
-            result["flow_id"], {"next_step_id": "dashboard"}
+        result = await configure_options(
+            hass, result["flow_id"], {"next_step_id": "dashboard"}
         )
         result = await hass.config_entries.options.async_configure(
             result["flow_id"], {"dashboard_enabled": enabled, "dashboard_title": title}
@@ -314,10 +314,9 @@ async def test_dashboard_texts_are_complete_for_config_and_options(hass):
         texts = await async_get_translations(
             hass, "de", category, integrations={DOMAIN}
         )
-        assert (
-            texts[f"component.{DOMAIN}.{category}.step.{step}.menu_options.dashboard"]
-            == "PV-Dashboard einrichten"
-        )
+        assert texts[
+            f"component.{DOMAIN}.{category}.step.{step}.menu_options.dashboard"
+        ] == ("PV-Dashboard einrichten" if category == "config" else "Dashboard")
         assert (
             "Ressourcenregistrierung und YAML entfallen"
             in texts[f"component.{DOMAIN}.{category}.step.dashboard.description"]

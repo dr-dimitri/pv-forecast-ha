@@ -22,7 +22,7 @@ from custom_components.pv_forecast.history_configuration import (
     _validated_comparison,
 )
 
-from .helpers import persisted_roof
+from .helpers import configure_options, persisted_roof
 from .test_config_flow import ROOF_FORM
 
 COMPARISON = {
@@ -70,9 +70,7 @@ async def _menu(hass, entry):
 
 
 async def _choose(hass, result, action):
-    return await hass.config_entries.options.async_configure(
-        result["flow_id"], {"next_step_id": action}
-    )
+    return await configure_options(hass, result["flow_id"], {"next_step_id": action})
 
 
 @pytest.mark.asyncio

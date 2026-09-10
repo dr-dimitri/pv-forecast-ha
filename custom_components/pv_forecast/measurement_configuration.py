@@ -38,9 +38,9 @@ from .measurements import SourceConfig, normalize_reading_value
 CONF_MEASUREMENT_SOURCES = "measurement_sources"
 
 _KIND_LABELS = {
-    "total": "Fortlaufender Energiezähler",
-    "daily": "Täglich zurückgesetzter Energiezähler",
-    "power": "Momentane Leistung (keine Energieintegration)",
+    "total": "measurement_kind_total",
+    "daily": "measurement_kind_daily",
+    "power": "measurement_kind_power",
 }
 
 
@@ -58,10 +58,8 @@ def _source_schema(defaults: dict[str, Any]) -> vol.Schema:
             ),
             vol.Required("kind", default=defaults.get("kind", "total")): SelectSelector(
                 SelectSelectorConfig(
-                    options=[
-                        SelectOptionDict(value=key, label=value)
-                        for key, value in _KIND_LABELS.items()
-                    ],
+                    options=list(_KIND_LABELS),
+                    translation_key="measurement_kind",
                     mode=SelectSelectorMode.DROPDOWN,
                 )
             ),
@@ -275,13 +273,12 @@ class MeasurementFlowMixin:
         lines = []
         for source in sources:
             kind = (
-                automatic if PENDING_HELPER in source else _KIND_LABELS[source["kind"]]
+                automatic
+                if PENDING_HELPER in source
+                else await self._measurement_text(_KIND_LABELS[source["kind"]])
             )
             lines.append(f"- **{source['scope']}**: {source['entity_id']} · {kind}")
-        summary = (
-            "\n".join(lines)
-            or "Keine Messquelle gewählt. Die Prognose ist vollständig nutzbar."
-        )
+        summary = "\n".join(lines) or await self._measurement_text("measurement_none")
         return self.async_show_menu(
             step_id="measurements",
             menu_options=menu,
@@ -299,23 +296,32 @@ class MeasurementFlowMixin:
         errors = {}
         if user_input is not None:
             selected = user_input.get("device")
+            if selected == "skip":
+                return await self.async_step_measurements()
             if selected == "manual":
                 return await self.async_step_measurement_details()
             device = devices.get(selected)
             if device is None:
-                errors["base"] = "measurement_device_unavailable"
+                errors["device"] = "measurement_device_unavailable"
             elif any(
                 source.get("registry_id") == device.registry_id
                 or source_power_registry_id(self.hass, source) == device.registry_id
                 for source in self._measurement_sources()
             ):
-                errors["base"] = "duplicate_measurement_source"
+                errors["device"] = "duplicate_measurement_source"
             else:
                 self._pending_device = selected
                 return await self.async_step_measurement_device()
         return self.async_show_form(
             step_id="add_measurement",
             errors=errors,
+            description_placeholders={
+                "devices": await self._measurement_text(
+                    "measurement_devices_found"
+                    if devices
+                    else "measurement_devices_missing"
+                )
+            },
             data_schema=vol.Schema(
                 {
                     vol.Required("device"): SelectSelector(
@@ -330,7 +336,13 @@ class MeasurementFlowMixin:
                                     label=await self._measurement_text(
                                         "measurement_manual"
                                     ),
-                                )
+                                ),
+                                SelectOptionDict(
+                                    value="skip",
+                                    label=await self._measurement_text(
+                                        "measurement_skip"
+                                    ),
+                                ),
                             ],
                             mode=SelectSelectorMode.DROPDOWN,
                         )
@@ -567,7 +579,7 @@ class MeasurementFlowMixin:
                     if state
                     else "—"
                 ),
-                "kind": _KIND_LABELS[source["kind"]],
+                "kind": await self._measurement_text(_KIND_LABELS[source["kind"]]),
                 "scope": source["scope"],
                 "reading": reading,
                 "derived": (

@@ -20,7 +20,7 @@ from custom_components.pv_forecast.models import AcInverterGroup
 from custom_components.pv_forecast.planning import plan_solar_window
 from custom_components.pv_forecast.services import _serialize_forecast
 
-from .helpers import persisted_roof, roof
+from .helpers import configure_options, persisted_roof, roof
 from .test_api import _hourly_payload, _Response, _Session
 
 
@@ -189,8 +189,8 @@ async def test_later_day_offers_better_contiguous_window_without_new_sensor(
     assert result["energy_kwh"] == 4
     assert result["includes_tendency"] is True
     options = await hass.config_entries.options.async_init(entry.entry_id)
-    options = await hass.config_entries.options.async_configure(
-        options["flow_id"], {"next_step_id": "forecast_horizon"}
+    options = await configure_options(
+        hass, options["flow_id"], {"next_step_id": "forecast_horizon"}
     )
     options = await hass.config_entries.options.async_configure(
         options["flow_id"], {"forecast_days": 2}

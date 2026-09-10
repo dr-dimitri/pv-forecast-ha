@@ -24,7 +24,7 @@ from custom_components.pv_forecast.measurement_configuration import (
     _validated_source,
 )
 
-from .helpers import persisted_roof
+from .helpers import configure_options, persisted_roof
 from .test_config_flow import ROOF_FORM
 
 ENERGY_ATTRS = {
@@ -79,17 +79,15 @@ async def _options(hass, entry):
 
     result = await hass.config_entries.options.async_init(entry.entry_id)
     assert "measurements" in result["menu_options"]
-    return await hass.config_entries.options.async_configure(
-        result["flow_id"], {"next_step_id": "measurements"}
+    return await configure_options(
+        hass, result["flow_id"], {"next_step_id": "measurements"}
     )
 
 
 async def _choose(hass, result, step_id):
     """Eine vorhandene Menüaktion auslösen."""
 
-    result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {"next_step_id": step_id}
-    )
+    result = await configure_options(hass, result["flow_id"], {"next_step_id": step_id})
     if step_id == "add_measurement":
         return await hass.config_entries.options.async_configure(
             result["flow_id"], {"device": "manual"}

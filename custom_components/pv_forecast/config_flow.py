@@ -367,6 +367,27 @@ def _ensure_unique_roof_name(
         raise DuplicateRoofNameError("Dachnamen müssen eindeutig sein")
 
 
+def _optional_summary(options: dict[str, Any], translations: dict[str, str]) -> str:
+    """Bereits gewählte freiwillige Funktionen aus den HA-Texten zusammenfassen."""
+    return translations["common.optional_summary"].format(
+        sources=len(options.get("measurement_sources", [])),
+        history=translations[
+            (
+                "common.option_on"
+                if options.get("history_enabled")
+                else "common.option_off"
+            )
+        ],
+        dashboard=translations[
+            (
+                "common.option_on"
+                if options.get(CONF_DASHBOARD_ENABLED)
+                else "common.option_off"
+            )
+        ],
+    )
+
+
 class PvForecastConfigFlow(
     DashboardFlowMixin,
     HistoryFlowMixin,
@@ -789,7 +810,7 @@ class PvForecastConfigFlow(
                 else:
                     self._roofs.append(roof)
             except DuplicateRoofNameError:
-                errors["base"] = "duplicate_roof_name"
+                errors[CONF_NAME] = "duplicate_roof_name"
             except (KeyError, TypeError, ValueError, InvalidConfigurationError):
                 errors["base"] = "invalid_roof"
             else:
@@ -829,7 +850,7 @@ class PvForecastConfigFlow(
                     user_input.get(CONF_INVERTER_MAX_POWER_KW)
                 )
             except (TypeError, ValueError, InvalidConfigurationError):
-                errors["base"] = "invalid_inverter"
+                errors[CONF_INVERTER_MAX_POWER_KW] = "invalid_inverter"
             else:
                 client = async_get_open_meteo_client(self.hass)
                 try:
@@ -911,6 +932,7 @@ class PvForecastConfigFlow(
                 "longitude": f"{float(self._location[CONF_LONGITUDE]):.6f}",
                 "timezone": str(self._location[CONF_TIME_ZONE]),
                 "roofs": _roof_summary(self._roofs, translations),
+                "optional": _optional_summary(self._options, translations),
                 "inverter": _inverter_summary(inverter_limit, translations),
             },
         )
@@ -1151,27 +1173,55 @@ class PvForecastOptionsFlow(
 
         roofs = self._roofs()
         inverter_limit = self.config_entry.options.get(CONF_INVERTER_MAX_POWER_KW)
-        menu_options = ["add_roof"]
-        if roofs:
-            menu_options.extend(["edit_roof", "remove_roof", "horizon_profile"])
-        menu_options.append("system")
-        menu_options.append("forecast_horizon")
-        menu_options.append("inverter_groups")
-        menu_options.append("measurements")
-        menu_options.append("history")
-        menu_options.append("calibration")
-        menu_options.append("dashboard")
+        menu_options = [
+            "plant_options",
+            "measurements",
+            "dashboard",
+            "advanced_options",
+        ]
         translations = await _async_ui_translations(self.hass)
         return self.async_show_menu(
             step_id="init",
             menu_options=menu_options,
             description_placeholders={
                 "roofs": _roof_summary(roofs, translations),
+                "optional": _optional_summary(
+                    dict(self.config_entry.options), translations
+                ),
                 "inverter": _inverter_summary(
                     float(inverter_limit) if inverter_limit is not None else None,
                     translations,
                 ),
             },
+        )
+
+    async def async_step_plant_options(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Häufige Aufgaben an Dachflächen und Anlagenlimit bündeln."""
+        roofs = self._roofs()
+        return self.async_show_menu(
+            step_id="plant_options",
+            menu_options=["add_roof"]
+            + (["edit_roof", "remove_roof"] if roofs else [])
+            + ["system", "init"],
+        )
+
+    async def async_step_advanced_options(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Optionale Modelle und Vergleiche getrennt von der Grundeinrichtung zeigen."""
+        roofs = self._roofs()
+        return self.async_show_menu(
+            step_id="advanced_options",
+            menu_options=[
+                "history",
+                "calibration",
+                "forecast_horizon",
+                "inverter_groups",
+            ]
+            + (["horizon_profile"] if roofs else [])
+            + ["init"],
         )
 
     async def async_step_forecast_horizon(
@@ -1183,7 +1233,7 @@ class PvForecastOptionsFlow(
             try:
                 days = validate_forecast_days(user_input.get(CONF_FORECAST_DAYS))
             except ValueError:
-                errors["base"] = "invalid_forecast_days"
+                errors[CONF_FORECAST_DAYS] = "invalid_forecast_days"
             else:
                 return self.async_create_entry(
                     title="",
@@ -1218,7 +1268,7 @@ class PvForecastOptionsFlow(
                 roof = _persisted_roof(user_input, uuid4().hex)
                 _ensure_unique_roof_name(roof, roofs)
             except DuplicateRoofNameError:
-                errors["base"] = "duplicate_roof_name"
+                errors[CONF_NAME] = "duplicate_roof_name"
             except (KeyError, TypeError, ValueError, InvalidConfigurationError):
                 errors["base"] = "invalid_roof"
             else:
@@ -1277,7 +1327,7 @@ class PvForecastOptionsFlow(
                 ]
                 _ensure_unique_roof_name(roof, other_roofs)
             except DuplicateRoofNameError:
-                errors["base"] = "duplicate_roof_name"
+                errors[CONF_NAME] = "duplicate_roof_name"
             except (KeyError, TypeError, ValueError, InvalidConfigurationError):
                 errors["base"] = "invalid_roof"
             else:
@@ -1371,7 +1421,7 @@ class PvForecastOptionsFlow(
                     user_input.get(CONF_INVERTER_MAX_POWER_KW)
                 )
             except (TypeError, ValueError, InvalidConfigurationError):
-                errors["base"] = "invalid_inverter"
+                errors[CONF_INVERTER_MAX_POWER_KW] = "invalid_inverter"
             else:
                 return self._finish(self._roofs(), inverter_limit)
 

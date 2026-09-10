@@ -61,3 +61,18 @@ def weather(
         gti_w_m2=gti,
         ambient_temperature_c=temperature,
     )
+
+
+async def configure_options(hass, flow_id, user_input):
+    """Bestehende Fachtests durch die tatsächlich angebotene Optionsgruppe führen."""
+    manager = hass.config_entries.options
+    current = manager._progress[flow_id].cur_step
+    step = user_input.get("next_step_id")
+    if current["step_id"] == "init" and step not in current["menu_options"]:
+        group = (
+            "plant_options"
+            if step in ("add_roof", "edit_roof", "remove_roof", "system")
+            else "advanced_options"
+        )
+        await manager.async_configure(flow_id, {"next_step_id": group})
+    return await manager.async_configure(flow_id, user_input)

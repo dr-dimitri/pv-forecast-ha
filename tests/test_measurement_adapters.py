@@ -21,14 +21,13 @@ from custom_components.pv_forecast.measurement_helpers import (
 from custom_components.pv_forecast.measurement_runtime import MeasurementManager
 from custom_components.pv_forecast.measurements import SourceConfig
 
+from .helpers import configure_options
 from .test_measurement_flow import _entry, _options
 
 
 async def _choose(hass, result, step_id):
     """Menüauswahl ohne automatische manuelle Sensorauswahl."""
-    return await hass.config_entries.options.async_configure(
-        result["flow_id"], {"next_step_id": step_id}
-    )
+    return await configure_options(hass, result["flow_id"], {"next_step_id": step_id})
 
 
 POWER = {
@@ -228,7 +227,11 @@ async def test_no_installed_device_offers_manual_path(hass):
     result = await _choose(hass, await _options(hass, entry), "add_measurement")
     selector = next(iter(result["data_schema"].schema.values()))
     assert selector.config["options"] == [
-        {"value": "manual", "label": "Anderen Sensor selbst auswählen"}
+        {"value": "manual", "label": "Anderen Sensor selbst auswählen"},
+        {
+            "value": "skip",
+            "label": "Jetzt überspringen: zurück zur Messquellenübersicht",
+        },
     ]
     result = await hass.config_entries.options.async_configure(
         result["flow_id"], {"device": "manual"}
@@ -280,7 +283,7 @@ async def test_duplicate_device_and_existing_helper_are_rejected(hass):
     result = await hass.config_entries.options.async_configure(
         result["flow_id"], {"device": f"ksem:{sensor.id}"}
     )
-    assert result["errors"] == {"base": "duplicate_measurement_source"}
+    assert result["errors"] == {"device": "duplicate_measurement_source"}
     with pytest.raises(ValueError, match="duplicate_measurement_source"):
         await async_resolve_measurement_helpers(hass, [manual, draft(sensor)])
     assert len(hass.config_entries.async_entries("integration")) == 1

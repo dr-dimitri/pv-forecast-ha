@@ -11,7 +11,7 @@ from custom_components.pv_forecast.configuration import inverter_groups_from_opt
 from custom_components.pv_forecast.const import DOMAIN
 from custom_components.pv_forecast.history_runtime import _configuration_id
 
-from .helpers import persisted_roof
+from .helpers import configure_options, persisted_roof
 from .test_config_flow import _assert_form_is_serializable
 
 
@@ -49,9 +49,12 @@ def _group(group_id="group", roofs=None):
 
 async def _menu(hass, entry):
     result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "advanced_options"}
+    )
     assert "inverter_groups" in result["menu_options"]
-    return await hass.config_entries.options.async_configure(
-        result["flow_id"], {"next_step_id": "inverter_groups"}
+    return await configure_options(
+        hass, result["flow_id"], {"next_step_id": "inverter_groups"}
     )
 
 
@@ -63,8 +66,8 @@ async def test_add_group_keeps_roofs_other_options_and_exact_power(hass):
     ) as fetch:
         result = await _menu(hass, entry)
         assert result["menu_options"] == ["add_inverter_group", "init"]
-        result = await hass.config_entries.options.async_configure(
-            result["flow_id"], {"next_step_id": "add_inverter_group"}
+        result = await configure_options(
+            hass, result["flow_id"], {"next_step_id": "add_inverter_group"}
         )
         _assert_form_is_serializable(result)
         assert result["data_schema"]({})["name"] == "Wechselrichter 1"
@@ -94,8 +97,8 @@ async def test_edit_group_keeps_group_id_and_exact_defaults(hass):
     entry = _entry(hass, [group])
     original = deepcopy(dict(entry.options))
     result = await _menu(hass, entry)
-    result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {"next_step_id": "edit_inverter_group"}
+    result = await configure_options(
+        hass, result["flow_id"], {"next_step_id": "edit_inverter_group"}
     )
     _assert_form_is_serializable(result)
     result = await hass.config_entries.options.async_configure(
@@ -124,8 +127,8 @@ async def test_invalid_group_stays_in_form_without_changing_options(hass, change
     entry = _entry(hass)
     original = deepcopy(dict(entry.options))
     result = await _menu(hass, entry)
-    result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {"next_step_id": "add_inverter_group"}
+    result = await configure_options(
+        hass, result["flow_id"], {"next_step_id": "add_inverter_group"}
     )
     result = await hass.config_entries.options.async_configure(
         result["flow_id"],
@@ -139,8 +142,8 @@ async def test_invalid_group_stays_in_form_without_changing_options(hass, change
 async def test_already_assigned_roof_cannot_be_selected_for_another_group(hass):
     entry = _entry(hass, [_group()])
     result = await _menu(hass, entry)
-    result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {"next_step_id": "add_inverter_group"}
+    result = await configure_options(
+        hass, result["flow_id"], {"next_step_id": "add_inverter_group"}
     )
     with pytest.raises(InvalidData):
         await hass.config_entries.options.async_configure(
@@ -161,8 +164,8 @@ async def test_remove_group_requires_confirmation_and_keeps_roofs(hass):
     entry = _entry(hass, [_group()])
     original = deepcopy(dict(entry.options))
     result = await _menu(hass, entry)
-    result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {"next_step_id": "remove_inverter_group"}
+    result = await configure_options(
+        hass, result["flow_id"], {"next_step_id": "remove_inverter_group"}
     )
     _assert_form_is_serializable(result)
     result = await hass.config_entries.options.async_configure(
@@ -174,8 +177,8 @@ async def test_remove_group_requires_confirmation_and_keeps_roofs(hass):
     )
     assert result["type"] is FlowResultType.MENU
     assert dict(entry.options) == original
-    result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {"next_step_id": "remove_inverter_group"}
+    result = await configure_options(
+        hass, result["flow_id"], {"next_step_id": "remove_inverter_group"}
     )
     result = await hass.config_entries.options.async_configure(
         result["flow_id"], {"id": "group"}
@@ -191,8 +194,8 @@ async def test_removing_roof_explicitly_handles_affected_group(hass, assigned):
     group = _group(roofs=assigned)
     entry = _entry(hass, [group])
     result = await hass.config_entries.options.async_init(entry.entry_id)
-    result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {"next_step_id": "remove_roof"}
+    result = await configure_options(
+        hass, result["flow_id"], {"next_step_id": "remove_roof"}
     )
     result = await hass.config_entries.options.async_configure(
         result["flow_id"], {"id": "a"}
@@ -216,9 +219,7 @@ async def test_opening_group_options_keeps_original_configuration_fingerprint(ha
     before = deepcopy(dict(entry.options))
     fingerprint = _configuration_id(entry)
     result = await _menu(hass, entry)
-    await hass.config_entries.options.async_configure(
-        result["flow_id"], {"next_step_id": "init"}
-    )
+    await configure_options(hass, result["flow_id"], {"next_step_id": "init"})
     assert dict(entry.options) == before
     assert "inverter_groups" not in entry.options
     assert _configuration_id(entry) == fingerprint
@@ -227,8 +228,8 @@ async def test_opening_group_options_keeps_original_configuration_fingerprint(ha
 async def test_roof_removal_does_not_remove_a_new_unconfirmed_group(hass):
     entry = _entry(hass)
     result = await hass.config_entries.options.async_init(entry.entry_id)
-    result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {"next_step_id": "remove_roof"}
+    result = await configure_options(
+        hass, result["flow_id"], {"next_step_id": "remove_roof"}
     )
     result = await hass.config_entries.options.async_configure(
         result["flow_id"], {"id": "a"}

@@ -20,7 +20,7 @@ from custom_components.pv_forecast.calibration_configuration import (
 from custom_components.pv_forecast.const import DOMAIN
 from custom_components.pv_forecast.measurements import SourceConfig
 
-from .helpers import persisted_roof
+from .helpers import configure_options, persisted_roof
 from .test_config_flow import ROOF_FORM
 
 SOURCE = SourceConfig("solar", "sensor.pv_energy", "total", "Gesamte AC-PV-Anlage")
@@ -49,13 +49,14 @@ def _entry(hass, *, sources=None, history=True, **changes):
 
 
 async def _choose(hass, result, step):
-    return await hass.config_entries.options.async_configure(
-        result["flow_id"], {"next_step_id": step}
-    )
+    return await configure_options(hass, result["flow_id"], {"next_step_id": step})
 
 
 async def _menu(hass, entry):
     result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "advanced_options"}
+    )
     assert "calibration" in result["menu_options"]
     return await _choose(hass, result, "calibration")
 

@@ -40,7 +40,7 @@ from custom_components.pv_forecast.shading import (
     validate_profile,
 )
 
-from .helpers import persisted_roof, roof, weather
+from .helpers import configure_options, persisted_roof, roof, weather
 from .test_api import _hourly_payload, _Response, _Session
 
 WINTER = datetime(2026, 12, 21, 13, tzinfo=UTC)
@@ -344,8 +344,8 @@ async def test_profile_options_validate_confirm_preserve_and_remove_by_stable_id
     )
     entry.add_to_hass(hass)
     result = await hass.config_entries.options.async_init(entry.entry_id)
-    result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {"next_step_id": "horizon_profile"}
+    result = await configure_options(
+        hass, result["flow_id"], {"next_step_id": "horizon_profile"}
     )
     result = await hass.config_entries.options.async_configure(
         result["flow_id"], {"id": "a"}
@@ -368,8 +368,8 @@ async def test_profile_options_validate_confirm_preserve_and_remove_by_stable_id
     assert len(result["data"]["roofs"]) == 2
     assert (entry.version, entry.minor_version) == (1, 1)
     result = await hass.config_entries.options.async_init(entry.entry_id)
-    result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {"next_step_id": "horizon_profile"}
+    result = await configure_options(
+        hass, result["flow_id"], {"next_step_id": "horizon_profile"}
     )
     result = await hass.config_entries.options.async_configure(
         result["flow_id"], {"id": "a"}
