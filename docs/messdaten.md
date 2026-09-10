@@ -30,8 +30,8 @@ einen verlässlichen Gerätezeitvertrag nicht als solcher erkannt werden.
 | `complete` | Zusätzlich ist die zeitliche Abdeckung ohne markierte Erfassungslücken belegt |
 | `coverage_seconds` | Durch ausreichend zeitnahe, gültige Differenzen belegte Sekunden je Quelle |
 | `quality_flags` | Ursachen und Einschränkungen; keine gemessene Prognosegüte |
-| `deltas` | Die ursprünglichen Grenzen der verwendeten Zählerdifferenzen mit Segment-ID und Qualitätsmarkierungen |
-| `readings` | Die im Fenster enthaltenen Messpunkte, insbesondere für einen Leistungsverlauf ohne Energieintegration |
+| `deltas` | Die Grenzen der verwendeten Zählerdifferenzen mit Segment-ID und Qualitätsmarkierungen; gesunde Abschnitte können innerhalb derselben UTC-Minute verlustfrei zusammengefasst sein |
+| `readings` | Die im Fenster aufbewahrten Messpunkte, insbesondere für einen Leistungsverlauf ohne Energieintegration; überflüssige Zwischenpunkte verdichteter Energiedifferenzen entfallen |
 | `identity_unresolved` | Die bestätigte Registry-Identität ist momentan nicht eindeutig auflösbar |
 
 Eine unvollständige beobachtete Energiemenge darf nicht als vollständiger
@@ -65,6 +65,14 @@ dem je Quelle gewählten maximalen Meldeintervall als `stale` kenntlich gemacht.
 Ein Neustart markiert seine unbeobachtete Strecke. Ein vor dem Neustart
 wiederhergestellter HA-Zustand ist kein neuer gültiger Messwert.
 
+Bei einem Integral-Helfer ergänzt `max_sub_interval` zeitgesteuerte
+Zwischenstände, wenn der Leistungssensor zwischenzeitlich keinen neuen Zustand
+meldet. Es drosselt nicht die von diesem Sensor ausgelösten Aktualisierungen.
+Ein auf fünf Minuten gestellter Helfer kann deshalb weiterhin sekündlich neue
+Energiewerte liefern. Ein vorhandener fortlaufender AC-Energiezähler vermeidet
+die zusätzliche Näherung aus Leistungswerten; ein Helfer bleibt an deren
+Verfügbarkeit und Meldeverhalten gebunden.
+
 ## Rückgänge, Resets und Austausch
 
 Ein fallender fortlaufender Zähler ohne belegten `last_reset` beginnt ein neues
@@ -86,14 +94,32 @@ unterschiedlichen Anlagen ableiten.
 ## Speicherung und Berechtigungen
 
 Der private lokale HA-Store `pv_forecast.measurements.<entry_id>` hat eine
-eigene Version 2. Seit #23 behalten die Messsegmente ihren ursprünglichen Standort-
-und Zeitzonenbezug. Die Migration aus Version 1 ergänzt diesen im bisherigen
-Anlagenkontext, ohne Werte zu verändern. Die gespeicherten Messungen und Differenzen sind begrenzt auf
-sieben Tage, 20.000 Messpunkte und höchstens 20.000 zugehörige
-Zählerdifferenzen je Quelle. Bei hoher Meldefrequenz kann zuerst
-das Mengenlimit greifen. Die Speicherung bündelt Schreibvorgänge auf einen feststehenden Termin
-spätestens 60 Sekunden nach der ersten ungeschriebenen Änderung. Weitere
-Meldungen verschieben ihn nicht; geschrieben wird der dann aktuelle Stand.
+eigene Version 3. Versionen 1 und 2 werden verlustfrei übernommen; seit #23
+behalten die Messsegmente ihren ursprünglichen Standort- und Zeitzonenbezug.
+Alte Stände erhalten keine erfundenen Kürzungsereignisse. Version 3 ergänzt bei
+tatsächlichem Verlust durch die Mengenbegrenzung optionale `retention_losses`
+mit ihrem ursprünglichen Segmentbezug.
+
+Die gespeicherten Messungen und Differenzen bleiben begrenzt auf sieben Tage,
+20.000 Messpunkte und höchstens 20.000 zugehörige Zählerdifferenzen je Quelle.
+Gesunde zusammenhängende Energieabschnitte innerhalb derselben UTC-Minute,
+desselben lokalen Tages und desselben Segments werden verlustfrei verdichtet.
+Überflüssige Rohzwischenpunkte entfallen, die belegte Energiemenge und die
+äußeren UTC-Grenzen bleiben erhalten. Lücken, Resets, Korrekturen und Übergänge
+zwischen Nullertrag und positiver Energie werden nicht zusammengezogen.
+
+Wenn sich häufige Sonderfälle nicht verdichten lassen, kann weiterhin die harte
+Mengenbegrenzung greifen. Eine solche Kürzung bleibt sichtbar und belegt keine
+vollständige Erfassung. Der Betriebscheck warnt vor verlorenen Messabschnitten
+des laufenden lokalen Tages am aktuellen Standort, auch wenn die Quelle wieder
+frische Werte liefert. Ein neuer vollständig erfasster Tag kann wieder ohne
+diese Tageswarnung beginnen. Reguläre Alterslöschung nach sieben Tagen ist kein
+solches Kürzungsereignis.
+
+Reguläre Schreibungen erfolgen zu festen Fünfminutenterminen, höchstens 288 pro
+Tag. Neue Meldungen verschieben den nächsten Termin nicht. Der zu schreibende
+Stand wird von der laufenden Erfassung entkoppelt; JSON-Kodierung und Dateiarbeit
+laufen im Executor, damit sie die HA-Ereignisverarbeitung nicht blockieren.
 Bei einem harten Prozessabbruch kann das letzte noch nicht geschriebene Zeitstück fehlen.
 Ein Neustart macht diese Lücke sichtbar. Beim Entladen werden Listener beendet
 und ausstehende Daten gespeichert.

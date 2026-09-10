@@ -20,6 +20,7 @@ from homeassistant.core import CALLBACK_TYPE, HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import entity_registry as er
 from homeassistant.util import dt as dt_util
+from homeassistant.util.file import WriteError
 
 from .configuration import inverter_groups_from_options, roofs_from_options
 from .const import (
@@ -37,6 +38,7 @@ from .const import (
 )
 from .coordinator import PvForecastCoordinator
 from .history import HistoryArchive
+from .history_storage import ArchiveStorage
 from .measurement_runtime import MeasurementManager
 from .measurements import SourceConfig
 from .shading import CONF_HORIZON_PROFILES, HORIZON_RULE_VERSION
@@ -57,8 +59,27 @@ MAX_RECORDS = 6000
 ASSESSMENT_RETENTION = timedelta(days=7)
 
 
+def _restore_archive(
+    data: dict[str, Any], timezone: str, storage: ArchiveStorage | None = None
+) -> HistoryArchive:
+    """Den noch ungeteilten Ladestand im Executor prüfen und einmal aufbereiten."""
+    archive = HistoryArchive.from_dict(data, timezone)
+    snapshot = archive.storage_snapshot()
+    if storage is not None:
+        storage.file_size({"archive": snapshot, "last_fetched_at": None})
+    return archive
+
+
 class _HistoryStore(ConfirmedStore):
     """Alte Archive mit ihrer ursprünglichen Modell- und Tagesbasis bewahren."""
+
+    def _write_prepared_data(self, mode: str, json_data: str | bytes) -> None:
+        # Auch Migrationen oder eine künftig geänderte native Formatierung
+        # dürfen die harte Dateigrenze nicht unbemerkt überschreiten.
+        size = len(json_data.encode()) if isinstance(json_data, str) else len(json_data)
+        if size > MAX_STORAGE_BYTES:
+            raise WriteError("Die native Archivdatei überschreitet die Speichergrenze")
+        super()._write_prepared_data(mode, json_data)
 
     async def _async_migrate_func(
         self, old_major_version: int, old_minor_version: int, old_data: dict[str, Any]
@@ -83,6 +104,8 @@ def _history_store(hass: HomeAssistant, entry_id: str) -> ConfirmedStore:
         f"{DOMAIN}.history.{entry_id}",
         private=True,
         atomic_writes=True,
+        serialize_in_event_loop=False,
+        snapshot_in_event_loop=True,
     )
 
 
@@ -122,11 +145,22 @@ async def async_delete_history_source_data(
     stored = await store.async_load()
     if stored is None:
         return
-    archive = HistoryArchive.from_dict(
-        stored["archive"], str(entry.data[CONF_TIME_ZONE])
+    archive = await hass.async_add_executor_job(
+        _restore_archive, stored["archive"], str(entry.data[CONF_TIME_ZONE])
     )
     if archive.delete_measurement_source(source_id):
-        stored["archive"] = archive.to_dict()
+        preparation = ArchiveStorage(store.key, store.version, store.minor_version)
+        stored = preparation.snapshot(
+            archive,
+            (
+                datetime.fromisoformat(value)
+                if (value := stored.get("last_fetched_at"))
+                else None
+            ),
+            dt_util.utcnow(),
+            max_records=MAX_RECORDS,
+            max_bytes=MAX_STORAGE_BYTES,
+        )
         await store.async_save_checked(stored)
         persistent_notification.async_dismiss(
             hass, f"{DOMAIN}.observation.{entry.entry_id}"
@@ -222,6 +256,9 @@ class ArchiveManager:
         self.enabled = entry.options.get("history_enabled") is True
         self._archive = HistoryArchive(self.timezone)
         self._store = _history_store(hass, entry.entry_id)
+        self._storage = ArchiveStorage(
+            self._store.key, self._store.version, self._store.minor_version
+        )
         self._store.async_track_writes(self._write_finished, SAVE_DELAY)
         self._cancel_listener: CALLBACK_TYPE | None = None
         self._last_fetched_at: datetime | None = None
@@ -229,6 +266,7 @@ class ArchiveManager:
         self._loaded = False
         self._running = False
         self._stopped = False
+        self._load_generation = 0
         self._save_scheduled = False
         self._dirty = False
         self._assessment_task: asyncio.Task[None] | None = None
@@ -305,14 +343,25 @@ class ArchiveManager:
     async def async_start(self) -> None:
         """Nur nach bewusster Konfiguration laden; pausierte Archive bleiben lesbar."""
 
-        if self._loaded or "history_enabled" not in self.entry.options:
+        if self._loaded or self._stopped or "history_enabled" not in self.entry.options:
             return
+        self._load_generation += 1
+        generation = self._load_generation
         try:
             stored = await self._store.async_load()
+            if self._stopped or generation != self._load_generation:
+                return
             if stored is not None:
-                self._archive = HistoryArchive.from_dict(
-                    stored["archive"], self.timezone
+                storage = ArchiveStorage(
+                    self._store.key, self._store.version, self._store.minor_version
                 )
+                archive = await self.hass.async_add_executor_job(
+                    _restore_archive, stored["archive"], self.timezone, storage
+                )
+                if self._stopped or generation != self._load_generation:
+                    return
+                self._archive = archive
+                self._storage = storage
                 if last_fetched := stored.get("last_fetched_at"):
                     parsed = datetime.fromisoformat(last_fetched)
                     if parsed.utcoffset() is None:
@@ -325,6 +374,8 @@ class ArchiveManager:
             TypeError,
             KeyError,
         ):
+            if self._stopped or generation != self._load_generation:
+                return
             self._storage_error = "storage_unavailable"
             _LOGGER.exception("Das lokale Prognosearchiv ist nicht lesbar")
             return
@@ -351,6 +402,7 @@ class ArchiveManager:
         """Den gemeinsamen Listener beenden und ausstehende Daten speichern."""
 
         self._running = False
+        self._load_generation += 1
         self._store.async_stop_retries()
         self._stopped = True
         if self._cancel_listener is not None:
@@ -362,11 +414,17 @@ class ArchiveManager:
             and self._storage_error is None
             and (self._dirty or self._store.write_pending)
         ):
-            await self._store.async_save(self._serialize())
+            try:
+                await self._store.async_save_checked(self._serialize())
+            except HomeAssistantError:
+                _LOGGER.error(
+                    "Das Prognosearchiv wurde beim Entladen nicht gespeichert"
+                )
 
     async def async_delete_data(self) -> None:
         """Bewusst alle Daten löschen und erst beim nächsten neuen Abruf beginnen."""
 
+        self._load_generation += 1
         self._mutation_in_progress = True
         try:
             await self._async_cancel_assessment()
@@ -374,6 +432,9 @@ class ArchiveManager:
         finally:
             self._mutation_in_progress = False
         self._archive = HistoryArchive(self.timezone)
+        self._storage = ArchiveStorage(
+            self._store.key, self._store.version, self._store.minor_version
+        )
         self._observation_report = {
             "schema_version": 1,
             "status": "insufficient_days",
@@ -536,6 +597,7 @@ class ArchiveManager:
             while self._running and self._assessment_requested:
                 self._assessment_requested = False
                 now = dt_util.utcnow()
+                records_changed = False
                 windows: dict[tuple[datetime, datetime], list[str]] = {}
                 for record_id, record in tuple(self._archive.records.items()):
                     if (
@@ -558,9 +620,10 @@ class ArchiveManager:
                         if record_id not in self._archive.records:
                             continue
                         if self._archive.assess(record_id, evidence, now):
+                            records_changed = True
                             self._dirty = True
                             self._schedule_save()
-                if self._archive.prune(
+                if records_changed and self._archive.prune(
                     now, max_records=MAX_RECORDS, max_bytes=MAX_STORAGE_BYTES - 1024
                 ):
                     self._dirty = True
@@ -869,15 +932,12 @@ class ArchiveManager:
     def _serialize(self) -> dict[str, Any]:
         # Auch Lifecycle-Schreibungen können eine noch laufende Bewertung
         # überholen. Die harte Speichergrenze gilt vor jedem Schreiben.
-        self._archive.prune(
+        data = self._storage.snapshot(
+            self._archive,
+            self._last_fetched_at,
             dt_util.utcnow(),
             max_records=MAX_RECORDS,
-            max_bytes=MAX_STORAGE_BYTES - 1024,
+            max_bytes=MAX_STORAGE_BYTES,
         )
         self._save_scheduled = False
-        return {
-            "archive": self._archive.to_dict(),
-            "last_fetched_at": (
-                self._last_fetched_at.isoformat() if self._last_fetched_at else None
-            ),
-        }
+        return data

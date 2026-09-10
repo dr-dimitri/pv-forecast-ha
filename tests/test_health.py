@@ -234,3 +234,58 @@ async def test_runtime_registry_states_are_read_without_changing_sources(
     result = codes(capture_health(hass, entry, NOW))
     assert expected in result
     assert dict(entry.options) == before
+
+
+@pytest.mark.parametrize("derived", [False, True])
+async def test_current_day_retention_loss_overrides_fresh_source_until_local_midnight(
+    hass, derived
+):
+    from types import SimpleNamespace
+
+    from homeassistant.config_entries import ConfigEntryState
+    from homeassistant.helpers import entity_registry as er
+
+    from custom_components.pv_forecast.measurement_runtime import MeasurementManager
+    from custom_components.pv_forecast.measurements import SourceConfig, SourceHistory
+
+    from .test_measurement_runtime import _entry, _source
+
+    registry = er.async_get(hass)
+    entity = registry.async_get_or_create("sensor", "test", "energy")
+    source = _source(registry_id=entity.id, entity_id=entity.entity_id)
+    source["derived_energy"] = derived
+    entry = _entry(hass, source)
+    manager = MeasurementManager(hass, entry)
+    captured = SourceHistory(SourceConfig.from_dict(source), "Europe/Berlin", 20)
+    start = datetime(2026, 9, 10, 21, 30, tzinfo=UTC)
+    for index in range(4):
+        captured.add_reading(start + timedelta(minutes=5 * index), 100 + index, "kWh")
+    now = start + timedelta(minutes=15)
+    captured.prune(start - timedelta(days=7), max_readings=3)
+    manager._histories[source["source_id"]] = captured
+    entry.mock_state(hass, ConfigEntryState.LOADED)
+    entry.runtime_data = SimpleNamespace(measurements=manager)
+    hass.states.async_set(entity.entity_id, "103")
+
+    with (
+        patch("homeassistant.helpers.storage.Store.async_load") as load,
+        patch("homeassistant.helpers.storage.Store.async_save") as save,
+        patch("custom_components.pv_forecast.history.HistoryArchive.assess") as assess,
+    ):
+        result = codes(capture_health(hass, entry, now))
+        assert result["source_retention_gap"].severity == "warning"
+        assert result["source_retention_gap"].value == 1
+        assert "source_ok" not in result
+        assert "source_gap" not in result
+        assert ("source_derived" in result) is derived
+
+        # In Berlin beginnt der nächste Tag bereits um 22 Uhr UTC.
+        midnight = datetime(2026, 9, 10, 22, tzinfo=UTC)
+        for later in (midnight, midnight + timedelta(minutes=1)):
+            captured.add_reading(later, 103, "kWh")
+            result = codes(capture_health(hass, entry, later))
+            assert "source_retention_gap" not in result
+            assert "source_ok" in result
+        load.assert_not_called()
+        save.assert_not_called()
+        assess.assert_not_called()

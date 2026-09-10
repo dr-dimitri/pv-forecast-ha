@@ -473,7 +473,7 @@ async def test_frequent_reports_do_not_postpone_pending_save(hass):
             await manager.async_stop()
 
 
-async def test_continuous_reports_reach_store_within_sixty_seconds(hass, hass_storage):
+async def test_continuous_reports_reach_store_within_five_minutes(hass, hass_storage):
     """Laufende Berichte werden auch ohne Ruhephase tatsächlich gespeichert."""
 
     with freeze_time(START, real_asyncio=True) as clock:
@@ -481,7 +481,7 @@ async def test_continuous_reports_reach_store_within_sixty_seconds(hass, hass_st
         manager = MeasurementManager(hass, _entry(hass, _source()))
         try:
             await manager.async_start()
-            for second in (20, 40):
+            for second in (100, 200):
                 clock.move_to(START + timedelta(seconds=second))
                 hass.states.async_set(
                     "sensor.pv_energy",
@@ -494,8 +494,8 @@ async def test_continuous_reports_reach_store_within_sixty_seconds(hass, hass_st
                 )
                 await hass.async_block_till_done()
             assert manager._store.key not in hass_storage
-            clock.move_to(START + timedelta(seconds=60))
-            async_fire_time_changed(hass, START + timedelta(seconds=60))
+            clock.move_to(START + timedelta(seconds=300))
+            async_fire_time_changed(hass, START + timedelta(seconds=300))
             await hass.async_block_till_done()
             saved = hass_storage[manager._store.key]["data"]
             assert len(saved["sources"]["source-1"]["readings"]) == 3
@@ -567,3 +567,69 @@ async def test_restored_forecast_start_ignores_pre_start_meter_state(hass):
         assert result["sources"][0]["energy_kwh"] == 1
         assert not result["sources"][0]["complete"]
         await manager.async_stop()
+
+
+async def test_version_two_migration_preserves_measurement_payload(hass, hass_storage):
+    """Bestehende Standort- und Messdaten erhalten keine erfundenen Verlusthinweise."""
+    from custom_components.pv_forecast.measurement_runtime import _measurement_store
+    from custom_components.pv_forecast.measurements import SourceConfig, SourceHistory
+
+    entry = _entry(hass, _source())
+    history = SourceHistory(SourceConfig.from_dict(_source()), "Europe/Berlin", 20)
+    history.add_reading(START, 1, "kWh")
+    history.add_reading(START + timedelta(minutes=30), 2, "kWh")
+    payload = {"sources": {"source-1": history.to_dict()}}
+    key = f"{DOMAIN}.measurements.{entry.entry_id}"
+    await Store(hass, 2, key).async_save(payload)
+    migrated = await _measurement_store(hass, entry.entry_id).async_load()
+    assert migrated == payload
+    assert hass_storage[key]["version"] == STORAGE_VERSION
+    assert hass_storage[key]["data"] == payload
+
+
+@pytest.mark.parametrize("phase", ["load", "from_dict", "prime"])
+async def test_stop_during_startup_does_not_reactivate_capture(hass, phase):
+    """Ein vorzeitig entladener Manager startet nach dem Executor keine Listener."""
+    import asyncio
+
+    from custom_components.pv_forecast.measurements import SourceConfig, SourceHistory
+
+    manager = MeasurementManager(hass, _entry(hass, _source()))
+    history = SourceHistory(SourceConfig.from_dict(_source()), "Europe/Berlin", 20)
+    history.add_reading(START, 1, "kWh")
+    await manager._store.async_save({"sources": {"source-1": history.to_dict()}})
+    entered, resume = asyncio.Event(), asyncio.Event()
+    original_load = manager._store.async_load
+    original_executor = hass.async_add_executor_job
+
+    async def delayed_load():
+        result = await original_load()
+        if phase == "load":
+            entered.set()
+            await resume.wait()
+        return result
+
+    async def delayed_executor(function, *args):
+        if function.__name__ == phase:
+            entered.set()
+            await resume.wait()
+        return await original_executor(function, *args)
+
+    with (
+        patch.object(manager._store, "async_load", side_effect=delayed_load),
+        patch.object(hass, "async_add_executor_job", side_effect=delayed_executor),
+    ):
+        task = asyncio.create_task(manager.async_start())
+        try:
+            await asyncio.wait_for(entered.wait(), timeout=2)
+            await manager.async_stop()
+        finally:
+            resume.set()
+            await task
+    assert not manager.running
+    assert manager._listeners == []
+    assert manager._cancel_cleanup is None
+    assert manager._store._delay_handle is None
+    assert not manager._save_scheduled
+    await manager.async_start()
+    assert not manager.running

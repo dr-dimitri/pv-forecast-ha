@@ -1,5 +1,5 @@
 // Ausschließlich synthetische, deterministische Testdaten; keine Modellberechnung.
-export const SCENARIOS = ["derived-energy", "offset-measurements", "restored","no-source", "no-measurement", "archive-off", "archive-empty", "zero", "shading", "horizon","underperformance", "sunny", "gaps", "stale", "empty", "acl", "outage", "old", "roof", "deleted-roof", "spring", "fold", "kolkata", "midnight", "experience", "planning-unavailable"];
+export const SCENARIOS = ["derived-energy", "offset-measurements", "stale-measurement", "restored","no-source", "no-measurement", "archive-off", "archive-empty", "zero", "shading", "horizon","underperformance", "sunny", "gaps", "stale", "empty", "acl", "outage", "old", "roof", "deleted-roof", "spring", "fold", "kolkata", "midnight", "experience", "planning-unavailable"];
 const HOURS = [0, 0, 0, 0, 0, 0, 0.1, 0.38, 0.95, 1.7, 2.45, 3.1, 3.6, 3.4, 2.9, 2.1, 1.4, 0.7, 0.22, 0.04, 0, 0, 0, 0];
 const iso = (instant) => new Date(instant).toISOString();
 
@@ -77,7 +77,7 @@ export function fixture(scenario = "sunny", { day = "today", roof_id } = {}) {
     },
     measurement: {
       schema_version: 1, total_energy: { energy_kwh: ["empty", "no-source", "no-measurement"].includes(scenario) ? null : scenario === "zero" ? 0 : scenario === "gaps" ? 5.6 : 12.4, energy_complete: !["gaps", "empty", "no-source", "no-measurement"].includes(scenario), source_count: ["empty", "no-source"].includes(scenario) ? 0 : 2, quality_flags: scenario === "derived-energy" ? ["derived_energy"] : scenario === "gaps" ? ["gap"] : [] }, total_intervals: ["empty", "no-source", "no-measurement"].includes(scenario) ? [] : totalIntervals,
-      outlook: { schema_version: 1, status: available ? "available" : "unavailable", reason: available ? null : "incomplete_measurements", as_of: iso(asOf), timezone, measured_until: iso(asOf - 900_000), measured_kwh: 12.1, bridge_kwh: 0.31, remaining_kwh: 10.76, total_kwh: 23.17, quality_flags: [], correction: "off" },
+      outlook: { schema_version: 1, status: available ? "available" : "unavailable", reason: available ? null : "incomplete_measurements", as_of: iso(asOf), timezone, measured_until: iso(asOf - (scenario === "stale-measurement" ? 6 * hour : 900_000)), measured_kwh: scenario === "stale-measurement" ? 5.4 : 12.1, bridge_kwh: scenario === "stale-measurement" ? 12 : 0.31, remaining_kwh: 10.76, total_kwh: scenario === "stale-measurement" ? 28.16 : 23.17, measurement_age_minutes: scenario === "stale-measurement" ? 360 : 15, measurement_stale: scenario === "stale-measurement", measurement_quality_flags: scenario === "stale-measurement" ? ["stale"] : [], forecast_quality_flags: [], quality_flags: scenario === "stale-measurement" ? ["stale"] : [], correction: "off" },
     },
     history,
   };

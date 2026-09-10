@@ -136,7 +136,7 @@ async def test_download_has_fixed_metadata_snapshot(hass, hass_client, forecast_
         "configuration_version": {"major": 1, "minor": 1},
         "model_version": "1",
         "supported_storage_versions": {
-            "measurements": 2,
+            "measurements": 3,
             "history": 7,
             "calibration": 1,
         },

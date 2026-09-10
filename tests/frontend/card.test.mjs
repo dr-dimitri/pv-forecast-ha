@@ -472,6 +472,44 @@ test("Tagesaussicht übernimmt getrennte Backendwerte ohne eigene Addition", asy
   assert.match(renderOutlook(state), /Noch offen/);
 });
 
+test("Stumme Messquelle erhält einen eigenen Hinweis ausschließlich in der Tagesaussicht", async () => {
+  const { state } = await load("stale-measurement");
+  const html = renderOutlook(state);
+  assert.match(html, /Heute voraussichtlich insgesamt <strong>28,16 kWh/);
+  assert.match(html, /Alter des gemeinsamen Messzeitpunkts: 360 Minuten/);
+  assert.match(html, /Der letzte gesicherte Messwert ist zu alt/);
+  assert.match(html, /bestätigte Meldefrist überschritten/);
+  assert.doesNotMatch(html.match(/<summary.*?<\/summary>/s)[0], /Messwert ist zu alt|360 Minuten/);
+  assert.match(html, /^<details id="outlook">/);
+
+  const wholeCard = renderContent(config, state);
+  const outsideOutlook = wholeCard.replace(/<details id="outlook">.*?<\/details>/s, "");
+  assert.doesNotMatch(outsideOutlook, /Messwert ist zu alt|360 Minuten|Meldefrist überschritten/);
+  state.measurement.data.outlook.reason = "stale_forecast";
+  state.measurement.data.outlook.status = "unavailable";
+  assert.match(renderOutlook(state), /Wetterabruf ist.*zu alt/);
+  assert.match(renderOutlook(state), /Messwert ist zu alt/);
+  state.measurement.data.outlook.schema_version = 2;
+  assert.doesNotMatch(renderOutlook(state), /Messwert ist zu alt|360 Minuten/);
+});
+
+test("Frische Messung und alte Antwort bleiben ohne erfundene Alterswarnung lesbar", async () => {
+  const { state } = await load();
+  const outlook = state.measurement.data.outlook;
+  outlook.measurement_age_minutes = 120;
+  assert.match(renderOutlook(state), /120 Minuten/);
+  assert.doesNotMatch(renderOutlook(state), /Messwert ist zu alt/);
+  for (const field of ["measurement_age_minutes", "measurement_stale", "measurement_quality_flags", "forecast_quality_flags"]) delete outlook[field];
+  outlook.quality_flags = ["stale"];
+  const html = renderOutlook(state);
+  assert.match(html, /Heute voraussichtlich insgesamt/);
+  assert.match(html, /Qualitätsmarkierungen/);
+  assert.doesNotMatch(html, /Messwert ist zu alt|Alter des gemeinsamen Messzeitpunkts/);
+  outlook.reason = "arithmetic_overflow";
+  outlook.status = "unavailable";
+  assert.match(renderOutlook(state), /überschreiten den darstellbaren Zahlenbereich/);
+});
+
 test("Erfahrungsband gehört sichtbar zur eigenen eingefrorenen Prognose", async () => {
   const { state } = await load("experience");
   const html = renderUncertainty(state);

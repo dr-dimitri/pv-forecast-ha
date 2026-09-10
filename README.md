@@ -149,6 +149,9 @@ Die Karte bietet ein **bestes Solarzeitfenster** für eine gewählte Laufdauer
 und einen zulässigen Zeitraum. Sie zeigt außerdem die Tagesaussicht aus
 belegter Messung, geschätzter Brücke seit der letzten Messung und Prognose ab
 jetzt. Datenlücken werden nicht als Nullwerte oder sichere Erzeugung ausgegeben.
+Die geöffnete Tagesaussicht zeigt das Alter der gemeinsamen Messgrenze und
+warnt ausdrücklich, wenn eine Quelle länger als ihre bestätigte Meldefrist
+stumm bleibt. Die geschätzte Brücke bleibt getrennt von der Messung sichtbar.
 
 [Solarzeitfenster](docs/solarzeitfenster.md) beschreibt die Leseaktion, einen
 getesteten HA-Script-Blueprint für einen bewusst angeforderten Hinweis und einen
@@ -281,8 +284,13 @@ nicht automatisch erkennbar; bestätige einen solchen Wechsel über die Optionen
 
 Messkopien bleiben lokal, unabhängig versioniert und auf sieben Tage sowie
 20.000 Messpunkte mit höchstens 20.000 zugehörigen Zählerdifferenzen je Quelle
-begrenzt; häufige Meldungen können das verfügbare
-Zeitfenster verkürzen. Über die Quellenoptionen lassen sich ihre Daten gezielt
+begrenzt. Lückenlose gesunde Abschnitte werden innerhalb einer Minute
+verlustfrei zusammengefasst, damit auch Sekundenmeldungen vollständige Tage
+belegen können. Lücken, Resets und Korrekturen bleiben erhalten. Wenn viele
+solche Sonderfälle die feste Anzahlgrenze erreichen, warnt **Betrieb prüfen**
+vor verlorener Tagesabdeckung. Regulär wird alle fünf Minuten gespeichert;
+JSON-Aufbereitung und Dateiarbeit laufen im Executor. Details und Grenzen:
+[Messdaten](docs/messdaten.md). Über die Quellenoptionen lassen sich ihre Daten gezielt
 löschen. Das entfernt nur die Kopie dieser Integration, weder den Originalsensor
 noch dessen HA-Historie. Beim Entfernen der Anlage wird ihr Messdatenspeicher
 mit entfernt. Das unten beschriebene Prognosearchiv ist optional; Lernen folgt

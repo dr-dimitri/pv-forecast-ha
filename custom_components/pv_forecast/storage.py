@@ -11,8 +11,13 @@ from homeassistant.helpers.storage import Store
 class ConfirmedStore(Store[dict[str, Any]]):
     """Erst erfolgreiche Dateischreibungen bestätigen; HA behält Lock und Atomizität."""
 
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
+    def __init__(
+        self, *args: Any, snapshot_in_event_loop: bool = False, **kwargs: Any
+    ) -> None:
         super().__init__(*args, **kwargs)
+        # Opt-in für entkoppelte Snapshots: nur ihre Erzeugung benötigt den
+        # Eventloop; die native JSON-Aufbereitung darf im Executor laufen.
+        self._snapshot_in_event_loop = snapshot_in_event_loop
         self.write_error: str | None = None
         self._generation = 0
         self._saved_generation = 0
@@ -74,6 +79,8 @@ class ConfirmedStore(Store[dict[str, Any]]):
         # Der Fehler muss vor dessen loggender Fehlerbehandlung sichtbar werden.
         generation = self._generation
         try:
+            if self._snapshot_in_event_loop and "data_func" in data:
+                data["data"] = data.pop("data_func")()
             await super()._async_write_data(data)
         except Exception:
             self.write_error = "storage_unavailable"

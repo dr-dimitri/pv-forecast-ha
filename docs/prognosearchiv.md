@@ -143,6 +143,27 @@ bestätigte Löschungen können zusätzlich schreiben. Bei hartem Prozessabbruch
 kann das letzte noch ungeschriebene Stück fehlen. Unbekannte Speicherversionen
 werden nicht überschrieben; ein Archivfehler wird getrennt angezeigt.
 
+Die 32-MiB-Grenze umfasst auch die tatsächliche native JSON-Einrückung und
+Storehülle. Ihre Größe wird aus unveränderten Datensatzbausteinen genau
+addiert; geänderte Bewertungen und Korrekturen ersetzen ihren Baustein.
+Ein vollständig entkoppelter Speicherstand wird im HA-Eventloop übernommen,
+die vollständige JSON-Erzeugung und Dateischreibung laufen im Executor.
+Alte Schreibgenerationen können neuere Änderungen nicht quittieren;
+Löschungen warten laufende Schreibungen ab. Ohne geänderte Bewertung entsteht
+kein zusätzlicher Beschneidungs- oder Schreibvorgang.
+
+Der Fünfminutentakt bleibt bestehen, damit ein harter Abbruch weiterhin nur
+das bisherige noch ungeschriebene Zeitfenster verlieren kann. Die Offline-Lastprobe
+aus #154 erzeugt 5.002 Datensätze über 100 Tage; nach regulärer Aufbewahrung
+bleiben 4.526 Datensätze und eine native Datei mit rund 8,78 MiB. Die Aufbereitung
+vor einer Schreibung sank auf der verwendeten Apple-Silicon-Testmaschine von
+229–310 ms auf rund 10–11 ms im warmen Betrieb. Die einmalige Erstaufbereitung
+eines geladenen Archivs erfolgt vor dem Start im Executor. Bei ununterbrochenen
+Änderungen entsprechen 288 Schreibungstermine maximal rund 2,47 GiB logischen
+Dateidaten pro Tag für dieses Beispiel, an der Dateigrenze maximal 9 GiB.
+Zusätzliche bewusste Schreibungen und die tatsächliche Schreibverstärkung des
+Datenträgers sind darin nicht enthalten; ohne Änderungen wird nicht geschrieben.
+
 Die Migration aus Version 1 erhält vorhandene Daten unverändert. Neue Stände
 speichern zusätzlich `basis` (UTC-Intervalle mit Gesamtleistung vor Clipping
 und damaligem AC-Limit), gegebenenfalls `applied_factor`, `applied_candidate_id`

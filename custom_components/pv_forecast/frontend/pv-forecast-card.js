@@ -452,21 +452,22 @@ export function renderOutlook(state) {
   const timezone = state.forecast.data.timezone;
   const outlook = state.measurement?.data?.outlook;
   const currentDay = outlook?.timezone === timezone && millis(outlook.as_of) >= millis(state.forecast.data.today_start) && millis(outlook.as_of) < millis(state.forecast.data.today_end);
-  const available = currentDay && outlook?.schema_version === 1 && outlook.status === "available" && finite(outlook.total_kwh);
+  const supported = currentDay && outlook?.schema_version === 1;
+  const available = supported && outlook.status === "available" && finite(outlook.total_kwh);
   const reason = {
     no_energy_sources: "Es sind noch keine bestätigten AC-Energiequellen vorhanden.",
     no_common_measurement_boundary: "Die Messquellen haben noch keinen gemeinsamen gesicherten Zeitpunkt.",
     unresolved_measurement_identity: "Die Zuordnung mindestens einer Messquelle ist nicht mehr bestätigt.",
     input_fallbacks: "Die Wetterdaten enthalten Ersatzwerte; eine aktuelle Tagesaussicht bleibt offen.",
-    incomplete_measurement: "Die Tagesaussicht ist noch nicht verfügbar.",
     incomplete_measurements: "Die Tagesaussicht ist noch nicht verfügbar.",
-    stale_measurement: "Der letzte gesicherte Messwert ist zu alt.",
-    stale_measurements: "Der letzte gesicherte Messwert ist zu alt.",
     incomplete_forecast: "Die Prognose deckt den restlichen Tag nicht vollständig ab.",
     stale_forecast: "Der Wetterabruf ist für eine aktuelle Tagesaussicht zu alt.",
+    arithmetic_overflow: "Die Tageswerte überschreiten den darstellbaren Zahlenbereich; eine Tagesaussicht kann nicht berechnet werden.",
   }[outlook?.reason] ?? "Für eine Tagesaussicht fehlen ausreichend belegte Mess- oder Prognosedaten.";
+  const measurementAge = supported && finite(outlook.measurement_age_minutes) && outlook.measurement_age_minutes >= 0 ? `<p class="hint">Alter des gemeinsamen Messzeitpunkts: ${energyText(outlook.measurement_age_minutes)} Minuten.</p>` : "";
+  const staleMeasurement = supported && outlook.measurement_stale === true ? '<p class="hint"><strong>Der letzte gesicherte Messwert ist zu alt.</strong> Mindestens eine Messquelle hat ihre bestätigte Meldefrist überschritten. Die Zeit seit dem gemeinsamen Messzeitpunkt bleibt geschätzt.</p>' : "";
   const metric = (label, value) => `<div><dt>${label}</dt><dd>${energyText(value)} <small>kWh</small></dd></div>`;
-  return `<details id="outlook"><summary id="outlook-toggle">Tagesaussicht für heute <span>${available ? `${energyText(outlook.total_kwh)} kWh` : "Noch offen"}</span></summary>${available ? `<p class="feature-result">Heute voraussichtlich insgesamt <strong>${energyText(outlook.total_kwh)} kWh</strong></p><dl class="report-metrics">${metric("Gesichert gemessen", outlook.measured_kwh)}${metric("Geschätzt seit letzter Messung", outlook.bridge_kwh)}${metric("Rest ab jetzt", outlook.remaining_kwh)}</dl><p class="hint">Messung bis ${escapeHtml(plantStamp(outlook.measured_until, timezone))}. Die Zeit seit dieser Messung bleibt eine Schätzung. Rest ab jetzt und geschätzte Brücke überschneiden sich nicht. Kurzfristige Korrektur ist aus.</p>${outlook.quality_flags?.length ? '<p class="hint">Die Tagesaussicht enthält Qualitätsmarkierungen; sie ist keine zugesagte Erzeugung.</p>' : ""}` : `<p class="hint">${escapeHtml(reason)}</p>`}</details>`;
+  return `<details id="outlook"><summary id="outlook-toggle">Tagesaussicht für heute <span>${available ? `${energyText(outlook.total_kwh)} kWh` : "Noch offen"}</span></summary>${available ? `<p class="feature-result">Heute voraussichtlich insgesamt <strong>${energyText(outlook.total_kwh)} kWh</strong></p><dl class="report-metrics">${metric("Gesichert gemessen", outlook.measured_kwh)}${metric("Geschätzt seit letzter Messung", outlook.bridge_kwh)}${metric("Rest ab jetzt", outlook.remaining_kwh)}</dl><p class="hint">Messung bis ${escapeHtml(plantStamp(outlook.measured_until, timezone))}. Die Zeit seit dieser Messung bleibt eine Schätzung. Rest ab jetzt und geschätzte Brücke überschneiden sich nicht. Kurzfristige Korrektur ist aus.</p>${outlook.quality_flags?.length ? '<p class="hint">Die Tagesaussicht enthält Qualitätsmarkierungen; sie ist keine zugesagte Erzeugung.</p>' : ""}` : `<p class="hint">${escapeHtml(reason)}</p>`}${measurementAge}${staleMeasurement}</details>`;
 }
 
 function renderHourlyBands(uncertainty, view) {
