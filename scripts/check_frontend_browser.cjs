@@ -105,7 +105,7 @@ function inspectCard(card) {
       if (contour < 2.99) findings.push({ kind: "control-contrast", element: label(element), contrast: contour });
     }
   }
-  for (const element of shadow.querySelectorAll(".forecast-line, .history-line, .actual-bar, .hour-tick")) {
+  for (const element of shadow.querySelectorAll(".forecast-line, .history-line, .actual-line, .actual-bar, .hour-tick")) {
     if (!element.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true })) continue;
     const back = background(element);
     const contrast = ratio(blend(color(getComputedStyle(element).stroke), back), back);
