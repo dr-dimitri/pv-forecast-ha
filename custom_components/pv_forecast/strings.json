@@ -328,7 +328,8 @@
           "plant_options": "Anlage",
           "measurements": "PV-Erzeugung",
           "dashboard": "Dashboard",
-          "advanced_options": "Erweiterte Funktionen"
+          "advanced_options": "Erweiterte Funktionen",
+          "health": "Betrieb prüfen"
         },
         "menu_option_descriptions": {
           "plant_options": "Dachflächen und maximale Wechselrichterleistung bearbeiten.",
@@ -736,6 +737,14 @@
         "data": {
           "forecast_cache_enabled": "Letzte Prognose für Neustarts speichern"
         }
+      },
+      "health": {
+        "title": "Betrieb prüfen",
+        "description": "Rein lokaler Betriebscheck. Keine Prüfung der realen Prognosegüte oder eines Anlagendefekts. Erneutes Prüfen löst keinen Wetterabruf aus.\n\n{report}",
+        "menu_options": {
+          "health": "Erneut prüfen",
+          "init": "Zurück zur Übersicht"
+        }
       }
     },
     "error": {
@@ -1004,7 +1013,67 @@
     "measurement_none": "Keine Messquelle gewählt. Die Prognose ist vollständig nutzbar.",
     "measurement_devices_found": "Bereits eingerichtete, unterstützte Geräte stehen mit ihrem Namen zur Auswahl. Der KSEM-Assistent verwendet das vorhandene AC-Summenregister.",
     "measurement_devices_missing": "Kein unterstütztes Gerät gefunden. Für KOSTAL KSEM muss zuerst dessen Integration in Home Assistant eingerichtet sein. Du kannst stattdessen vorhandene PV-Sensoren manuell auswählen oder die Zuordnung überspringen.",
-    "measurement_skip": "Jetzt überspringen: zurück zur Messquellenübersicht"
+    "measurement_skip": "Jetzt überspringen: zurück zur Messquellenübersicht",
+    "health_not_loaded": "**Anlage nicht geladen** · {severity}\n\nDetailprüfungen sind nur eingeschränkt möglich. Prüfe den Einrichtungsstatus unter Geräte & Dienste; eine fehlende Laufzeit beweist keinen defekten Speicher.",
+    "health_provider_pause": "**Anbieterpause aktiv** · {severity}\n\nEin Wetterabruf ist frühestens in {value} Minuten wieder möglich. Das ist kein geplanter Abruftermin. Warte die Pause ab; Neustart oder Force-Update umgehen sie nicht.",
+    "health_polling_disabled": "**Automatisches Polling ausgeschaltet** · {severity}\n\nHome Assistant aktualisiert diese Anlage nicht automatisch. Prüfe die Systemeinstellungen des Integrationseintrags, wenn das nicht beabsichtigt ist.",
+    "health_no_forecast": "**Noch keine Prognose** · {severity}\n\nEs liegt kein aktueller Laufzeitstand vor. Prüfe den Einrichtungsstatus und die Internetverbindung; lokale Mess- und Speicherprüfungen können fehlen.",
+    "health_invalid_response": "**Ungültige Wetterantwort** · {severity}\n\nDie letzte Antwort konnte nicht als gültige Prognose gelesen werden. Prüfe die Integrationsversion und anschließend das HA-Protokoll; es wird kein Force-Update ausgelöst.",
+    "health_fetch_failed": "**Wetteraktualisierung fehlgeschlagen** · {severity}\n\nDer letzte Abruf war nicht erfolgreich. Prüfe Internetverbindung und Anbieterstatus und beachte eine angezeigte Pause.",
+    "health_fetch_unknown": "**Abrufstatus nicht prüfbar** · {severity}\n\nEin verlässlicher Abrufstatus fehlt. Prüfe, ob die Integration vollständig geladen ist.",
+    "health_fetch_success": "**Letzter Wetterabruf erfolgreich** · {severity}\n\nDie letzte Antwort wurde verarbeitet. Das sagt nichts über die reale Prognosegüte aus; prüfe Datenalter und Abdeckung separat.",
+    "health_age_unknown": "**Datenalter nicht prüfbar** · {severity}\n\nDer Abrufzeitpunkt fehlt oder liegt in der Zukunft. Prüfe die HA-Systemzeit und warte auf einen regulären erfolgreichen Abruf.",
+    "health_stale": "**Prognose veraltet** · {severity}\n\nDer letzte erfolgreiche Abruf liegt {value} Minuten zurück. Operative Planung benötigt höchstens 60 Minuten alte Daten. Prüfe den Abrufstatus und warte den regulären Abruf ab.",
+    "health_age": "**Alter des Wetterstands** · {severity}\n\nDer letzte erfolgreiche Abruf liegt {value} Minuten zurück. Dies ist Datenalter und keine Fehlerwahrscheinlichkeit; aktuell ist keine Handlung allein wegen dieses Alters nötig.",
+    "health_horizon_complete": "**Gespeicherter Horizont vollständig** · {severity}\n\nDie {value} lokalen Prognosetage sind zeitlich vollständig abgedeckt. Eingabefallbacks und heutige Tageszuordnung werden separat geprüft.",
+    "health_horizon_incomplete": "**Prognosehorizont unvollständig** · {severity}\n\nFür die {value} lokalen Prognosetage fehlen belegte Intervalle. Warte einen erfolgreichen regulären Abruf ab und prüfe bei anhaltender Lücke das Protokoll.",
+    "health_energy_complete": "**Aktuelle Energy-Tage abgedeckt** · {severity}\n\nHeute und morgen sind zeitlich abgedeckt. Ein Abruffehler sperrt die native Energy-Ausgabe weiterhin; dies prüft nur die Abdeckung.",
+    "health_energy_incomplete": "**Aktuelle Energy-Tage nicht vollständig** · {severity}\n\nHeute oder morgen fehlen Intervalle. Ein früher vollständig gespeicherter Horizont beweist keine aktuelle Abdeckung. Warte einen regulären Abruf ab.",
+    "health_input_fallbacks": "**Eingabefallbacks vorhanden** · {severity}\n\n{value} Intervalle tragen Qualitätsmarkierungen. Prüfe den nächsten regulären Wetterstand; diese Markierungen sind keine gemessene Prognosegüte.",
+    "health_no_sources": "**Keine Messquelle zugeordnet** · {severity}\n\nMessung ist optional. Ordne unter PV-Erzeugung nur bestätigte AC-PV-Ertragsquellen zu, wenn du Messung oder Lernen verwenden möchtest.",
+    "health_measurements_unknown": "**Messquellen nicht prüfbar** · {severity}\n\nDer Messmanager ist nicht verfügbar. Prüfe zuerst den Einrichtungsstatus; daraus lässt sich kein entfernter Sensor ableiten.",
+    "health_measurement_store": "**Messspeicher nicht lesbar** · {severity}\n\nDie Messspeicherung ist eingeschränkt. Prüfe Version und HA-Protokoll. Lösche keine Daten, bevor die Ursache geklärt ist.",
+    "health_source_removed": "**Zugeordnete Quelle entfernt** · {severity}\n\n{value} Registry-Zuordnungen fehlen. Prüfe die Sensoren unter PV-Erzeugung und bestätige eine neue Quelle bewusst; alte Identitäten werden nicht ersetzt.",
+    "health_source_disabled": "**Zugeordnete Quelle deaktiviert** · {severity}\n\n{value} Sensoren sind in der Registry deaktiviert. Prüfe deren Einstellungen in Home Assistant und die gewollte Zuordnung unter PV-Erzeugung.",
+    "health_source_identity": "**Quellenidentität nicht sicher prüfbar** · {severity}\n\n{value} Quellen haben keine sicher bestätigte aktuelle Registry-Identität. Prüfe die Zuordnung unter PV-Erzeugung; eine Quelle ohne Registry ist nicht automatisch ausgetauscht.",
+    "health_source_unavailable": "**Quelle derzeit nicht verfügbar** · {severity}\n\n{value} Quellen melden unknown/unavailable oder keinen Zustand. Prüfe die zugrunde liegende Geräteintegration; fehlende Werte sind kein Nullertrag.",
+    "health_source_gap": "**Aktuelle Messabdeckung fehlt** · {severity}\n\n{value} Quellen haben noch keine frische Basis oder eine bekannte Lücke. Prüfe die Meldeintervalle und warte auf neue Berichte; Lücken werden nicht künstlich geschlossen.",
+    "health_source_ok": "**Aktuelle Quellenberichte vorhanden** · {severity}\n\n{value} Quellen besitzen einen aktuellen Messstand. Prüfe die bestätigte AC-Messgrenze separat; dies beweist keine Vollständigkeit vergangener Tage.",
+    "health_source_derived": "**Energie aus Integral-Helfer** · {severity}\n\n{value} Quellen sind aus Leistung abgeleitet. Prüfe auch den Leistungssensor; dessen Lücken bleiben für die abgeleitete Energie unbekannt.",
+    "health_source_daily": "**Grenze eines täglichen Zählers** · {severity}\n\n{value} Quellen setzen täglich zurück. Ein Reset belegt keinen endgültigen Vortagswert. Für vollständige Tagesberichte verwende einen fortlaufenden AC-Zähler oder den KSEM-Assistenten.",
+    "health_archive_off": "**Archiv ausgeschaltet** · {severity}\n\nDie Archivierung ist optional und ausgeschaltet. Aktiviere sie unter Erweiterte Funktionen → Prognosearchiv nur, wenn du historische Vergleiche möchtest.",
+    "health_archive_unknown": "**Archivzustand nicht prüfbar** · {severity}\n\nDer Archivmanager ist nicht verfügbar. Prüfe zuerst den Einrichtungsstatus; es wird kein Store geöffnet oder repariert.",
+    "health_archive_store": "**Archivspeicher eingeschränkt** · {severity}\n\nDas Archiv ist nicht lesbar oder seine Version wird nicht unterstützt. Prüfe Integrationsversion und Protokoll; unbekannte Daten nicht überschreiben oder vorschnell löschen.",
+    "health_archive_not_loaded": "**Archiv noch nicht geladen** · {severity}\n\nDie lokale Archivinitialisierung ist nicht abgeschlossen. Prüfe den Einrichtungsstatus und das Protokoll.",
+    "health_archive_empty": "**Archiv noch leer** · {severity}\n\nNoch keine rechtzeitig beobachteten Stände vorhanden. Lass die Anlage regulär laufen; vergangene Stichtage werden nicht nachträglich erfunden.",
+    "health_archive_ready": "**Archivstände vorhanden** · {severity}\n\n{value} Zieldatensätze sind lokal vorhanden. Nutze die Archivansicht zur Auswertung; die Anzahl allein belegt keine Prognosegüte.",
+    "health_archive_truncated": "**Archiv wurde begrenzt** · {severity}\n\nAufbewahrungs- oder Größenlimits haben Daten gekürzt. Berücksichtige fehlende ältere Belege; lösche das Archiv nicht automatisch.",
+    "health_learning_off": "**Selbstkalibrierung ausgeschaltet** · {severity}\n\nDie optionale Selbstkalibrierung ist aus. Das ist kein Fehler. Einstellungen stehen unter Erweiterte Funktionen → Selbstkalibrierung.",
+    "health_learning_unknown": "**Lernstatus nicht prüfbar** · {severity}\n\nEin geprüfter Laufzeitstatus fehlt. Prüfe zuerst die Einrichtung und dann den vorhandenen Lernstatusdialog.",
+    "health_learning_store": "**Lernspeicher nicht lesbar** · {severity}\n\nLernen ist durch einen Speicherfehler eingeschränkt. Prüfe Version und Protokoll; unbekannte Speicherversionen nicht überschreiben.",
+    "health_learning_prerequisites": "**Lernvoraussetzungen fehlen** · {severity}\n\nArchiv und bestätigte AC-Energiequellen werden benötigt. Prüfe die Voraussetzungen im Selbstkalibrierungsdialog; es wird nichts automatisch aktiviert.",
+    "health_learning_learning": "**Lerndaten werden gesammelt** · {severity}\n\nNoch fehlende gültige Lerntage sind kein technischer Defekt. Prüfe Stichprobe und Messabdeckung im Lernstatusdialog und lasse die Erfassung weiterlaufen.",
+    "health_learning_testing": "**Kandidat wird geprüft** · {severity}\n\nDie nachgelagerte Prüfung läuft. Prüfe den Lernstatusdialog; ein Kandidat ist noch keine nachgewiesene Verbesserung.",
+    "health_learning_approved": "**Faktorprüfung bestanden** · {severity}\n\nEine bestehende Freigabe liegt vor. Der Lernstatusdialog zeigt Modus und Vergleich; daraus folgt keine Garantie für künftige Tage.",
+    "health_learning_rejected": "**Kandidat nicht freigegeben** · {severity}\n\nDie festgelegte Prüfung hat keine Freigabe ergeben. Prüfe den Vergleich im Lernstatusdialog; Anwenderparameter bleiben unverändert.",
+    "health_learning_invalidated": "**Lerngrundlage ungültig** · {severity}\n\nDie bisherige Grundlage ist nicht mehr gültig. Prüfe Quellenwechsel, Messkorrekturen und Anlagenänderungen im Lernstatusdialog.",
+    "health_learning_underperformance_paused": "**Lernen wegen Prüfhinweis pausiert** · {severity}\n\nEin experimenteller Minderertragshinweis pausiert das Lernen. Prüfe den Hinweis in der geschützten Karte; er ist keine Defektdiagnose.",
+    "health_cache_disabled": "**Neustartcache ausgeschaltet** · {severity}\n\nDas optionale Speichern der letzten Prognose ist aus. Bei Bedarf bewusst unter Erweiterte Funktionen → Letzte Prognose speichern aktivieren.",
+    "health_cache_empty": "**Neustartcache noch leer** · {severity}\n\nEin vollständiger erfolgreicher Wetterabruf wird benötigt. Warte auf den regulären Abruf; der Cache ersetzt keinen Einrichtungstest.",
+    "health_cache_available": "**Neustartcache vorhanden** · {severity}\n\nEin gültiger Stand wurde geladen oder gespeichert. Prüfe Wetteralter und Abrufstatus separat; ein Cache ist kein neuer Wetterabruf.",
+    "health_cache_unsupported_version": "**Cacheversion nicht unterstützt** · {severity}\n\nDer Store wird nicht überschrieben. Prüfe die Integrationsversion; Ausschalten löscht diesen Cache bewusst.",
+    "health_cache_storage_limit": "**Cachegröße begrenzt** · {severity}\n\nDie Speichergrenze wurde erreicht. Ein bisheriger Stand bleibt erhalten; Intervalle werden nicht abgeschnitten. Prüfe Horizont und Dachkonfiguration.",
+    "health_cache_storage_unavailable": "**Cachespeicher nicht verfügbar** · {severity}\n\nDer Cache konnte nicht sicher gelesen oder geschrieben werden. Prüfe freien Speicher und HA-Protokoll; die laufende Prognose bleibt davon getrennt.",
+    "health_cache_invalid_snapshot": "**Cachestand nicht verwendbar** · {severity}\n\nZuordnung, Zeitabdeckung oder Rohmodellbilanz passen nicht. Warte auf einen vollständigen erfolgreichen Abruf; der alte Stand legitimiert keinen Standortwechsel.",
+    "health_cache_unknown": "**Cachezustand nicht prüfbar** · {severity}\n\nKein Laufzeitstatus verfügbar. Prüfe zuerst den Einrichtungsstatus; der Check liest selbst keine Datei.",
+    "health_group_weather": "Wetter und Prognose",
+    "health_group_measurements": "Lokale Messquellen",
+    "health_group_archive": "Prognosearchiv",
+    "health_group_calibration": "Selbstkalibrierung",
+    "health_group_cache": "Neustartcache",
+    "health_severity_info": "Information",
+    "health_severity_warning": "Hinweis",
+    "health_severity_error": "Fehler"
   },
   "issues": {
     "dashboard_update": {

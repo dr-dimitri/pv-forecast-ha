@@ -979,6 +979,7 @@ async def test_options_flow_menu_offers_removal_of_last_roof(hass) -> None:
         "measurements",
         "dashboard",
         "advanced_options",
+        "health",
     }
     assert "Süddach" in result["description_placeholders"]["roofs"]
 
@@ -1002,6 +1003,7 @@ async def test_options_flow_menu_hides_edit_and_remove_without_roofs(hass) -> No
         "measurements",
         "dashboard",
         "advanced_options",
+        "health",
     }
     assert result["description_placeholders"]["roofs"] == ""
 
@@ -1027,6 +1029,7 @@ async def test_options_flow_add_roof_does_not_touch_existing_roofs(hass) -> None
         "measurements",
         "dashboard",
         "advanced_options",
+        "health",
     }
     result = await configure_options(
         hass, result["flow_id"], {"next_step_id": "add_roof"}
@@ -1255,6 +1258,7 @@ async def test_options_flow_removing_roof_requires_confirmation(hass) -> None:
         "measurements",
         "dashboard",
         "advanced_options",
+        "health",
     }
     result = await configure_options(
         hass, result["flow_id"], {"next_step_id": "remove_roof"}

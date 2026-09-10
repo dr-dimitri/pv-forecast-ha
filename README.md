@@ -564,3 +564,11 @@ Optional bewahrt **Erweiterte Funktionen → Letzte Prognose speichern** den let
 vollständigen Rohmodellstand für Neustarts ohne Internet. Herkunft, ursprüngliche
 Abrufzeit und Fehler bleiben sichtbar; lokale Messung kann wieder starten.
 [Prognosecache und Grenzen](docs/prognosecache.md).
+
+Unter **Konfigurieren → Betrieb prüfen** erklärt ein rein lokaler Bericht Abruf,
+Anbieterpause, Datenalter, Horizont-/Energy-Abdeckung, Messquellen, Archiv, Lernen
+und Neustartcache. **Erneut prüfen** liest nur vorhandene Zustände: keine
+Wetterabfrage, kein Storezugriff und keine automatische Änderung. Ausgeschaltete
+Funktionen und fehlende Lerntage sind keine Defektmeldung. Auch ohne geladene
+Anlage ist ein eingeschränkter Bericht verfügbar.
+[Betriebscheck mit nativen Browsernachweisen](docs/betriebscheck.md).
