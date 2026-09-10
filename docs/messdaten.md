@@ -145,8 +145,9 @@ Ohne belegte Differenzen sowie für noch nicht abgeschlossene Fenster bleibt
 auch `observed_energy_kwh` null. Gesunde Nullplateaus behalten die bestehende
 exakte Randzuordnung. Es gibt keine Hochrechnung auf eine vollständige Stunde.
 
-Die Karte zeichnet solche Teilmengen gestrichelt in der Produktionsfarbe und
-kennzeichnet sie in Legende, Intervallauswahl und Tabelle als „teilweise erfasst“.
+Die Karte zeigt diese Mengen gemeinsam mit den vollständigen Intervallwerten
+als gestrichelten Ist-Verlauf. Legende, Intervallauswahl und Tabelle verwenden
+keinen zusätzlichen Erfassungshinweis.
 So bleiben positive Messwerte bei üblichen, zur vollen Stunde versetzten
 Zählermeldungen sichtbar. Die vollständige Stundenproduktion ist dabei weiterhin
 unbekannt. Archiv, Lernen und vollständige Prognosevergleiche verwenden weiterhin

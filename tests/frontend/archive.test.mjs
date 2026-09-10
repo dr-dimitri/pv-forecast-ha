@@ -41,6 +41,8 @@ for (const scenario of ["sunny", "gaps", "spring", "fold", "kolkata"]) test(`${s
   assert.ok(rows.every(row => row.forecast === undefined));
   const html = renderArchiveDay({selection, result: {status: "ready", data}}, 360);
   assert.match(html, /id="archive-interval-chart"/);
+  assert.match(html, /class="forecast-line"/);
+  assert.doesNotMatch(html, /class="history-line"|class="actual-bar"/);
   assert.doesNotMatch(html, /id="chart"/);
   assert.match(html, /18 Uhr am Vortag/); assert.match(html, /Vollständig belegte Tagesmessung/);
   assert.doesNotMatch(html, /Aktuelle Prognose/);

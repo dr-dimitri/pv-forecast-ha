@@ -653,3 +653,16 @@ Die vorhandene Prognoseaktion ergänzt optional `include_explanation` mit einem 
 Die Kurve „Grundmodell ohne Selbstkalibrierung“ stammt direkt aus derselben Rohbasis mit Faktor 1, einschließlich Temperaturannahme, Anwenderwirkungsgrad, optionalem Horizontprofil und realen AC-Limits. Der Unterschied zur wirksamen Kurve bleibt getrennt vom Faktorbeitrag vor Clipping. Fehlende oder inkompatible Rohbasis liefert keine erfundenen Werte. Herkunft live/restored, echter Abrufzeitpunkt, Fehlerstatus und Qualitätsmerkmale bleiben sichtbar. Beobachtete Kandidaten sind keine produktive Wirkung; Temperatur-/Horizont-/Anwenderverluste erhalten keine nachträglich erfundene einzelne kWh-Wirkung.
 
 Die Karte bietet einen geschlossenen Bereich „Prognose erklärt“ und eine optionale Grundmodell-Kurve als Karteneinstellung. Die Dachansicht blendet den Gesamtvergleich aus. Identische aktive Karten teilen vorhandene Lesezyklen; geschlossene Erklärung ohne Kurve verlangt keine Zusatzdaten. Keine neuen Sensoren, Stores, Aktionen, Modellfreigaben, Wetter-/Messabrufe oder Änderungen an Config Entry 1.1. Modellierte Einflüsse sind keine gemessenen Geräteverluste oder nachgewiesene Verbesserung.
+
+## Vereinfachte Energieanzeige vom 10.09.2026
+
+Auf ausdrücklichen Anwenderwunsch entfallen in der Karte einschließlich Kennzahlen,
+Legende, Intervallwerten und Meldungen die Hinweise auf teilweise/unvollständig
+erfasste oder aus Leistung berechnete Ist-Energie. Das Diagramm zeigt ausschließlich
+die Prognose durchgezogen und die vorhandenen tatsächlichen Energiemengen als eine
+gestrichelte Linie. Messbalken, separate Teilmengen- und Grundmodellkurven entfallen.
+Die bisherige Grundmodelloption zeigt nur noch Werte in Details und Tabelle.
+Fehlende Werte bleiben leer. Backendwerte, Qualitätsmerkmale, Abdeckungsprüfung
+und Mess-/Archiv-/Lernregeln bleiben unverändert. Diese in Issue #1 festgehaltene
+Darstellungsentscheidung ersetzt die entgegenstehenden Kennzeichnungs- und
+Kurvenvorgaben der Karte.

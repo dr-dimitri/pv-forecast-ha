@@ -92,19 +92,25 @@ sich auf die gespeicherte Anlagenzeitzone, auch wenn dein Browser woanders ist.
 
 - **Aktuelle Prognose:** die gemeinsame berechnete Energie in kWh je angezeigtem
   UTC-Intervall. Die Linie ist durchgezogen.
-- **Jeweils 1 Stunde vorher:** rechtzeitig archivierte Prognosen mit festem
-  Vorlauf. Die gestrichelte Linie hat pro Intervall einen eigenen Stichtag;
-  sie ist keine gemeinsam am Vortag ausgegebene Tageskurve. Ohne rechtzeitige
-  Archivierung bleiben die betreffenden Stücke leer.
-- **Gemessen:** genau belegte Energiemengen aus bestätigten, disjunkten
-  AC-PV-Messquellen. Unvollständige Stunden werden nicht interpoliert. Ein
-  erfasster Tagesanteil wird ausdrücklich als unvollständig bezeichnet.
+- **Tatsächlich produziert:** die vorhandenen Energiemengen aus bestätigten,
+  disjunkten AC-PV-Messquellen als gestrichelte Linie.
+
+Das Diagramm zeigt diese beiden Verläufe ohne zusätzliche Balken. Hinweise auf
+teilweise erfasste oder aus Leistung berechnete Ist-Energie entfallen auch in
+Kennzahlen, Legende, Intervallwerten und Meldungen. Fehlende Werte bleiben leer.
+Die zugrunde liegenden Messwerte und die Prüfungen für Archiv und Lernen bleiben
+unverändert. Feste Archivprognosen stehen weiter in Intervallwerten, Details und
+der separaten Archivansicht bereit.
+
+![Tagesdiagramm bei 360 px](images/energieverlauf-360-light.png)
+![Tagesdiagramm im dunklen Design](images/energieverlauf-360-dark.png)
+
+Die Bilder verwenden synthetische Offline-Daten.
 
 Dachmesswerte und Dacharchive sind bislang nicht zugeordnet. In der Dachansicht
 werden deshalb ausschließlich ihre tatsächlich berechneten Prognosen gezeigt;
 Gesamtmessungen werden nicht nach Dachgröße verteilt. Ohne Messquelle bleibt
-die Karte als reine Prognoseansicht nutzbar. Ohne Archiv fehlen die historische
-Linie und belastbare Fehlerkennzahlen. Eine gültig gemessene Null ist etwas
+die Karte als reine Prognoseansicht nutzbar. Ohne Archiv fehlen archivierte Prognosewerte und belastbare Fehlerkennzahlen. Eine gültig gemessene Null ist etwas
 anderes als eine Datenlücke.
 
 Die erste Kartenfassung verwendet ausschließlich eine Energieachse in kWh je
@@ -215,7 +221,7 @@ Nutzererprobung.
 ![Archivnavigation bei 360 px](images/ui-132-360-light.png)
 ![Archivnavigation im dunklen Design](images/ui-132-360-dark.png)
 
-### Prognose erklärt und Grundmodellkurve
+### Prognose erklärt und Grundmodellwerte
 
 Unter der Livegrafik steht für die Gesamtanlage der zunächst geschlossene Bereich
 „Prognose erklärt“. Die Tagesbilanz zeigt Basis, vorzeichenbehafteten Faktorbeitrag,
@@ -223,17 +229,17 @@ Gruppenbegrenzung, zusätzliche Anlagenbegrenzung und wirksame AC-Prognose. Bei
 einem ausgewählten Grafikintervall erscheint zusätzlich dessen eigene Bilanz.
 Grundmodell und wirksame Prognose nach Begrenzung werden separat verglichen.
 
-Die Checkbox blendet „Grundmodell ohne Selbstkalibrierung“ als strichpunktierte
-Kurve ein. Intervall-Details und Wertetabelle nennen die unveränderten
-Backendwerte. Zum dauerhaften Speichern dient dieselbe Option im visuellen
-Karteneditor beziehungsweise `show_raw_forecast: true` in der Kartenkonfiguration.
+Die Checkbox ergänzt „Grundmodell ohne Selbstkalibrierung“ in Intervall-Details
+und Wertetabelle mit den unveränderten Backendwerten. Das Diagramm bleibt bei
+Prognose und tatsächlicher Produktion. Zum dauerhaften Speichern dient dieselbe
+Option im visuellen Karteneditor beziehungsweise `show_raw_forecast: true` in der Kartenkonfiguration.
 Die temporäre Checkbox verändert keine Anlagenparameter. Dachansichten zeigen
 keine Gesamtverlustbilanz. Eine fehlende kompatible Rohbasis bleibt als solche
 sichtbar; gespeicherte/veraltete Stände behalten ihre Herkunft und Wetterzeit.
 
 Die Erklärung kommt mit der normalen Prognoseantwort; identische aktive Karten
-teilen den Lesezyklus. Ohne geöffnete Erklärung und ohne Grundmodellkurve wird
-der Zusatzblock nicht angefragt. Ausblenden/Entfernen beendet die aktiven Leser.
+teilen den Lesezyklus. Ohne geöffnete Erklärung und ohne angeforderte
+Grundmodellwerte wird der Zusatzblock nicht angefragt. Ausblenden/Entfernen beendet die aktiven Leser.
 
 ![Prognoseerklärung bei 360 px](images/ui-133-360-light.png)
 ![Prognoseerklärung im dunklen Design](images/ui-133-360-dark.png)

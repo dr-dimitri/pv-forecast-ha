@@ -17,7 +17,8 @@ const server=http.createServer((req,res)=>{const file=path.resolve(root,'.'+new 
       await card.locator('#explanation-toggle').focus();await page.keyboard.press('Enter');
       await card.getByText('Angewendeter Anlagenfaktor: 1,2',{exact:true}).waitFor();
       await card.locator('#raw-toggle').focus();await page.keyboard.press('Space');
-      await card.locator('.raw-line').waitFor();
+      assert.equal(await card.locator('.raw-line').count(),0);
+      await card.locator('#raw-toggle:checked').waitFor();
       await card.locator('#interval-chart').focus();await page.keyboard.press('Home');await page.keyboard.press('ArrowRight');
       await card.locator('#interval-detail').getByText('Grundmodell ohne Selbstkalibrierung',{exact:true}).waitFor();
       await card.locator('#roof').selectOption('south');
@@ -29,7 +30,8 @@ const server=http.createServer((req,res)=>{const file=path.resolve(root,'.'+new 
       await card.locator('#interval-chart').focus();await page.keyboard.press('Home');await page.keyboard.press('ArrowRight');
       assert.equal(await card.evaluate(c=>c.shadowRoot.activeElement?.id),'interval-chart');
       await card.locator('#roof').selectOption('');
-      await card.locator('.raw-line').waitFor();
+      assert.equal(await card.locator('.raw-line').count(),0);
+      await card.locator('#raw-toggle:checked').waitFor();
       assert.equal(await card.locator('#raw-toggle').isChecked(),true);
       await card.locator('#interval-chart').focus();await page.keyboard.press('Home');
       await card.locator('#interval-detail').getByText('Grundmodell ohne Selbstkalibrierung',{exact:true}).waitFor();

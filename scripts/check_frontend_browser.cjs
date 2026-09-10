@@ -105,7 +105,7 @@ function inspectCard(card) {
       if (contour < 2.99) findings.push({ kind: "control-contrast", element: label(element), contrast: contour });
     }
   }
-  for (const element of shadow.querySelectorAll(".forecast-line, .history-line, .actual-line, .actual-bar, .hour-tick")) {
+  for (const element of shadow.querySelectorAll(".forecast-line, .actual-line, .hour-tick")) {
     if (!element.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true })) continue;
     const back = background(element);
     const contrast = ratio(blend(color(getComputedStyle(element).stroke), back), back);
@@ -220,13 +220,18 @@ async function checkNavigation(page, card, test) {
 // Echte Browserereignisse prüfen die Auswahl unabhängig von Backendberechnungen.
 async function checkChart(page, card, test) {
   if (test.scenario === "offset-measurements") {
-    const partial = card.locator("#interval-chart .actual-partial-line");
-    assert.ok(await partial.count() > 0, "Versetzte positive Messwerte benötigen eine sichtbare Teilkurve");
-    const bounds = await partial.first().evaluate((element) => element.getBBox().y);
-    assert.ok(bounds < 198, "Die Teilkurve liegt oberhalb der nächtlichen Nulllinie");
-    assert.match(await card.locator(".legend").first().textContent(), /Teilweise erfasst/);
+    const actual = card.locator("#interval-chart .actual-line");
+    assert.ok(await actual.count() > 0, "Versetzte positive Messwerte bleiben im Ist-Verlauf sichtbar");
+    const bounds = await actual.first().evaluate((element) => element.getBBox().y);
+    assert.ok(bounds < 198, "Der Ist-Verlauf liegt oberhalb der nächtlichen Nulllinie");
   }
   const chart = card.locator("#interval-chart");
+  assert.equal(await chart.locator(".actual-bar, .actual-partial-line, .history-line, .raw-line").count(), 0);
+  assert.equal(await card.locator(".legend").first().locator("span").count(), 2);
+  assert.doesNotMatch(await card.locator(".body").textContent(), /[Tt]eilweise erfasst|[Uu]nvollständig erfasst|berechnete Energie|berechnetem Anteil|Messung unvollständig|Messung seit Tagesbeginn ist nicht vollständig/);
+  for (const line of await chart.locator(".actual-line").all()) assert.notEqual(await line.evaluate((element) => getComputedStyle(element).strokeDasharray), "none");
+  for (const line of await chart.locator(".forecast-line").all()) assert.equal(await line.evaluate((element) => getComputedStyle(element).strokeDasharray), "none");
+  assert.equal(await card.locator(".actual-key").first().evaluate((element) => getComputedStyle(element).borderTopStyle), "dashed");
   const markers = await chart.locator(".hour-tick").evaluateAll((items) => items.map((item) => ({
     x: item.x1.baseVal.value, endX: item.x2.baseVal.value,
     height: item.y2.baseVal.value - item.y1.baseVal.value,

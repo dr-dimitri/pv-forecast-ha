@@ -5,7 +5,7 @@ import { fixtureHass } from "./fixtures.mjs";
 const config = { config_entry_id: "demo-plant", day: "today" };
 async function load(scenario) { let last; await loadView(fixtureHass(scenario), config, (state) => { last = state; }); return last; }
 test("Zustände unterscheiden fehlende Quellen, Messbeginn, Null und Archiv", async () => {
-  for (const [scenario, id] of [["no-source", "no-source"], ["no-measurement", "measurement-incomplete"], ["gaps", "measurement-incomplete"], ["archive-off", "archive-off"], ["archive-empty", "archive-empty"], ["stale", "stale"], ["old", "version"]]) {
+  for (const [scenario, id] of [["no-source", "no-source"], ["no-measurement", "measurement-empty"], ["gaps", "incomplete-forecast"], ["archive-off", "archive-off"], ["archive-empty", "archive-empty"], ["stale", "stale"], ["old", "version"]]) {
     assert.ok(dataNotices(await load(scenario)).some((item) => item.id === id), scenario);
   }
   assert.equal(dataNotices(await load("zero")).some((item) => /measurement|no-source/.test(item.id)), false);
@@ -48,7 +48,7 @@ test("Tageswechsel verwirft abhängige Werte beim Nachladen, Ausfall und wiederh
     assert.equal(state.measurement.data, undefined);
     assert.equal(state.history.data, undefined);
     const html = renderContent(config, state);
-    assert.doesNotMatch(html, /Seit Tagesbeginn|17,2–28,4|Heute voraussichtlich insgesamt/);
+    assert.doesNotMatch(html, /Aktueller Stand|17,2–28,4|Heute voraussichtlich insgesamt/);
   };
   for (let attempt = 0; attempt < 2; attempt++) {
     const ready = Promise.withResolvers(), release = Promise.withResolvers();
@@ -77,7 +77,7 @@ test("Tageswechsel verwirft abhängige Werte beim Nachladen, Ausfall und wiederh
     return result;
   } }, config, (incoming) => { state = retainReadState(state, incoming); });
   assert.equal(state.measurement.data.total_energy.energy_kwh, 0.25);
-  assert.match(renderContent(config, state), /Seit Tagesbeginn/);
+  assert.match(renderContent(config, state), /Aktueller Stand/);
   assert.match(renderContent(config, state), /19,5 kWh/);
   assert.match(renderContent(config, state), /10–28,4/);
   assert.equal(old.measurement.data.total_energy.energy_kwh, 12.4, "Der ursprüngliche Stand wird nicht verändert");
