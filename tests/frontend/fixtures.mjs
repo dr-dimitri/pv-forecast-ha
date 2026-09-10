@@ -25,7 +25,7 @@ export function fixture(scenario = "sunny", { day = "today", roof_id } = {}) {
   }
   const view = {
     view_version: 1, as_of: iso(asOf), timezone, plant_name: "Sonnenhaus", roofs: [{ id: "south", name: "Süddach" }, { id: "east", name: "Garage Ost" }],
-    roof_id: roof_id ?? null, day, date: scenario === "fold" ? "2026-10-25" : scenario === "spring" ? "2026-03-29" : "2026-09-10",
+    roof_id: roof_id ?? null, day, date: iso(Date.parse(`${scenario === "fold" ? "2026-10-25" : scenario === "spring" ? "2026-03-29" : "2026-09-10"}T12:00:00Z`) + (day === "tomorrow" ? 86400000 : 0)).slice(0, 10),
     start: iso(start), end: iso(end), today_start: iso(todayStart), today_end: iso(todayEnd),
     summary: { today_kwh: roof_id ? 12.47 : 23.14, tomorrow_kwh: roof_id ? 14.68 : 26.9, remaining_today_kwh: roof_id ? 6.82 : 10.76 },
     intervals, complete: scenario !== "gaps", stale: ["stale", "restored"].includes(scenario),
@@ -88,6 +88,7 @@ export function fixtureHass(scenario = "sunny", { calls = [], connection = {}, d
       if (scenario === "acl" && message.service !== "get_forecast") throw { code: "unauthorized" };
       const data = fixture(scenario, message.service_data);
       if (message.service === "get_forecast") {
+        if (message.service_data.include_explanation) data.forecast.explanation = explanationFixture(data.forecast.view);
         data.forecast.view.day_views = Object.fromEntries(["today", "tomorrow"].map((day) => {
           const view = fixture(scenario, { ...message.service_data, day }).forecast.view;
           return [day, Object.fromEntries(["day", "date", "start", "end", "intervals", "complete", "stale"].map((key) => [key, view[key]]))];
@@ -108,4 +109,9 @@ export function archiveFixture(scenario, selection) {
   const move = (value) => iso(Date.parse(value) + shift);
   const intervals = live.intervals.map((item, index) => ({ ...item, start: move(item.start), end: move(item.end), source_start: move(item.start), source_end: move(item.end), raw_energy_kwh: item.energy_kwh, cutoff: iso(Date.parse(item.start) + shift - 3600000), fetched_at: iso(Date.parse(item.start) + shift - 3900000), observed_at: iso(Date.parse(item.start) + shift - 3600000), measurement: { energy_kwh: scenario === "gaps" && index === 10 ? null : item.energy_kwh, complete: !(scenario === "gaps" && index === 10), assessed_at: iso(Date.parse(live.end) + shift + 3600000), previous_revision_count: index === 12 ? 1 : 0, revised: index === 12, whole_interval_energy_kwh: item.energy_kwh } }));
   return { schema_version: 1, scope: "total", date: selection.date, horizon: selection.horizon ?? "hourly_1h", label: selection.horizon === "hourly_3h" ? "Jeweils 3 Stunden vorher" : "Jeweils 1 Stunde vorher", timezone: live.timezone, start: move(live.start), end: move(live.end), configuration_id: selection.configuration_id ?? "synthetic-current", contexts: [{ configuration_id: "synthetic-current", timezone: live.timezone, active: true, min_date: "2026-01-01", max_date: "2026-12-31" }, { configuration_id: "synthetic-old", timezone: live.timezone, active: false, min_date: "2026-01-01", max_date: "2026-12-31" }], status: scenario === "gaps" ? "partial" : "complete", running: true, intervals, daily_forecasts: { daily_previous_18: { energy_kwh: 24 }, daily_same_06: { energy_kwh: 25 } }, daily_measurement: { energy_kwh: scenario === "gaps" ? null : 23, complete: scenario !== "gaps" } };
+}
+
+export function explanationFixture(view) {
+  const intervals = view.intervals.map(item => ({start:item.start, end:item.end, before_calibration_kwh: item.energy_kwh, calibration_delta_kwh:0.2, group_clipping_kwh:0.1, total_clipping_kwh:0.1,effective_kwh:item.energy_kwh}));
+  return {schema_version:1,scope:"total",status:"available",date:view.date,timezone:view.timezone,start:view.start,end:view.end,factor:1.2,origin:"live",fetched_at:view.as_of,last_update_success:true,intervals,raw_intervals:view.intervals.map(item=>({...item,energy_kwh:typeof item.energy_kwh === 'number' ? Math.max(0,item.energy_kwh-0.1) : null})),totals:{before_calibration_kwh:25,calibration_delta_kwh:5,group_clipping_kwh:2,total_clipping_kwh:3,effective_kwh:25,raw_model_kwh:24,effective_minus_raw_kwh:1,effective_minus_raw_percent:4.167},quality_flags:[],assumptions:["temperature_model","configured_efficiency","horizon_profile"]};
 }

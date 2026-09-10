@@ -77,6 +77,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: PvForecastConfigEntry) -
             coordinator.last_update_success_time = restored.fetched_at
             coordinator.origin = "restored"
             coordinator.restored_at = dt_util.utcnow()
+            coordinator.async_build_explanation()
     except (Exception, CancelledError):
         await cache.async_stop()
         raise

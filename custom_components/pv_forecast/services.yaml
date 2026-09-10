@@ -5,6 +5,9 @@ get_forecast:
       selector:
         config_entry:
           integration: pv_forecast
+    include_explanation:
+      selector:
+        boolean:
     include_view:
       default: false
       selector:

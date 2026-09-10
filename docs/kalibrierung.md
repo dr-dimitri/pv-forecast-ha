@@ -112,3 +112,26 @@ leer; ein bloßer Testkandidat wird dort nicht als produktive Verbesserung ausge
 Die Tests verwenden synthetische, zeitlich getrennte Daten und prüfen unter anderem
 Neustart, Abschalten, Reset, Clipping und Messkorrekturen. Die reale Erprobung mit
 mindestens 30 Lerntagen und 14 späteren Prüftagen auf echten Anlagen steht aus.
+
+## Angewendete Wirkung nachvollziehen
+
+„Prognose erklärt“ zeigt die aktuelle Gesamtanlage für heute beziehungsweise
+morgen. Die Zahlenfolge beginnt mit der Modellenergie nach Temperaturannahme,
+Anwenderwirkungsgrad und optionalem Horizontprofil. Darauf wirkt der tatsächlich
+angewendete Faktor; anschließend kürzen die realen AC-Gruppen und zusätzlich das
+Anlagenlimit. Beide Kürzungen werden einmal und nichtnegativ gezählt. Der
+Faktorbeitrag kann negativ sein.
+
+Beispiel für eine Stunde: 10 kWh Basis + 2 kWh durch Faktor 1,2 − 0 kWh
+Gruppenkürzung − 4 kWh Anlagenbegrenzung = 8 kWh wirksam. Das Grundmodell mit
+Faktor 1 liefert nach derselben 8-kW-Grenze ebenfalls 8 kWh. Der zusätzliche
+Faktorbeitrag vor Clipping ist deshalb kein zugesagter zusätzlicher AC-Ertrag.
+
+„Grundmodell ohne Selbstkalibrierung“ enthält bereits Temperaturannahme,
+Anwenderwirkungsgrad, optionales Horizontprofil und die realen AC-Grenzen. Es ist
+keine verlustlose Modulproduktion. Der Vergleich stammt aus derselben
+Wetter-/Konfigurationsgeneration wie die wirksame Prognose. Beobachtete oder
+entzogene Kandidaten werden nicht als angewendete Korrektur bezeichnet.
+
+Die Bilanz beschreibt modellierte Einflüsse, keine gemessenen Geräteverluste
+oder nachgewiesene Verbesserung. Die reale Güteprüfung bleibt davon getrennt.

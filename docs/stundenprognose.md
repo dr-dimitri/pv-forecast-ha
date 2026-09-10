@@ -169,3 +169,37 @@ neue Wetterdaten an oder installiert Schaltaktionen.
 
 Der Aufruf verwendet den nativen Vertrag für
 [HA-Aktionen mit Antwortdaten](https://developers.home-assistant.io/docs/dev_101_services/).
+
+## Optionale Erklärung der aktuellen Gesamtprognose
+
+```yaml
+action: pv_forecast.get_forecast
+data:
+  config_entry_id: DEINE_ANLAGE
+  day: today
+  include_explanation: true
+response_variable: prognose
+```
+
+`explanation` hat eine eigene `schema_version: 1`, `scope: total`, Datum,
+Anlagenzeitzone und UTC-Grenzen des ausgewählten heutigen oder morgigen Tages.
+Auch bei `roof_id` bleibt diese Bilanz ausdrücklich auf die Gesamtanlage bezogen.
+Ohne Flag bleibt die bisherige Antwort unverändert.
+
+`totals` und `intervals` führen Energie vor Kalibrierung (`before_calibration_kwh`),
+Faktorbeitrag (`calibration_delta_kwh`), Gruppenkürzung (`group_clipping_kwh`),
+zusätzliche Gesamtkürzung (`total_clipping_kwh`) und `effective_kwh`. Ihre Bilanz
+wird gegen die bestehende wirksame Zeitreihe und Tageskennzahl geprüft.
+`raw_intervals` liefert direkt die passende Grundmodellkurve mit Faktor 1 nach
+realen AC-Grenzen. `raw_model_kwh`, `effective_minus_raw_kwh` und Prozent bei
+positiver Basis stehen separat in `totals`; beim Nulltag ist Prozent `null`.
+
+Die Antwort nennt angewendeten Faktor, Herkunft `live/restored`, echte Abrufzeit,
+Abruffehler, Alter (`stale`), Vollständigkeit und Qualitätsmerkmale. Ein
+wiederhergestellter Stand kann rechnerisch erklärt werden, bleibt aber als solcher
+gekennzeichnet und erhält dadurch keine operative Freigabe. Fehlende oder
+inkompatible Rohbasis, Abdeckung oder Bilanz liefert `status: unavailable` und
+einen Grund ohne numerische Erklärung. Keine alte Basis wird aus der AC-Kurve
+rekonstruiert. Die Zwischenstufen entstehen höchstens einmal je Roh-/Faktorgeneration;
+Leseaktionen projizieren nur UTC-Überlappungen. Es gibt keinen HTTP-, Mess-,
+Archiv- oder Lernzugriff durch die Erklärung.

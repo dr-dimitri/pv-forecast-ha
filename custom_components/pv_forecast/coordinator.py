@@ -36,6 +36,7 @@ from .const import (
     DOMAIN,
     UPDATE_INTERVAL,
 )
+from .explanation import ExplanationSnapshot, build_explanation
 from .horizon import forecast_days_from_options
 from .models import ForecastDay, ForecastResult, PlanningValues
 from .temperature_comparison import COEFFICIENTS, mountings_from_options
@@ -72,6 +73,7 @@ class PvForecastCoordinator(TimestampDataUpdateCoordinator[ForecastResult]):
         self._update_in_progress = False
         self.planning_values: PlanningValues | None = None
         self.raw_data: ForecastResult | None = None
+        self.explanation: ExplanationSnapshot | None = None
         self.origin = "live"
         self.restored_at: datetime | None = None
         self.forecast_cache: ForecastCacheManager | None = None
@@ -101,7 +103,9 @@ class PvForecastCoordinator(TimestampDataUpdateCoordinator[ForecastResult]):
         ):
             return
         forecast = self.raw_data
-        if forecast is not None:
+        if forecast is not None and (
+            factor != self.calibration_factor or self.data is None
+        ):
             self.data = apply_calibration(
                 forecast,
                 factor,
@@ -110,7 +114,29 @@ class PvForecastCoordinator(TimestampDataUpdateCoordinator[ForecastResult]):
             )
         self.calibration_factor = factor
         self.calibration_candidate_id = candidate_id
+        self.async_build_explanation()
         self.async_update_listeners()
+
+    @callback
+    def async_build_explanation(self, effective: ForecastResult | None = None) -> None:
+        """Eine kohärente Roh-/Wirkgeneration lokal und ohne I/O festhalten."""
+        current = effective if effective is not None else self.data
+        timezone = str(self._entry.data[CONF_TIME_ZONE])
+        if (
+            self.explanation is not None
+            and self.explanation.raw is self.raw_data
+            and self.explanation.effective is current
+            and self.explanation.factor == self.calibration_factor
+            and self.explanation.timezone == timezone
+        ):
+            return
+        self.explanation = build_explanation(
+            self.raw_data,
+            current,
+            self.calibration_factor,
+            self._entry.options.get(CONF_INVERTER_MAX_POWER_KW),
+            str(self._entry.data[CONF_TIME_ZONE]),
+        )
 
     @callback
     def async_start_day_updates(self) -> None:
@@ -298,6 +324,7 @@ class PvForecastCoordinator(TimestampDataUpdateCoordinator[ForecastResult]):
                     except (InvalidConfigurationError, ValueError, OverflowError):
                         # Ein fehlgeschlagener Vergleich ersetzt keine gültige Prognose.
                         self.temperature_data = None
+            self.async_build_explanation(effective)
             return effective
         except OpenMeteoRetryError as err:
             raise UpdateFailed(
