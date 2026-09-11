@@ -101,7 +101,39 @@ EMHASS-Betrieb ist damit nicht abgenommen. Referenz:
 ## Heute voraussichtlich insgesamt
 
 Die optionale `include_outlook: true`-Ergänzung von `get_measurements` liefert
-unter `outlook` eine getrennte Tagesaussicht für die Gesamtanlage:
+unter `outlook.estimate` eine Tagesabschätzung für die Gesamtanlage, auch bei
+Messlücken. Ihr eigener Vertrag `schema_version: 1` enthält:
+
+- `status`, `reason`: verfügbar oder fehlende benötigte Prognosedaten,
+- `basis`: `measurements_and_forecast` oder `forecast_only`,
+- `measured_kwh`: berücksichtigte Messenergie, ohne nutzbare Abschnitte `null`,
+- `measurement_coverage_seconds`: gemeinsam belegte Dauer,
+- `estimated_past_kwh`: Prognose für alle übrigen Zeiten seit lokaler Mitternacht,
+- `remaining_kwh`: Prognose ab jetzt bis zum lokalen Tagesende,
+- `total_kwh`: die überschneidungsfreie Summe der drei Energieanteile,
+- `forecast_stale`, `forecast_quality_flags`: Alter/Fehler und Ersatzwerte der
+  tatsächlich verwendeten Prognoseabschnitte.
+
+Beispiel: Bei 24 kWh Tagesprognose mit konstant 1 kW und 4 kWh gemessener
+Erzeugung zwischen 8 und 10 Uhr ergibt die Tagesaussicht um 12 Uhr **26 kWh**:
+4 kWh gemessen, 10 kWh geschätzte Vergangenheit und 12 kWh Restprognose.
+Die zwei gemessenen Stunden ersetzen ihre Prognose vollständig. Ein fehlender
+Morgen sperrt die Anzeige nicht. Mehrere Zähler benötigen für jeden verwendeten
+Abschnitt gemeinsame exakte Grenzen; positive Differenzen werden niemals
+anteilig verteilt. Korrigierte/ungültige Messungen und frühere Quellen- oder
+Standortsegmente fließen nicht ein. Ohne solche gemeinsam belegten Abschnitte
+erscheint die reine Tagesprognose. Fehlende Messung wird damit geschätzt, nicht
+als null gemessen ausgegeben.
+
+Die Karte verwendet bevorzugt diese Abschätzung. Ohne verfügbare Messantwort,
+etwa bei fehlenden Quellenrechten oder einem älteren Backend, zeigt sie die
+bereits berechtigte heutige Tageskennzahl aus `get_forecast`. Sie berechnet
+keine eigene Summe. Ältere verfügbare Prognosen und Eingabefallbacks bleiben
+mit Hinweis sichtbar. Fehlt auch die benötigte Prognoseabdeckung, erscheint
+„Keine Prognosedaten“ mit Erklärung statt eines erfundenen Ertrags.
+
+Die bisherigen strengen Felder unter `outlook` bleiben für bestehende Leser
+unverändert. Sie belegen weiterhin ein vollständiges Messpräfix:
 
 - `measured_kwh`: vollständig belegte Energie seit lokaler Mitternacht,
 - `measured_until`: letzter gemeinsamer exakter Messzeitpunkt,
@@ -126,8 +158,10 @@ Beispiel: 8 kWh bis 11:30 Uhr, 0,5 kWh geschätzte Brücke bis 12 Uhr und
 12 kWh Restprognose ergeben 20,5 kWh. Die Brücke ist keine Messung. Bei
 mehreren Zählern wird eine gemeinsame belegte Grenze benötigt; unterschiedliche
 Meldezeiten rechtfertigen keine anteilige Verteilung von Zählerdifferenzen.
-Fehlt das Messpräfix oder eine Prognoseabdeckung, bleibt die Tagesaussicht
-unvollständig. Die verbleibende Basisprognose bleibt getrennt zugänglich.
+Fehlt das Messpräfix oder eine Prognoseabdeckung, bleiben diese strengen Felder
+unvollständig. Die Karte zeigt trotzdem die verfügbare Abschätzung aus `estimate`
+beziehungsweise die reine Tagesprognose. Archiv, Lernen, Energy und operative
+Planung verwenden weiterhin ihre bisherigen Vollständigkeits- und Altersregeln.
 
 Eine halbstündige Brücke ist dabei keine feste Altersgrenze. Meldet eine Quelle
 beispielsweise sechs Stunden nichts mehr, bleibt eine ansonsten vollständige

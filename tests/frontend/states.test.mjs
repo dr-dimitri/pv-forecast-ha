@@ -48,7 +48,8 @@ test("Tageswechsel verwirft abhängige Werte beim Nachladen, Ausfall und wiederh
     assert.equal(state.measurement.data, undefined);
     assert.equal(state.history.data, undefined);
     const html = renderContent(config, state);
-    assert.doesNotMatch(html, /Aktueller Stand|17,2–28,4|Heute voraussichtlich insgesamt/);
+    assert.doesNotMatch(html, /Aktueller Stand|17,2–28,4|23,17 kWh/);
+    assert.match(html, /basiert auf der Wetterprognose/);
   };
   for (let attempt = 0; attempt < 2; attempt++) {
     const ready = Promise.withResolvers(), release = Promise.withResolvers();
@@ -111,13 +112,13 @@ test("Späte Tagesantworten werden auch bei erfolgreichem Lesen nicht falsch zug
   state.measurement.data.outlook.as_of = state.forecast.data.today_end;
   state.history.data.uncertainty.days.today.target_date = "2026-09-11";
   let html = renderContent(config, state);
-  assert.doesNotMatch(html, /Heute voraussichtlich insgesamt|17,2–28,4/);
+  assert.doesNotMatch(html, /23,17 kWh|17,2–28,4/);
   state.measurement.data.outlook.as_of = state.forecast.data.as_of;
   state.history.data.uncertainty.days.today.target_date = state.forecast.data.date;
   state.measurement.data.outlook.timezone = "UTC";
   state.history.data.uncertainty.timezone = "UTC";
   html = renderContent(config, state);
-  assert.doesNotMatch(html, /Heute voraussichtlich insgesamt|17,2–28,4/);
+  assert.doesNotMatch(html, /23,17 kWh|17,2–28,4/);
 });
 test("Wiederhergestellte Prognose nennt Herkunft und echte Wetterzeit", async () => {
   const restored = await load("restored");

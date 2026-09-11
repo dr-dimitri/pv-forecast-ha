@@ -36,8 +36,10 @@ Historische UTC-Abfragen liefern weiterhin alte Messwerte mit deren
 `segment_contexts` und ursprünglicher Tageszeitzone. Tagesaussicht und
 Kartenintervalle verwenden ausschließlich Messungen des aktuellen
 Standortsegments. Frühere Energie darf nicht mit der Prognose des neuen
-Standorts addiert werden. Ein unvollständig gemessener Umzugstag erhält keine
-erfundene vollständige Tagesaussicht.
+Standorts addiert werden. Am unvollständig gemessenen Umzugstag ergänzt die
+Tagesabschätzung die fehlenden Abschnitte anhand der Prognose des aktuellen
+Standorts. Der bisherige strenge Messnachweis bleibt unvollständig; alte
+Messenergie wird nicht auf den neuen Standort übertragen.
 
 Die öffentliche Messabfrage ergänzt `current_location_total_energy` für das
 angefragte UTC-Fenster. Die Karte bevorzugt diesen Teilwert für „Ist heute“ und
