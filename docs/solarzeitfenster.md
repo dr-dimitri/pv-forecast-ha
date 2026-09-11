@@ -120,8 +120,10 @@ Erzeugung zwischen 8 und 10 Uhr ergibt die Tagesaussicht um 12 Uhr **26 kWh**:
 Die zwei gemessenen Stunden ersetzen ihre Prognose vollständig. Ein fehlender
 Morgen sperrt die Anzeige nicht. Mehrere Zähler benötigen für jeden verwendeten
 Abschnitt gemeinsame exakte Grenzen; positive Differenzen werden niemals
-anteilig verteilt. Korrigierte/ungültige Messungen und frühere Quellen- oder
-Standortsegmente fließen nicht ein. Ohne solche gemeinsam belegten Abschnitte
+anteilig verteilt. Ein technischer Zählerneustart erhält zuvor belegte Energie
+derselben Quellenidentität am aktuellen Standort; seine unbelegte Lücke wird
+durch Prognose ergänzt. Korrigierte/ungültige Messungen und abweichende Quellen-
+oder Standortidentitäten fließen nicht ein. Ohne gemeinsam belegte Abschnitte
 erscheint die reine Tagesprognose. Fehlende Messung wird damit geschätzt, nicht
 als null gemessen ausgegeben.
 
