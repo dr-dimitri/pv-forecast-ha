@@ -40,9 +40,7 @@ async def async_get_solar_forecast(
         return None
     timezone = ZoneInfo(str(entry.data[CONF_TIME_ZONE]))
     local_date = dt_util.utcnow().astimezone(timezone).date()
-    if forecast.local_date != local_date:
-        return None
-
+    # Ein älterer Ankertag kann beide aktuellen Tage vollständig überdecken.
     start = datetime.combine(local_date, time.min, timezone).astimezone(UTC)
     midnight = datetime.combine(
         local_date + timedelta(days=1), time.min, timezone
