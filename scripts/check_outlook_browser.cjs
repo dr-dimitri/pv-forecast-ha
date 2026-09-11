@@ -23,7 +23,7 @@ const server = http.createServer((request, response) => {
     browser = await chromium.launch({ headless: true, executablePath: process.env.PV_CHROMIUM_EXECUTABLE });
     fs.mkdirSync(output, { recursive: true });
     for (const width of [360, 1440]) for (const theme of ["light", "dark"]) {
-      for (const scenario of ["partial-outlook", "unresolved-outlook", "derived-outlook", "no-source", "acl", "restored", "empty"]) {
+      for (const scenario of ["partial-outlook", "offset-outlook", "unresolved-outlook", "derived-outlook", "no-source", "acl", "restored", "empty"]) {
         const page = await browser.newPage({ viewport: { width, height: 1000 }, colorScheme: theme });
         const errors = [];
         page.on("pageerror", (error) => errors.push(error.message));
@@ -48,6 +48,13 @@ const server = http.createServer((request, response) => {
           assert.match(text, /erneut bestätigen/);
           assert.doesNotMatch(text, /Verwertbare Messwerte werden automatisch/);
         }
+        if (scenario === "offset-outlook") {
+          assert.match(text, /versetzter Meldezeiten/);
+          assert.match(text, /Ist heute/);
+          assert.match(text, /23,14 kWh/);
+          assert.doesNotMatch(text, /automatisch berücksichtigt|Berücksichtigte Messung/);
+          assert.match(await card.locator("ha-card").innerText(), /Ist heute\s+12,4 kWh/);
+        }
         if (scenario === "derived-outlook") {
           assert.match(text, /Berücksichtigte Messung/);
           assert.doesNotMatch(text, /Qualitätsmarkierungen|teilweise Ersatzwerte|aus Leistung berechnet/);
@@ -61,7 +68,7 @@ const server = http.createServer((request, response) => {
         await page.close();
       }
     }
-    console.log("28 Browserfälle bestanden: Messlücke, ungeklärte Quellenidentität, abgeleitete Messung, fehlende Quelle, Quellenrechte, alter Wetterstand und fehlende Prognose; 360/1440 px, Hell/Dunkel und Tastatur.");
+    console.log("32 Browserfälle bestanden: Messlücke, versetzte Meldezeiten, ungeklärte Quellenidentität, abgeleitete Messung, fehlende Quelle, Quellenrechte, alter Wetterstand und fehlende Prognose; 360/1440 px, Hell/Dunkel und Tastatur.");
   } finally {
     await browser?.close();
     server.close();

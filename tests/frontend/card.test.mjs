@@ -532,6 +532,50 @@ test("Nur die heutige unterstützte Tagesaussicht begründet einen Quellenhinwei
   }
 });
 
+test("Versetzte Messquellen erklären den Prognoserückfall neben gültiger Ist-Energie", async () => {
+  const { state } = await load("offset-outlook");
+  const before = structuredClone(state);
+  const html = renderOutlook(state);
+  assert.match(html, /23,14 kWh/);
+  assert.match(html, /basiert auf der Wetterprognose/);
+  assert.match(html, /keine gemeinsam belegten Zeitabschnitte/);
+  assert.match(html, /versetzter Meldezeiten/);
+  assert.match(html, /gemessene Energie steht weiterhin unter „Ist heute“/);
+  assert.doesNotMatch(html, /automatisch berücksichtigt|Berücksichtigte Messung/);
+  assert.match(renderContent(config, state), /Ist heute<\/dt><dd>12,4 <small>kWh/);
+  assert.deepEqual(state, before);
+});
+
+test("Fehlende Quellen und fehlende Messabschnitte erhalten eigene Rückfalltexte", async () => {
+  const { state } = await load("offset-outlook");
+  for (const [reason, text] of [
+    ["no_energy_sources", /keine Energiequelle für die Tagesaussicht zugeordnet/],
+    ["no_usable_measurements", /noch keine verwendbaren Messabschnitte/],
+  ]) {
+    state.measurement.data.outlook.estimate.measurement_fallback_reason = reason;
+    const html = renderOutlook(state);
+    assert.match(html, text);
+    assert.doesNotMatch(html, /versetzter Meldezeiten|automatisch berücksichtigt/);
+  }
+});
+
+test("Rückfallhinweise benötigen einen passenden aktuellen Schätzvertrag", async () => {
+  const { state } = await load("offset-outlook");
+  const original = structuredClone(state.measurement.data.outlook);
+  for (const changes of [
+    { schema_version: 2 }, { timezone: "UTC" },
+    { as_of: "2026-09-09T12:00:00Z" }, { as_of: state.forecast.data.today_end },
+    { estimate: { ...original.estimate, schema_version: 2 } },
+    { estimate: { ...original.estimate, measurement_fallback_reason: undefined } },
+    { estimate: { ...original.estimate, measurement_fallback_reason: "unknown" } },
+  ]) {
+    state.measurement.data.outlook = { ...original, ...changes };
+    const html = renderOutlook(state);
+    assert.match(html, /23,14 kWh/);
+    assert.doesNotMatch(html, /versetzter Meldezeiten|gemessene Energie steht weiterhin/);
+  }
+});
+
 test("Tagesabschätzung erhält abgeleitete Messwerte ohne Herkunftswarnung und trennt Prognoseersatzwerte", async () => {
   const { state } = await load("derived-outlook");
   const before = structuredClone(state);
