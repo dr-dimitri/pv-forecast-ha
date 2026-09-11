@@ -52,12 +52,14 @@ def forecast_client():
         yield fetch
 
 
-def _weather(day: date, timezone_name: str, gti: float = 1000):
+def _weather(day: date, timezone_name: str, gti: float = 1000, forecast_days: int = 2):
     """Die lokalen Zieltage mit stündlichen UTC-Eingabedaten überdecken."""
 
     timezone = ZoneInfo(timezone_name)
     start = datetime.combine(day, time.min, timezone).astimezone(UTC)
-    end = datetime.combine(day + timedelta(days=2), time.min, timezone).astimezone(UTC)
+    end = datetime.combine(
+        day + timedelta(days=forecast_days), time.min, timezone
+    ).astimezone(UTC)
     cursor = start.replace(minute=0) + timedelta(hours=1)
     points = []
     while cursor - timedelta(hours=1) < end:
@@ -67,7 +69,11 @@ def _weather(day: date, timezone_name: str, gti: float = 1000):
 
 
 async def _load_plant(
-    hass, forecast_client, timezone_name: str = "Europe/Berlin", day: date = DAY
+    hass,
+    forecast_client,
+    timezone_name: str = "Europe/Berlin",
+    day: date = DAY,
+    forecast_days: int = 2,
 ):
     """Eine echte Anlage mit zwei Dächern und gemeinsamem 15-kW-Limit laden."""
 
@@ -84,11 +90,14 @@ async def _load_plant(
         options={
             CONF_ROOFS: [persisted_roof("a"), persisted_roof("b", name="Garage")],
             CONF_INVERTER_MAX_POWER_KW: 15.0,
+            "forecast_days": forecast_days,
         },
         pref_disable_polling=True,
     )
     entry.add_to_hass(hass)
-    forecast_client.return_value = _weather(day, timezone_name)
+    forecast_client.return_value = _weather(
+        day, timezone_name, forecast_days=forecast_days
+    )
     assert await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()
     return entry
@@ -201,6 +210,99 @@ async def test_energy_preserves_local_days_and_absolute_starts(
         assert points[midnight.isoformat()] == pytest.approx(
             15000 * (original.end - midnight).total_seconds() / 3600
         )
+    assert forecast_client.await_count == 1
+
+
+@pytest.mark.parametrize("forecast_days", [3, 7])
+@pytest.mark.parametrize(
+    ("timezone_name", "current_day", "today_hours"),
+    [
+        ("Europe/Berlin", DAY, 24),
+        ("Europe/Berlin", date(2026, 3, 29), 23),
+        ("Europe/Berlin", date(2026, 10, 25), 25),
+        ("Asia/Kathmandu", DAY, 24),
+    ],
+)
+async def test_energy_uses_covered_days_after_snapshot_midnight(
+    hass,
+    freezer,
+    forecast_client,
+    forecast_days,
+    timezone_name,
+    current_day,
+    today_hours,
+) -> None:
+    """Ein Mehrtagesstand bleibt bis zum letzten vollständig belegten Paar lesbar."""
+
+    timezone = ZoneInfo(timezone_name)
+    snapshot_day = current_day - timedelta(days=1)
+    freezer.move_to(datetime.combine(snapshot_day, time(12), timezone))
+    entry = await _load_plant(
+        hass, forecast_client, timezone_name, snapshot_day, forecast_days
+    )
+    coordinator = entry.runtime_data.coordinator
+    snapshot = coordinator.data
+    fetched_at = coordinator.last_update_success_time
+
+    freezer.move_to(datetime.combine(current_day, time(0, 1), timezone))
+    result = await async_get_solar_forecast(hass, entry.entry_id)
+
+    assert result is not None
+    totals = {}
+    for stamp, wh in result["wh_hours"].items():
+        day = datetime.fromisoformat(stamp).astimezone(timezone).date()
+        totals[day] = totals.get(day, 0) + wh
+    assert totals == pytest.approx(
+        {current_day: today_hours * 15000, current_day + timedelta(days=1): 24 * 15000}
+    )
+    for key, day in (
+        ("today", current_day),
+        ("tomorrow", current_day + timedelta(days=1)),
+    ):
+        assert totals[day] == pytest.approx(coordinator.get_daily_yield(key) * 1000)
+
+    last_pair = snapshot_day + timedelta(days=forecast_days - 2)
+    freezer.move_to(datetime.combine(last_pair, time(12), timezone))
+    assert await async_get_solar_forecast(hass, entry.entry_id) is not None
+    freezer.move_to(datetime.combine(last_pair + timedelta(days=1), time.min, timezone))
+    assert await async_get_solar_forecast(hass, entry.entry_id) is None
+    assert coordinator.data is snapshot
+    assert coordinator.last_update_success_time == fetched_at
+    assert forecast_client.await_count == 1
+
+
+@pytest.mark.parametrize("problem", ["failed", "gap", "incomplete", "negative", "nan"])
+async def test_energy_still_rejects_unusable_multiday_snapshot_after_midnight(
+    hass, freezer, forecast_client, problem
+) -> None:
+    """Ein längerer Horizont bewahrt die Fehler- und Abdeckungsprüfungen."""
+
+    entry = await _load_plant(hass, forecast_client, forecast_days=7)
+    coordinator = entry.runtime_data.coordinator
+    snapshot = coordinator.data
+    intervals = snapshot.total_intervals
+    if problem == "failed":
+        coordinator.async_set_update_error(UpdateFailed("Abruf fehlgeschlagen"))
+    elif problem == "gap":
+        coordinator.data = replace(
+            snapshot, total_intervals=intervals[:30] + intervals[31:]
+        )
+    else:
+        change = {
+            "incomplete": {"is_complete": False},
+            "negative": {"energy_kwh": -1},
+            "nan": {"energy_kwh": float("nan")},
+        }[problem]
+        coordinator.data = replace(
+            snapshot,
+            total_intervals=(
+                *intervals[:30],
+                replace(intervals[30], **change),
+                *intervals[31:],
+            ),
+        )
+    freezer.move_to("2026-08-23T22:01:00+00:00")
+    assert await async_get_solar_forecast(hass, entry.entry_id) is None
     assert forecast_client.await_count == 1
 
 
