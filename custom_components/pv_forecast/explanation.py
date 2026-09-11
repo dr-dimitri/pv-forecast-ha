@@ -163,6 +163,7 @@ def explanation_view(
     end = datetime.combine(
         target + timedelta(days=1), time.min, ZoneInfo(timezone)
     ).astimezone(UTC)
+    expected = window_energy(effective.total_intervals, start, end)
     result = {
         "schema_version": 1,
         "scope": "total",
@@ -177,7 +178,7 @@ def explanation_view(
         "stale": not last_update_success
         or fetched_at is None
         or not timedelta(0) <= now - fetched_at <= timedelta(minutes=60),
-        "complete": window_energy(effective.total_intervals, start, end) is not None,
+        "complete": expected is not None,
         "status": "unavailable",
         "reason": "missing_raw_basis",
         "assumptions": [
@@ -206,6 +207,8 @@ def explanation_view(
         return result | {"reason": "incompatible_generation"}
     if snapshot.reason:
         return result | {"reason": snapshot.reason}
+    if expected is None:
+        return result | {"reason": "incomplete_coverage"}
     fields = (
         "before_calibration_kwh",
         "calibration_delta_kwh",
@@ -240,7 +243,9 @@ def explanation_view(
     if covered != (end - start).total_seconds():
         return result | {"reason": "incomplete_coverage"}
     totals = {field: sum(item[field] for item in intervals) for field in fields}
-    expected = (
+    # Die UTC-Zeitreihe enthält auch nach Mitternacht vollständig belegte
+    # Folgetage. Vorhandene gespeicherte Tageskennzahlen bleiben gegenprüfbar.
+    stored_daily = (
         effective.total.today
         if target == effective.local_date
         else (
@@ -249,7 +254,9 @@ def explanation_view(
             else None
         )
     )
-    if expected is None or not _same(totals["effective_kwh"], expected):
+    if not _same(totals["effective_kwh"], expected) or (
+        stored_daily is not None and not _same(stored_daily, expected)
+    ):
         return result | {"reason": "inconsistent_daily_total"}
     baseline = sum(item["energy_kwh"] for item in raw_intervals)
     difference = totals["effective_kwh"] - baseline
