@@ -6,7 +6,11 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from custom_components.pv_forecast.measurements import SourceConfig, SourceHistory
+from custom_components.pv_forecast.measurements import (
+    SourceConfig,
+    SourceHistory,
+    aggregate_energy,
+)
 from custom_components.pv_forecast.outlook import build_day_outlook
 
 from .test_solar_window import forecast
@@ -314,6 +318,7 @@ def test_estimate_joins_different_reporting_intervals_at_exact_boundaries():
     second.add_reading(START + timedelta(hours=4), 104, "kWh")
     second.add_reading(START + timedelta(hours=6), 106, "kWh")
     estimate = outlook([first, second])["estimate"]
+    assert estimate["measurement_fallback_reason"] is None
     assert estimate["measured_kwh"] == 7
     assert estimate["measurement_coverage_seconds"] == 7200
     assert estimate["total_kwh"] == 29
@@ -358,20 +363,135 @@ def test_estimate_preserves_same_source_measurements_across_counter_restart(
         assert result["reason"] == "incomplete_measurements"
 
 
-@pytest.mark.parametrize("case", ["none", "empty_source", "unresolved", "offset"])
-def test_estimate_without_usable_measurements_is_full_daily_forecast(case):
+@pytest.mark.parametrize(
+    "case,reason",
+    [
+        ("none", "no_energy_sources"),
+        ("power_only", "no_energy_sources"),
+        ("no_readings", "no_usable_measurements"),
+        ("empty_source", "no_usable_measurements"),
+        ("unresolved", "unresolved_measurement_identity"),
+        ("offset", "no_common_measurement_boundary"),
+    ],
+)
+def test_estimate_without_usable_measurements_is_full_daily_forecast(case, reason):
     """Fehlende gemeinsame Messgrenzen sperren die vorhandene Tagesprognose nicht."""
     first = measurements()
     first.add_reading(NOON, 108, "kWh")
     second = measurements("b", start=START + timedelta(minutes=1))
     second.add_reading(NOON - timedelta(minutes=1), 109, "kWh")
     histories = [] if case == "none" else [first, second]
+    if case == "power_only":
+        histories = [SourceHistory(replace(first.source, kind="power"), "UTC", 20)]
+    if case == "no_readings":
+        histories = [SourceHistory(first.source, "UTC", 20)]
     if case == "empty_source":
         histories = [first, measurements("b")]
     estimate = outlook(histories, identity_unresolved=case == "unresolved")["estimate"]
     assert estimate["status"] == "available"
     assert estimate["basis"] == "forecast_only"
+    assert estimate["measurement_fallback_reason"] == reason
+    assert estimate["reason"] is None
     assert estimate["measured_kwh"] is None
+    assert estimate["total_kwh"] == 24
+
+
+@pytest.mark.parametrize("night_plateau", [False, True])
+def test_offset_sources_keep_observed_energy_and_explain_forecast_only(night_plateau):
+    """Belegte Einzelmengen bleiben erhalten, ohne Gesamtprognose doppelt zu zählen."""
+    zone = "Europe/Berlin"
+    start = datetime(2026, 9, 9, tzinfo=ZoneInfo(zone)).astimezone(UTC)
+    now = start + timedelta(hours=12, minutes=45)
+    histories = []
+    for source_id, offset, step in [("a", 0, 0.5), ("b", 30, 0.25)]:
+        history = SourceHistory(
+            SourceConfig(
+                source_id,
+                f"sensor.{source_id}",
+                "total",
+                "AC-PV",
+                max_interval_minutes=65,
+            ),
+            zone,
+            20,
+        )
+        for hour in range(-1 if night_plateau else 0, 13):
+            produced_hours = max(0, hour - 6) if night_plateau else hour
+            history.add_reading(
+                start + timedelta(hours=hour, minutes=offset),
+                100 + produced_hours * step,
+                "kWh",
+            )
+        histories.append(history)
+    original = [history.to_dict() for history in histories]
+    total = aggregate_energy(histories, start, now, now)
+    result = build_day_outlook(
+        forecast([1] * 24, start), histories, zone, now, now, True
+    )
+    estimate = result["estimate"]
+    assert total["energy_kwh"] == (4.5 if night_plateau else 9)
+    assert total["source_count"] == 2
+    assert "stale" not in total["quality_flags"]
+    assert result["status"] == "unavailable"
+    assert result["reason"] == "no_common_measurement_boundary"
+    assert result["measured_kwh"] is None
+    assert result["total_kwh"] is None
+    assert estimate["status"] == "available"
+    assert estimate["reason"] is None
+    assert estimate["basis"] == "forecast_only"
+    assert estimate["measurement_fallback_reason"] == "no_common_measurement_boundary"
+    assert estimate["measured_kwh"] is None
+    assert estimate["measurement_coverage_seconds"] == 0
+    assert estimate["estimated_past_kwh"] == 12.75
+    assert estimate["remaining_kwh"] == 11.25
+    assert estimate["total_kwh"] == 24
+    assert [history.to_dict() for history in histories] == original
+    assert aggregate_energy(histories, start, now, now) == total
+
+
+@pytest.mark.parametrize(
+    "case", ["daily_correction", "derived_gap", "former_identity", "positive_boundary"]
+)
+def test_discarded_differences_do_not_claim_missing_common_boundaries(case):
+    """Nicht nutzbare Rohdifferenzen werden nicht als zeitversetzte Messung erklärt."""
+    first = measurements()
+    first.add_reading(NOON, 108, "kWh")
+    source = replace(first.source, source_id="b", entity_id="sensor.b")
+    if case == "daily_correction":
+        source = replace(source, kind="daily")
+    if case == "derived_gap":
+        source = replace(source, derived_energy=True)
+    second = SourceHistory(source, "UTC", 20)
+    second.add_reading(
+        START - timedelta(hours=1) if case == "positive_boundary" else START,
+        100,
+        "kWh",
+    )
+    second.add_reading(NOON - timedelta(hours=1), 108, "kWh")
+    if case == "daily_correction":
+        second.add_reading(NOON, 104, "kWh")
+    if case == "former_identity":
+        second.replace_source(replace(source, entity_id="sensor.replacement"))
+    original = [history.to_dict() for history in [first, second]]
+    assert second.deltas
+    estimate = outlook([first, second])["estimate"]
+    assert estimate["status"] == "available"
+    assert estimate["measurement_fallback_reason"] == "no_usable_measurements"
+    assert estimate["basis"] == "forecast_only"
+    assert estimate["measured_kwh"] is None
+    assert estimate["total_kwh"] == 24
+    assert [history.to_dict() for history in [first, second]] == original
+
+
+@pytest.mark.parametrize("has_source", [False, True])
+def test_estimate_at_midnight_has_no_measurement_period(has_source):
+    """Ein noch leerer Tag behauptet weder Meldeversatz noch eine gemessene Null."""
+    estimate = outlook([measurements()] if has_source else [], now=START)["estimate"]
+    assert estimate["measurement_fallback_reason"] == (
+        "no_usable_measurements" if has_source else "no_energy_sources"
+    )
+    assert estimate["measured_kwh"] is None
+    assert estimate["estimated_past_kwh"] == 0
     assert estimate["total_kwh"] == 24
 
 
@@ -411,6 +531,7 @@ def test_estimate_discards_former_source_and_daily_corrections():
     daily.add_reading(START + timedelta(hours=6), 4, "kWh")
     estimate = outlook([daily])["estimate"]
     assert estimate["basis"] == "forecast_only"
+    assert estimate["measurement_fallback_reason"] == "no_usable_measurements"
     assert estimate["total_kwh"] == 24
 
 

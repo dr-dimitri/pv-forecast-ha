@@ -455,7 +455,8 @@ export function renderOutlook(state) {
   const currentDay = outlook?.timezone === timezone && millis(outlook.as_of) >= millis(state.forecast.data.today_start) && millis(outlook.as_of) < millis(state.forecast.data.today_end);
   const supported = currentDay && outlook?.schema_version === 1;
   const available = supported && outlook.status === "available" && finite(outlook.total_kwh);
-  const estimate = supported && outlook.estimate?.schema_version === 1 && outlook.estimate.status === "available" && finite(outlook.estimate.total_kwh) ? outlook.estimate : null;
+  const supportedEstimate = supported && outlook.estimate?.schema_version === 1 ? outlook.estimate : null;
+  const estimate = supportedEstimate?.status === "available" && finite(supportedEstimate.total_kwh) ? supportedEstimate : null;
   const measurementAge = supported && finite(outlook.measurement_age_minutes) && outlook.measurement_age_minutes >= 0 ? `<p class="hint">Alter des gemeinsamen Messzeitpunkts: ${energyText(outlook.measurement_age_minutes)} Minuten.</p>` : "";
   const staleMeasurement = supported && outlook.measurement_stale === true ? '<p class="hint"><strong>Der letzte gesicherte Messwert ist zu alt.</strong> Mindestens eine Messquelle hat ihre bestätigte Meldefrist überschritten. Die Zeit seit dem gemeinsamen Messzeitpunkt bleibt geschätzt.</p>' : "";
   const metric = (label, value) => `<div><dt>${label}</dt><dd>${energyText(value)} <small>kWh</small></dd></div>`;
@@ -463,11 +464,18 @@ export function renderOutlook(state) {
     const total = estimate?.total_kwh ?? view.summary.today_kwh;
     const hasTotal = finite(total);
     const measured = estimate?.basis === "measurements_and_forecast";
-    const identityUnresolved = supported && outlook.reason === "unresolved_measurement_identity";
+    const fallbackReason = supportedEstimate?.measurement_fallback_reason;
+    const identityUnresolved = supported && (outlook.reason === "unresolved_measurement_identity" || fallbackReason === "unresolved_measurement_identity");
     const identityHint = identityUnresolved ? '<p class="hint">Die Zuordnung mindestens einer Messquelle ist derzeit nicht sicher bestätigt. Bitte in den Integrationsoptionen unter „PV-Erzeugung“ prüfen und bei geänderter Quelle erneut bestätigen.</p>' : "";
+    const fallbackExplanations = {
+      no_energy_sources: "Es ist keine Energiequelle für die Tagesaussicht zugeordnet.",
+      no_usable_measurements: "Für mindestens eine Messquelle liegen noch keine verwendbaren Messabschnitte vor.",
+      no_common_measurement_boundary: "Die Messquellen liefern Werte, aber keine gemeinsam belegten Zeitabschnitte, etwa wegen versetzter Meldezeiten oder Messlücken. Die gemessene Energie steht weiterhin unter „Ist heute“.",
+    };
+    const fallbackExplanation = Object.hasOwn(fallbackExplanations, fallbackReason) ? fallbackExplanations[fallbackReason] : null;
     const explanation = measured
       ? "Vorhandene Messwerte sind berücksichtigt. Für die übrigen Zeiten wird die Prognose verwendet."
-      : `Die Tagesaussicht basiert auf der Wetterprognose.${identityUnresolved ? "" : " Verwertbare Messwerte werden automatisch berücksichtigt, sobald sie vorliegen."}`;
+      : `Die Tagesaussicht basiert auf der Wetterprognose.${identityUnresolved ? "" : ` ${fallbackExplanation ?? "Verwertbare Messwerte werden automatisch berücksichtigt, sobald sie vorliegen."}`}`;
     const stale = estimate?.forecast_stale || view.stale || state.forecast.retained || (supported && outlook.reason === "stale_forecast");
     const todayIntervals = view.day_views?.today?.intervals ?? (view.day === "today" ? view.intervals : []);
     const quality = estimate ? estimate.forecast_quality_flags?.length : todayIntervals?.some((interval) => interval.quality_flags?.length);

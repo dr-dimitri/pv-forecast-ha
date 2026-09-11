@@ -54,6 +54,7 @@ def build_day_outlook(
         "status": "unavailable",
         "reason": "incomplete_forecast",
         "basis": "forecast_only",
+        "measurement_fallback_reason": None,
         "measured_kwh": None,
         "estimated_past_kwh": None,
         "remaining_kwh": result["remaining_kwh"],
@@ -66,11 +67,13 @@ def build_day_outlook(
     }
     result["estimate"] = estimate
     try:
-        windows = (
-            []
-            if identity_unresolved or now == start
-            else _measured_windows(histories, start, now)
-        )
+        if identity_unresolved:
+            windows = []
+            estimate["measurement_fallback_reason"] = "unresolved_measurement_identity"
+        else:
+            windows, estimate["measurement_fallback_reason"] = _measured_windows(
+                histories, start, now
+            )
         measured = fsum(value for _, _, value in windows)
         # Nur das Komplement der Messabschnitte schätzen. Die gemeinsame
         # Prognose wird weder skaliert noch um ganze Teilmessmengen erhöht.
@@ -121,15 +124,17 @@ def build_day_outlook(
 
 def _measured_windows(
     histories: Sequence[SourceHistory], start: datetime, now: datetime
-) -> list[tuple[datetime, datetime, float]]:
-    """Ganze aktuelle Zählerdifferenzen an gemeinsamen exakten Grenzen verbinden."""
+) -> tuple[list[tuple[datetime, datetime, float]], str | None]:
+    """Gemeinsame Messabschnitte oder den Grund ihrer fehlenden Nutzbarkeit liefern."""
     sources = [
         history.current_location_view()
         for history in histories
         if _has_energy_in_window(history, start, now)
     ]
     if not sources:
-        return []
+        return [], "no_energy_sources"
+    if now == start:
+        return [], "no_usable_measurements"
     # Die zentrale Auswahl entfernt Korrekturen, ungültige Integral-Lücken und
     # angeschnittene positive Differenzen; identische Quellen bleiben verboten.
     snapshots = {
@@ -187,7 +192,13 @@ def _measured_windows(
         window_values.append(energy)
     if window_values:
         windows.append((window_start, window_end, fsum(window_values)))
-    return windows
+    if windows:
+        return windows, None
+    # Fehlende gemeinsame Grenzen setzen nutzbare Differenzen jeder Quelle
+    # voraus; leere, korrigierte oder ersetzte Quellen sind ein anderer Fall.
+    if any(not values for values in source_values):
+        return [], "no_usable_measurements"
+    return [], "no_common_measurement_boundary"
 
 
 def _build_exact_outlook(

@@ -106,6 +106,8 @@ Messlücken. Ihr eigener Vertrag `schema_version: 1` enthält:
 
 - `status`, `reason`: verfügbar oder fehlende benötigte Prognosedaten,
 - `basis`: `measurements_and_forecast` oder `forecast_only`,
+- `measurement_fallback_reason`: eigener Grund für fehlende nutzbare Messabschnitte,
+  unabhängig davon, ob die Schätzung verfügbar ist; bei verwendeter Messung `null`,
 - `measured_kwh`: berücksichtigte Messenergie, ohne nutzbare Abschnitte `null`,
 - `measurement_coverage_seconds`: gemeinsam belegte Dauer,
 - `estimated_past_kwh`: Prognose für alle übrigen Zeiten seit lokaler Mitternacht,
@@ -126,6 +128,19 @@ durch Prognose ergänzt. Korrigierte/ungültige Messungen und abweichende Quelle
 oder Standortidentitäten fließen nicht ein. Ohne gemeinsam belegte Abschnitte
 erscheint die reine Tagesprognose. Fehlende Messung wird damit geschätzt, nicht
 als null gemessen ausgegeben.
+
+Der Messrückfallgrund unterscheidet `no_energy_sources` (keine Energiequelle),
+`no_usable_measurements` (mindestens eine Quelle liefert im Zeitraum keine
+nutzbaren Differenzen), `no_common_measurement_boundary` (alle Quellen liefern
+nutzbare Differenzen, aber keinen gemeinsam belegten Abschnitt) und
+`unresolved_measurement_identity` (nicht sicher bestätigte Quellenzuordnung).
+Er entsteht aus derselben Auswahl der aktuellen, gültigen Messabschnitte;
+verworfene Korrekturen oder frühere Quellen werden nicht als Meldeversatz erklärt.
+Bei versetzt meldenden Quellen kann die Gesamtmessung unter „Ist heute“ deshalb
+bereits Energie enthalten, während die Tagesaussicht die reine Wetterprognose
+zeigt. Die Karte erklärt diesen Unterschied ohne die Zusage, dass weitere
+Meldungen allein gemeinsame exakte Grenzen herstellen. Zählersummen und
+strenge Tagesaussicht bleiben unverändert.
 
 Die Karte verwendet bevorzugt diese Abschätzung. Ohne verfügbare Messantwort,
 etwa bei fehlenden Quellenrechten oder einem älteren Backend, zeigt sie die

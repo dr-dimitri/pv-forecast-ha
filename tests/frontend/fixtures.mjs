@@ -1,5 +1,5 @@
 // Ausschließlich synthetische, deterministische Testdaten; keine Modellberechnung.
-export const SCENARIOS = ["partial-outlook", "unresolved-outlook", "derived-outlook", "derived-energy", "offset-measurements", "stale-measurement", "restored","no-source", "no-measurement", "archive-off", "archive-empty", "zero", "shading", "horizon","underperformance", "sunny", "gaps", "stale", "empty", "acl", "outage", "old", "roof", "deleted-roof", "spring", "fold", "kolkata", "midnight", "experience", "planning-unavailable"];
+export const SCENARIOS = ["partial-outlook", "offset-outlook", "unresolved-outlook", "derived-outlook", "derived-energy", "offset-measurements", "stale-measurement", "restored","no-source", "no-measurement", "archive-off", "archive-empty", "zero", "shading", "horizon","underperformance", "sunny", "gaps", "stale", "empty", "acl", "outage", "old", "roof", "deleted-roof", "spring", "fold", "kolkata", "midnight", "experience", "planning-unavailable"];
 const HOURS = [0, 0, 0, 0, 0, 0, 0.1, 0.38, 0.95, 1.7, 2.45, 3.1, 3.6, 3.4, 2.9, 2.1, 1.4, 0.7, 0.22, 0.04, 0, 0, 0, 0];
 const iso = (instant) => new Date(instant).toISOString();
 
@@ -77,6 +77,10 @@ export function fixture(scenario = "sunny", { day = "today", roof_id } = {}) {
   if (scenario === "unresolved-outlook") Object.assign(outlook, {
     status: "unavailable", reason: "unresolved_measurement_identity", measured_until: null, measured_kwh: null, bridge_kwh: null, total_kwh: null, measurement_age_minutes: null,
     estimate: { schema_version: 1, status: "available", reason: null, basis: "forecast_only", measured_kwh: null, estimated_past_kwh: 12.38, remaining_kwh: 10.76, total_kwh: 23.14, forecast_stale: false, forecast_quality_flags: [], measurement_coverage_seconds: 0 },
+  });
+  if (scenario === "offset-outlook") Object.assign(outlook, {
+    status: "unavailable", reason: "no_common_measurement_boundary", measured_until: null, measured_kwh: null, bridge_kwh: null, total_kwh: null, measurement_age_minutes: null,
+    estimate: { schema_version: 1, status: "available", reason: null, basis: "forecast_only", measurement_fallback_reason: "no_common_measurement_boundary", measured_kwh: null, estimated_past_kwh: 12.38, remaining_kwh: 10.76, total_kwh: 23.14, forecast_stale: false, forecast_quality_flags: [], measurement_coverage_seconds: 0 },
   });
   return {
     forecast: {
