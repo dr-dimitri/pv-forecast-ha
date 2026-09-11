@@ -124,7 +124,9 @@ def _measured_windows(
 ) -> list[tuple[datetime, datetime, float]]:
     """Ganze aktuelle Zählerdifferenzen an gemeinsamen exakten Grenzen verbinden."""
     sources = [
-        history for history in histories if _has_energy_in_window(history, start, now)
+        history.current_location_view()
+        for history in histories
+        if _has_energy_in_window(history, start, now)
     ]
     if not sources:
         return []
@@ -139,12 +141,19 @@ def _measured_windows(
     source_values = []
     common = None
     for history in sources:
+        # Technische Zählerneustarts bewahren die Quellenidentität. Frühere
+        # Messgrenzen bleiben auch am selben Standort ausgeschlossen.
+        segments = {
+            segment_id
+            for segment_id, source in history.segment_sources.items()
+            if source.measurement_identity == history.source.measurement_identity
+        }
         bounds: dict[datetime, tuple[int, int]] = {}
         values = []
         previous_end = None
         run = 0
         for delta in snapshots[history.source.source_id]["deltas"]:
-            if delta["segment_id"] != history.segment_id:
+            if delta["segment_id"] not in segments:
                 continue
             left, right = datetime.fromisoformat(
                 delta["start"]

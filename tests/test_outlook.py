@@ -291,7 +291,8 @@ def test_estimate_uses_measurements_after_missing_morning_without_double_countin
 def test_estimate_fills_derived_gap_and_keeps_both_valid_sections():
     """Unbekannte Integralenergie bleibt Schätzung; beide belegten Seiten zählen."""
     history = measurements(max_interval_minutes=180)
-    history.source = replace(history.source, derived_energy=True)
+    history.replace_source(replace(history.source, derived_energy=True))
+    history.add_reading(START, 100, "kWh")
     history.add_reading(START + timedelta(hours=2), 103, "kWh")
     history.mark_gap("restart")
     history.add_reading(START + timedelta(hours=3), 110, "kWh")
@@ -316,6 +317,45 @@ def test_estimate_joins_different_reporting_intervals_at_exact_boundaries():
     assert estimate["measured_kwh"] == 7
     assert estimate["measurement_coverage_seconds"] == 7200
     assert estimate["total_kwh"] == 29
+
+
+@pytest.mark.parametrize("second_source", [False, True])
+@pytest.mark.parametrize("after_reset", [False, True])
+def test_estimate_preserves_same_source_measurements_across_counter_restart(
+    second_source, after_reset
+):
+    """Ein Zählerneustart entfernt nur seine Lücke, nicht zuvor belegte Energie."""
+    history = measurements()
+    history.add_reading(START + timedelta(hours=6), 104, "kWh")
+    history.add_reading(START + timedelta(hours=7), 0, "kWh")
+    if after_reset:
+        history.add_reading(START + timedelta(hours=8), 2, "kWh")
+    histories = [history]
+    if second_source:
+        other = measurements("b")
+        other.add_reading(START + timedelta(hours=6), 103, "kWh")
+        other.add_reading(START + timedelta(hours=7), 104, "kWh")
+        other.add_reading(START + timedelta(hours=8), 105, "kWh")
+        histories.append(other)
+
+    now = START + timedelta(hours=8)
+    result = outlook(histories, now=now, fetched_at=now)
+    estimate = result["estimate"]
+    measured = 4 + 3 * second_source + (2 + second_source) * after_reset
+    assert estimate["status"] == "available"
+    assert estimate["basis"] == "measurements_and_forecast"
+    assert estimate["measured_kwh"] == measured
+    assert estimate["measurement_coverage_seconds"] == (6 + after_reset) * 3600
+    assert estimate["estimated_past_kwh"] == 2 - after_reset
+    assert estimate["remaining_kwh"] == 16
+    assert estimate["total_kwh"] == measured + 18 - after_reset
+    if not after_reset:
+        assert estimate["measured_kwh"] == result["measured_kwh"]
+        assert estimate["total_kwh"] == result["total_kwh"] == 22 + 3 * second_source
+    else:
+        # Die Schätzung hebt die strengere Forderung nach einem Messpräfix nicht auf.
+        assert result["status"] == "unavailable"
+        assert result["reason"] == "incomplete_measurements"
 
 
 @pytest.mark.parametrize("case", ["none", "empty_source", "unresolved", "offset"])
@@ -372,6 +412,20 @@ def test_estimate_discards_former_source_and_daily_corrections():
     estimate = outlook([daily])["estimate"]
     assert estimate["basis"] == "forecast_only"
     assert estimate["total_kwh"] == 24
+
+
+def test_estimate_preserves_registry_identity_after_rename_and_counter_restart():
+    """Eine umbenannte Registry-Entity behält auch ihre früheren Zählersegmente."""
+    source = replace(measurements().source, registry_id="stable-registry")
+    history = SourceHistory(source, "UTC", 20)
+    history.add_reading(START, 100, "kWh")
+    history.add_reading(START + timedelta(hours=6), 104, "kWh")
+    history.add_reading(START + timedelta(hours=7), 0, "kWh")
+    history.replace_source(replace(source, entity_id="sensor.renamed"))
+
+    estimate = outlook([history])["estimate"]
+    assert estimate["measured_kwh"] == 4
+    assert estimate["total_kwh"] == 22
 
 
 @pytest.mark.parametrize("hours", [0, 2])
