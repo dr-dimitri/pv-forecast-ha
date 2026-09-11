@@ -267,3 +267,169 @@ def test_dst_outlook_keeps_the_actual_local_day_length(day):
     )
     assert result["status"] == "available"
     assert result["total_kwh"] == 8 + count - 12
+
+
+def test_estimate_uses_measurements_after_missing_morning_without_double_counting():
+    """Fehlende Morgenstunden verhindern die belegte spätere Messung nicht."""
+    history = measurements(start=START + timedelta(hours=8))
+    history.add_reading(START + timedelta(hours=10), 104, "kWh")
+    original = history.to_dict()
+    result = outlook([history])
+    assert result["status"] == "unavailable"
+    assert result["total_kwh"] is None
+    estimate = result["estimate"]
+    assert estimate["status"] == "available"
+    assert estimate["basis"] == "measurements_and_forecast"
+    assert estimate["measured_kwh"] == 4
+    assert estimate["estimated_past_kwh"] == 10
+    assert estimate["remaining_kwh"] == 12
+    assert estimate["total_kwh"] == 26
+    assert estimate["measurement_coverage_seconds"] == 7200
+    assert history.to_dict() == original
+
+
+def test_estimate_fills_derived_gap_and_keeps_both_valid_sections():
+    """Unbekannte Integralenergie bleibt Schätzung; beide belegten Seiten zählen."""
+    history = measurements(max_interval_minutes=180)
+    history.source = replace(history.source, derived_energy=True)
+    history.add_reading(START + timedelta(hours=2), 103, "kWh")
+    history.mark_gap("restart")
+    history.add_reading(START + timedelta(hours=3), 110, "kWh")
+    history.add_reading(START + timedelta(hours=4), 112, "kWh")
+    estimate = outlook([history])["estimate"]
+    assert estimate["measured_kwh"] == 5
+    assert estimate["estimated_past_kwh"] == 9
+    assert estimate["remaining_kwh"] == 12
+    assert estimate["total_kwh"] == 26
+
+
+def test_estimate_joins_different_reporting_intervals_at_exact_boundaries():
+    """Einzelquellen ersetzen nur gemeinsam belegte Abschnitte der Gesamtprognose."""
+    first = measurements(start=START + timedelta(hours=2))
+    second = measurements("b", start=START + timedelta(hours=2))
+    first.add_reading(START + timedelta(hours=3), 101, "kWh")
+    first.add_reading(START + timedelta(hours=4), 103, "kWh")
+    first.add_reading(START + timedelta(hours=5), 104, "kWh")
+    second.add_reading(START + timedelta(hours=4), 104, "kWh")
+    second.add_reading(START + timedelta(hours=6), 106, "kWh")
+    estimate = outlook([first, second])["estimate"]
+    assert estimate["measured_kwh"] == 7
+    assert estimate["measurement_coverage_seconds"] == 7200
+    assert estimate["total_kwh"] == 29
+
+
+@pytest.mark.parametrize("case", ["none", "empty_source", "unresolved", "offset"])
+def test_estimate_without_usable_measurements_is_full_daily_forecast(case):
+    """Fehlende gemeinsame Messgrenzen sperren die vorhandene Tagesprognose nicht."""
+    first = measurements()
+    first.add_reading(NOON, 108, "kWh")
+    second = measurements("b", start=START + timedelta(minutes=1))
+    second.add_reading(NOON - timedelta(minutes=1), 109, "kWh")
+    histories = [] if case == "none" else [first, second]
+    if case == "empty_source":
+        histories = [first, measurements("b")]
+    estimate = outlook(histories, identity_unresolved=case == "unresolved")["estimate"]
+    assert estimate["status"] == "available"
+    assert estimate["basis"] == "forecast_only"
+    assert estimate["measured_kwh"] is None
+    assert estimate["total_kwh"] == 24
+
+
+def test_estimate_uses_current_location_only_and_never_splits_positive_delta():
+    history = measurements()
+    history.bind_location("old", "UTC", START)
+    history.add_reading(START + timedelta(hours=6), 108, "kWh")
+    history.bind_location("new", "UTC", START + timedelta(hours=7))
+    history.add_reading(START + timedelta(hours=7), 108, "kWh")
+    history.add_reading(NOON, 110, "kWh")
+    estimate = outlook([history.current_location_view()])["estimate"]
+    assert estimate["measured_kwh"] == 2
+    assert estimate["total_kwh"] == 21
+
+    crossing = measurements(start=START - timedelta(hours=1))
+    crossing.add_reading(START + timedelta(hours=1), 104, "kWh")
+    crossing.add_reading(START + timedelta(hours=2), 106, "kWh")
+    estimate = outlook([crossing])["estimate"]
+    assert estimate["measured_kwh"] == 2
+    assert estimate["total_kwh"] == 25
+
+
+def test_estimate_discards_former_source_and_daily_corrections():
+    """Frühere Messgrenzen und zurückgenommene Tageswerte bleiben ausgeschlossen."""
+    history = measurements()
+    history.add_reading(START + timedelta(hours=4), 109, "kWh")
+    history.replace_source(replace(history.source, entity_id="sensor.replacement"))
+    history.add_reading(START + timedelta(hours=5), 200, "kWh")
+    history.add_reading(START + timedelta(hours=7), 202, "kWh")
+    estimate = outlook([history])["estimate"]
+    assert estimate["measured_kwh"] == 2
+    assert estimate["total_kwh"] == 24
+
+    daily = SourceHistory(replace(history.source, kind="daily"), "UTC", 20)
+    daily.add_reading(START, 0, "kWh")
+    daily.add_reading(START + timedelta(hours=5), 8, "kWh")
+    daily.add_reading(START + timedelta(hours=6), 4, "kWh")
+    estimate = outlook([daily])["estimate"]
+    assert estimate["basis"] == "forecast_only"
+    assert estimate["total_kwh"] == 24
+
+
+@pytest.mark.parametrize("hours", [0, 2])
+def test_estimate_keeps_forecast_age_and_input_fallbacks_visible(hours):
+    data = forecast([1] * 24, START)
+    data = replace(
+        data,
+        total_intervals=tuple(
+            replace(interval, quality_flags=("missing_temperature",))
+            for interval in data.total_intervals
+        ),
+    )
+    estimate = outlook([], data=data, fetched_at=NOON - timedelta(hours=hours))[
+        "estimate"
+    ]
+    assert estimate["status"] == "available"
+    assert estimate["total_kwh"] == 24
+    assert estimate["forecast_stale"] is bool(hours)
+    assert estimate["forecast_quality_flags"] == ["missing_temperature"]
+
+
+def test_estimate_needs_forecast_only_outside_measured_sections():
+    history = measurements(start=START + timedelta(hours=8))
+    history.add_reading(START + timedelta(hours=10), 104, "kWh")
+    data = forecast([1] * 24, START)
+    data = replace(
+        data, total_intervals=data.total_intervals[:8] + data.total_intervals[10:]
+    )
+    estimate = outlook([history], data=data)["estimate"]
+    assert estimate["status"] == "available"
+    assert estimate["total_kwh"] == 26
+    data = replace(data, total_intervals=data.total_intervals[1:])
+    estimate = outlook([history], data=data)["estimate"]
+    assert estimate["status"] == "unavailable"
+    assert estimate["reason"] == "incomplete_forecast"
+    assert estimate["total_kwh"] is None
+    assert estimate["measured_kwh"] == 4
+
+
+@pytest.mark.parametrize(
+    "zone_name,day,hours",
+    [
+        ("Europe/Berlin", datetime(2026, 3, 29), 23),
+        ("Europe/Berlin", datetime(2026, 10, 25), 25),
+        ("Asia/Kolkata", datetime(2026, 9, 11), 24),
+    ],
+)
+@pytest.mark.parametrize("power", [0, 1])
+def test_estimate_without_measurements_respects_local_day_and_zero(
+    zone_name, day, hours, power
+):
+    zone = ZoneInfo(zone_name)
+    start = day.replace(tzinfo=zone).astimezone(UTC)
+    now = start + timedelta(hours=10, minutes=49)
+    result = build_day_outlook(
+        forecast([power] * hours, start), [], zone_name, now, now, True
+    )
+    estimate = result["estimate"]
+    assert estimate["status"] == "available"
+    assert estimate["total_kwh"] == pytest.approx(power * hours)
+    assert estimate["estimated_past_kwh"] == pytest.approx(power * (10 + 49 / 60))

@@ -178,6 +178,13 @@ async def test_measurement_action_day_outlook_is_explicit_local_and_permissioned
     assert outlook["total_kwh"] is None
     assert outlook["remaining_kwh"] is not None
     assert outlook["correction"] == "off"
+    estimate = outlook["estimate"]
+    assert estimate["status"] == "available"
+    assert estimate["measured_kwh"] == pytest.approx(1)
+    assert estimate["estimated_past_kwh"] > 0
+    assert estimate["total_kwh"] == pytest.approx(
+        1 + estimate["estimated_past_kwh"] + estimate["remaining_kwh"]
+    )
     assert json.loads(json.dumps(result, allow_nan=False)) == result
     assert fetch.await_count == 1
     assert coordinator.data is forecast

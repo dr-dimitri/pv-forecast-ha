@@ -147,9 +147,14 @@ Lernen unterscheiden den früheren vom neuen Standort. Details stehen unter
 ## Solarplanung und aktuelle Tagesaussicht
 
 Die Karte bietet ein **bestes Solarzeitfenster** für eine gewählte Laufdauer
-und einen zulässigen Zeitraum. Sie zeigt außerdem die Tagesaussicht aus
-belegter Messung, geschätzter Brücke seit der letzten Messung und Prognose ab
-jetzt. Datenlücken werden nicht als Nullwerte oder sichere Erzeugung ausgegeben.
+und einen zulässigen Zeitraum. Die **Tagesaussicht** zeigt den voraussichtlichen
+Gesamtertrag heute auch bei fehlenden Messdaten: Verwertbare Messabschnitte
+fließen ein, die übrigen Zeiten werden anhand der Prognose geschätzt. Ohne
+verwertbare Messung erscheint die reine Tagesprognose. Die Anzeige erklärt
+Messung, geschätzte Vergangenheit und Rest ab jetzt getrennt; dafür ist keine
+Reparatur oder zusätzliche Einrichtung nötig. Ein älterer verfügbarer
+Prognosestand bleibt mit Hinweis sichtbar. Fehlen auch benötigte Prognosewerte,
+werden keine Zahlen erfunden.
 Die geöffnete Tagesaussicht zeigt das Alter der gemeinsamen Messgrenze und
 warnt ausdrücklich, wenn eine Quelle länger als ihre bestätigte Meldefrist
 stumm bleibt. Die geschätzte Brücke bleibt getrennt von der Messung sichtbar.

@@ -469,7 +469,49 @@ test("Tagesaussicht übernimmt getrennte Backendwerte ohne eigene Addition", asy
   state.measurement.data.outlook.status = "unavailable";
   assert.doesNotMatch(renderOutlook(state), /91,23/);
   state.measurement.data.outlook.schema_version = 2;
-  assert.match(renderOutlook(state), /Noch offen/);
+  assert.match(renderOutlook(state), /23,14 kWh/);
+});
+
+test("Tagesaussicht mit Messlücke zeigt die ergänzte Backendprognose", async () => {
+  const { state } = await load("partial-outlook");
+  const estimate = state.measurement.data.outlook.estimate;
+  estimate.total_kwh = 91.23;
+  const html = renderOutlook(state);
+  assert.match(html, /91,23 kWh/);
+  assert.match(html, /Vorhandene Messwerte sind berücksichtigt/);
+  assert.match(html, /Berücksichtigte Messung/);
+  assert.match(html, /Bisheriger Tag geschätzt/);
+  assert.match(html, /Rest ab jetzt/);
+  assert.doesNotMatch(html, /Noch offen|noch nicht verfügbar|21,16/);
+  estimate.forecast_stale = true;
+  estimate.forecast_quality_flags = ["missing_temperature"];
+  assert.match(renderOutlook(state), /91,23 kWh/);
+  assert.match(renderOutlook(state), /Wetterabruf ist nicht aktuell/);
+  assert.match(renderOutlook(state), /teilweise Ersatzwerte/);
+});
+
+test("Ohne Messdaten oder Leserecht bleibt die heutige Tagesprognose sichtbar", async () => {
+  for (const scenario of ["no-source", "no-measurement", "acl", "restored"]) {
+    const { state } = await load(scenario);
+    const html = renderOutlook(state);
+    assert.match(html, /23,14 kWh/);
+    assert.match(html, /basiert auf der Wetterprognose/);
+    assert.doesNotMatch(html, /Noch offen|noch nicht verfügbar|Gesichert gemessen/);
+  }
+  const { state } = await load("partial-outlook");
+  state.measurement.data.outlook.as_of = "2026-09-09T12:00:00Z";
+  state.forecast.data.day = "tomorrow";
+  assert.match(renderOutlook(state), /23,14 kWh/);
+  assert.doesNotMatch(renderOutlook(state), /21,16|26,9/);
+});
+
+test("Auch ohne Messung ist null Ertrag eine Prognose; fehlende Werte bleiben unbekannt", async () => {
+  const { state } = await load("no-source");
+  state.forecast.data.summary.today_kwh = 0;
+  assert.match(renderOutlook(state), /<strong>0 kWh/);
+  state.forecast.data.summary.today_kwh = null;
+  assert.match(renderOutlook(state), /Keine Prognosedaten/);
+  assert.doesNotMatch(renderOutlook(state), /<strong>0 kWh/);
 });
 
 test("Stumme Messquelle erhält einen eigenen Hinweis ausschließlich in der Tagesaussicht", async () => {
@@ -487,7 +529,7 @@ test("Stumme Messquelle erhält einen eigenen Hinweis ausschließlich in der Tag
   assert.doesNotMatch(outsideOutlook, /Messwert ist zu alt|360 Minuten|Meldefrist überschritten/);
   state.measurement.data.outlook.reason = "stale_forecast";
   state.measurement.data.outlook.status = "unavailable";
-  assert.match(renderOutlook(state), /Wetterabruf ist.*zu alt/);
+  assert.match(renderOutlook(state), /Wetterabruf ist nicht aktuell/);
   assert.match(renderOutlook(state), /Messwert ist zu alt/);
   state.measurement.data.outlook.schema_version = 2;
   assert.doesNotMatch(renderOutlook(state), /Messwert ist zu alt|360 Minuten/);
@@ -507,7 +549,7 @@ test("Frische Messung und alte Antwort bleiben ohne erfundene Alterswarnung lesb
   assert.doesNotMatch(html, /Messwert ist zu alt|Alter des gemeinsamen Messzeitpunkts/);
   outlook.reason = "arithmetic_overflow";
   outlook.status = "unavailable";
-  assert.match(renderOutlook(state), /überschreiten den darstellbaren Zahlenbereich/);
+  assert.match(renderOutlook(state), /23,14 kWh/);
 });
 
 test("Erfahrungsband gehört sichtbar zur eigenen eingefrorenen Prognose", async () => {
