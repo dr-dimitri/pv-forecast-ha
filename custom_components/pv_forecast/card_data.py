@@ -153,7 +153,8 @@ def build_forecast_view(
                     source,
                     *_bounds(forecast.local_date + timedelta(days=offset), timezone),
                 ),
-                "tendency": offset >= 2,
+                "tendency": forecast.local_date + timedelta(days=offset)
+                >= today + timedelta(days=2),
                 "quality_flags": sorted(
                     {
                         flag
@@ -171,7 +172,9 @@ def build_forecast_view(
                     "reason": "no_horizon_evaluation",
                 },
             }
-            for offset in range(forecast.forecast_days)
+            for offset in range(
+                max(0, (today - forecast.local_date).days), forecast.forecast_days
+            )
         ],
         "summary": {
             "today_kwh": today_energy,

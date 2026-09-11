@@ -20,11 +20,13 @@ DAY = date(2026, 9, 9)
 HOUR = timedelta(hours=1)
 
 
-def forecast(day=DAY, timezone="UTC", gti=1000):
+def forecast(day=DAY, timezone="UTC", gti=1000, forecast_days=2):
     """Das reale gemeinsame Berechnungsmodell liefert die Daten für die Darstellung."""
     zone = ZoneInfo(timezone)
     start = datetime.combine(day, time.min, zone).astimezone(UTC)
-    end = datetime.combine(day + timedelta(days=2), time.min, zone).astimezone(UTC)
+    end = datetime.combine(
+        day + timedelta(days=forecast_days), time.min, zone
+    ).astimezone(UTC)
     cursor = start.replace(minute=0, second=0, microsecond=0) + HOUR
     points = []
     while cursor - HOUR < end:
@@ -32,7 +34,12 @@ def forecast(day=DAY, timezone="UTC", gti=1000):
         cursor += HOUR
     roofs = (roof("south", name="Süddach"), roof("garage", name="Garage"))
     return calculate_forecast(
-        roofs, {item.id: tuple(points) for item in roofs}, 15, day, zone
+        roofs,
+        {item.id: tuple(points) for item in roofs},
+        15,
+        day,
+        zone,
+        forecast_days=forecast_days,
     )
 
 
@@ -41,6 +48,91 @@ def view(data, now=None, timezone="UTC", **kwargs):
     return build_forecast_view(
         data, timezone, "Meine PV-Anlage", now, now, True, **kwargs
     )
+
+
+@pytest.mark.parametrize("selected_roof", [None, "garage"])
+@pytest.mark.parametrize("elapsed_days", [1, 3])
+@pytest.mark.parametrize(
+    ("timezone", "current_day"),
+    [
+        ("UTC", DAY),
+        ("Europe/Berlin", date(2026, 3, 29)),
+        ("Europe/Berlin", date(2026, 10, 25)),
+        ("Asia/Kathmandu", DAY),
+    ],
+)
+def test_multiday_view_starts_with_current_local_day(
+    selected_roof, elapsed_days, timezone, current_day
+) -> None:
+    """Gesamt- und Dachaussicht ordnen alte Stände nach dem heutigen lokalen Tag ein."""
+
+    data = forecast(
+        current_day - timedelta(days=elapsed_days), timezone, forecast_days=7
+    )
+    original = deepcopy(data)
+    zone = ZoneInfo(timezone)
+    now = datetime.combine(current_day, time(0, 1), zone).astimezone(UTC)
+    result = view(data, now, timezone, roof_id=selected_roof)
+    days = result["daily_forecasts"]
+    assert [item["date"] for item in days] == [
+        (current_day + timedelta(days=offset)).isoformat()
+        for offset in range(7 - elapsed_days)
+    ]
+    assert [item["tendency"] for item in days] == [False, False] + [True] * (
+        5 - elapsed_days
+    )
+    power = 15 if selected_roof is None else 7.5
+    for item in days:
+        day = date.fromisoformat(item["date"])
+        start = datetime.combine(day, time.min, zone).astimezone(UTC)
+        end = datetime.combine(day + timedelta(days=1), time.min, zone).astimezone(UTC)
+        assert item["energy_kwh"] == pytest.approx(
+            power * (end - start).total_seconds() / 3600
+        )
+    assert days[0]["energy_kwh"] == result["summary"]["today_kwh"]
+    assert days[1]["energy_kwh"] == result["summary"]["tomorrow_kwh"]
+    assert result["forecast_days"] == 7
+    assert data == original
+
+
+@pytest.mark.parametrize("forecast_days", [3, 7])
+def test_multiday_view_does_not_extend_expired_horizon(forecast_days) -> None:
+    """Der letzte gespeicherte Tag bleibt lesbar; danach ist die Aussicht leer."""
+
+    data = forecast(forecast_days=forecast_days)
+    for elapsed in (forecast_days - 1, forecast_days, forecast_days + 1):
+        now = datetime.combine(DAY + timedelta(days=elapsed), time(12), UTC)
+        result = view(data, now)
+        if elapsed == forecast_days - 1:
+            assert len(result["daily_forecasts"]) == 1
+            assert result["daily_forecasts"][0]["tendency"] is False
+            assert result["daily_forecasts"][0]["energy_kwh"] == 360
+            assert result["summary"]["tomorrow_kwh"] is None
+        else:
+            assert result["daily_forecasts"] == []
+            assert result["summary"]["today_kwh"] is None
+        assert result["forecast_days"] == forecast_days
+
+
+@pytest.mark.parametrize("selected_roof", [None, "garage"])
+def test_multiday_view_keeps_missing_days_distinct_from_zero(selected_roof) -> None:
+    """Ein fehlender Tag bleibt unbekannt und korrekt datiert."""
+
+    data = forecast(gti=0, forecast_days=7)
+    missing_day = DAY + timedelta(days=2)
+    data = replace(
+        data,
+        total_intervals=tuple(
+            item for item in data.total_intervals if item.start.date() != missing_day
+        ),
+    )
+    now = datetime.combine(DAY + timedelta(days=1), time(1), UTC)
+    result = view(data, now, roof_id=selected_roof)
+    days = result["daily_forecasts"]
+    assert [item["energy_kwh"] for item in days] == [0, None, 0, 0, 0, 0]
+    assert days[1]["date"] == missing_day.isoformat()
+    assert days[1]["tendency"] is False
+    assert result["summary"]["tomorrow_kwh"] is None
 
 
 def test_total_and_roof_views_use_existing_clipped_contributions() -> None:
