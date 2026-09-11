@@ -134,6 +134,20 @@ keine eigene Summe. Ältere verfügbare Prognosen und Eingabefallbacks bleiben
 mit Hinweis sichtbar. Fehlt auch die benötigte Prognoseabdeckung, erscheint
 „Keine Prognosedaten“ mit Erklärung statt eines erfundenen Ertrags.
 
+Bei einer nicht sicher bestätigten Quellenzuordnung erklärt die geöffnete
+Tagesaussicht, dass die Zuordnung in den Integrationsoptionen unter „PV-Erzeugung“
+geprüft und bei geänderter Quelle erneut bestätigt werden soll. Dieser Hinweis
+bleibt auch ohne verfügbare Prognosesumme sichtbar. Neue Zählerstände allein
+bestätigen keine ausgetauschte Quelle. Der Hinweis verwendet ausschließlich den
+aktuellen Outlook-Vertrag für den heutigen Tag in der Anlagenzeitzone.
+
+Die vereinfachte Energieanzeige aus Issue #1 bleibt erhalten: Abgeleitete oder
+unvollständige Ist-Energie erhält auch in der Tagesabschätzung keinen zusätzlichen
+Herkunfts- oder Erfassungshinweis. Ihre Backend-Qualitätsmerkmale bleiben erhalten
+und werden nicht als Wetterersatzwerte ausgegeben. Der Ersatzwerthinweis bezieht
+sich auf die tatsächlich verwendeten Prognoseabschnitte, einschließlich
+geschätzter vergangener Zeiten.
+
 Die bisherigen strengen Felder unter `outlook` bleiben für bestehende Leser
 unverändert. Sie belegen weiterhin ein vollständiges Messpräfix:
 
