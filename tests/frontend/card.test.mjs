@@ -490,6 +490,67 @@ test("Tagesaussicht mit Messlücke zeigt die ergänzte Backendprognose", async (
   assert.match(renderOutlook(state), /teilweise Ersatzwerte/);
 });
 
+test("Ungeklärte Quellenzuordnung zeigt bei verfügbarer Tagesaussicht eine Handlungsanweisung", async () => {
+  const { state } = await load("unresolved-outlook");
+  for (const withEstimate of [true, false]) {
+    if (!withEstimate) delete state.measurement.data.outlook.estimate;
+    const before = structuredClone(state);
+    const html = renderOutlook(state);
+    assert.match(html, /23,14 kWh/);
+    assert.match(html, /basiert auf der Wetterprognose/);
+    assert.match(html, /Zuordnung mindestens einer Messquelle ist derzeit nicht sicher bestätigt/);
+    assert.match(html, /Integrationsoptionen unter „PV-Erzeugung“ prüfen/);
+    assert.match(html, /bei geänderter Quelle erneut bestätigen/);
+    assert.doesNotMatch(html, /automatisch berücksichtigt, sobald sie vorliegen|Berücksichtigte Messung/);
+    assert.doesNotMatch(html.match(/<summary.*?<\/summary>/s)[0], /Zuordnung|bestätigen/);
+    assert.deepEqual(state, before);
+  }
+});
+
+test("Die Handlungsanweisung zur Quellenzuordnung bleibt auch ohne Prognosesumme sichtbar", async () => {
+  const { state } = await load("unresolved-outlook");
+  Object.assign(state.measurement.data.outlook.estimate, { status: "unavailable", total_kwh: null });
+  state.forecast.data.summary.today_kwh = null;
+  const html = renderOutlook(state);
+  assert.match(html, /Keine Prognosedaten/);
+  assert.match(html, /Zuordnung mindestens einer Messquelle ist derzeit nicht sicher bestätigt/);
+  assert.match(html, /bei geänderter Quelle erneut bestätigen/);
+  assert.doesNotMatch(html, /automatisch berücksichtigt, sobald sie vorliegen|<strong>0 kWh/);
+});
+
+test("Nur die heutige unterstützte Tagesaussicht begründet einen Quellenhinweis", async () => {
+  const { state } = await load("unresolved-outlook");
+  const original = structuredClone(state.measurement.data.outlook);
+  for (const changes of [
+    { schema_version: undefined }, { schema_version: 2 }, { timezone: "UTC" },
+    { as_of: "2026-09-09T12:00:00Z" }, { as_of: state.forecast.data.today_end },
+  ]) {
+    state.measurement.data.outlook = { ...original, ...changes };
+    const html = renderOutlook(state);
+    assert.match(html, /23,14 kWh/);
+    assert.doesNotMatch(html, /Zuordnung mindestens einer Messquelle|bei geänderter Quelle erneut bestätigen/);
+  }
+});
+
+test("Tagesabschätzung erhält abgeleitete Messwerte ohne Herkunftswarnung und trennt Prognoseersatzwerte", async () => {
+  const { state } = await load("derived-outlook");
+  const before = structuredClone(state);
+  const html = renderOutlook(state);
+  assert.equal(state.measurement.data.outlook.estimate.basis, "measurements_and_forecast");
+  assert.deepEqual(state.measurement.data.outlook.measurement_quality_flags, ["derived_energy"]);
+  assert.deepEqual(state.measurement.data.outlook.quality_flags, ["derived_energy"]);
+  assert.match(html, /23,17 kWh/);
+  assert.match(html, /Berücksichtigte Messung<\/dt><dd>12,1 /);
+  assert.doesNotMatch(html, /Qualitätsmarkierungen|Ersatzwerte|abgeleitet|aus Leistung|unvollständig/i);
+  assert.deepEqual(state, before);
+
+  state.measurement.data.outlook.estimate.forecast_quality_flags = ["missing_temperature"];
+  const fallbackHtml = renderOutlook(state);
+  assert.match(fallbackHtml, /Die Wetterprognose verwendet teilweise Ersatzwerte/);
+  assert.match(fallbackHtml, /23,17 kWh/);
+  assert.doesNotMatch(fallbackHtml, /Qualitätsmarkierungen|abgeleitet|aus Leistung|unvollständig/i);
+});
+
 test("Ohne Messdaten oder Leserecht bleibt die heutige Tagesprognose sichtbar", async () => {
   for (const scenario of ["no-source", "no-measurement", "acl", "restored"]) {
     const { state } = await load(scenario);

@@ -23,7 +23,7 @@ const server = http.createServer((request, response) => {
     browser = await chromium.launch({ headless: true, executablePath: process.env.PV_CHROMIUM_EXECUTABLE });
     fs.mkdirSync(output, { recursive: true });
     for (const width of [360, 1440]) for (const theme of ["light", "dark"]) {
-      for (const scenario of ["partial-outlook", "no-source", "acl", "restored", "empty"]) {
+      for (const scenario of ["partial-outlook", "unresolved-outlook", "derived-outlook", "no-source", "acl", "restored", "empty"]) {
         const page = await browser.newPage({ viewport: { width, height: 1000 }, colorScheme: theme });
         const errors = [];
         page.on("pageerror", (error) => errors.push(error.message));
@@ -42,6 +42,16 @@ const server = http.createServer((request, response) => {
           assert.match(text, /21,16 kWh/);
           assert.match(text, /Bisheriger Tag geschätzt/);
         }
+        if (scenario === "unresolved-outlook") {
+          assert.match(text, /Zuordnung mindestens einer Messquelle/);
+          assert.match(text, /Integrationsoptionen/);
+          assert.match(text, /erneut bestätigen/);
+          assert.doesNotMatch(text, /Verwertbare Messwerte werden automatisch/);
+        }
+        if (scenario === "derived-outlook") {
+          assert.match(text, /Berücksichtigte Messung/);
+          assert.doesNotMatch(text, /Qualitätsmarkierungen|teilweise Ersatzwerte|aus Leistung berechnet/);
+        }
         if (scenario === "restored") assert.match(text, /Wetterabruf ist nicht aktuell/);
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
         const overflow = await outlook.evaluate((element) => [...element.querySelectorAll("p, dd, dt")].some((item) => item.scrollWidth > item.clientWidth + 1));
@@ -51,7 +61,7 @@ const server = http.createServer((request, response) => {
         await page.close();
       }
     }
-    console.log("20 Browserfälle bestanden: Messlücke, fehlende Quelle, Quellenrechte, alter Wetterstand und fehlende Prognose; 360/1440 px, Hell/Dunkel und Tastatur.");
+    console.log("28 Browserfälle bestanden: Messlücke, ungeklärte Quellenidentität, abgeleitete Messung, fehlende Quelle, Quellenrechte, alter Wetterstand und fehlende Prognose; 360/1440 px, Hell/Dunkel und Tastatur.");
   } finally {
     await browser?.close();
     server.close();
