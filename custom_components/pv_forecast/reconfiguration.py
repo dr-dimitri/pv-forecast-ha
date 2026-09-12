@@ -20,6 +20,8 @@ from .history import HistoryArchive
 from .history_runtime import _history_store
 from .measurement_runtime import _measurement_store
 from .measurements import SourceConfig, SourceHistory
+from .morning_runtime import _store as _morning_store
+from .morning_runtime import validate_morning_store
 
 
 class ReconfigurationChangedError(HomeAssistantError):
@@ -93,6 +95,9 @@ async def _async_validate_stores(hass: HomeAssistant, entry: ConfigEntry) -> Non
     calibration = await load_persisted(_calibration_store(hass, entry.entry_id))
     if calibration is not None:
         CalibrationState.from_dict(calibration["state"])
+    morning = await load_persisted(_morning_store(hass, entry.entry_id))
+    if morning is not None:
+        validate_morning_store(morning)
 
 
 async def async_prepare_location_change(

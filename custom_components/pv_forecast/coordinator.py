@@ -41,6 +41,7 @@ from .explanation import ExplanationSnapshot, build_explanation
 from .forecast_intervals import window_energy
 from .horizon import forecast_days_from_options
 from .models import ForecastDay, ForecastResult, PlanningValues
+from .morning import apply_morning
 from .temperature_comparison import COEFFICIENTS, mountings_from_options
 
 if TYPE_CHECKING:
@@ -81,6 +82,9 @@ class PvForecastCoordinator(TimestampDataUpdateCoordinator[ForecastResult]):
         self.forecast_cache: ForecastCacheManager | None = None
         self.temperature_data: ForecastResult | None = None
         self.temperature_mountings: dict[str, str] | None = None
+        self.morning_applied = False
+        self.morning_coefficient = 0.0
+        self.morning_candidate_id: str | None = None
         self.calibration_factor = 1.0
         self.calibration_candidate_id: str | None = None
 
@@ -108,14 +112,60 @@ class PvForecastCoordinator(TimestampDataUpdateCoordinator[ForecastResult]):
         if forecast is not None and (
             factor != self.calibration_factor or self.data is None
         ):
-            self.data = apply_calibration(
-                forecast,
-                factor,
-                self._entry.options.get(CONF_INVERTER_MAX_POWER_KW),
-                ZoneInfo(str(self._entry.data[CONF_TIME_ZONE])),
+            self.data = self._apply_morning(
+                apply_calibration(
+                    forecast,
+                    factor,
+                    self._entry.options.get(CONF_INVERTER_MAX_POWER_KW),
+                    ZoneInfo(str(self._entry.data[CONF_TIME_ZONE])),
+                ),
+                factor=factor,
             )
         self.calibration_factor = factor
         self.calibration_candidate_id = candidate_id
+        self.async_build_explanation()
+        self.async_update_listeners()
+
+    def _apply_morning(
+        self, baseline: ForecastResult, *, factor: float | None = None
+    ) -> ForecastResult:
+        if self.raw_data is None or self.morning_coefficient == 0:
+            self.morning_applied = False
+            return baseline
+        result = apply_morning(
+            self.raw_data,
+            baseline,
+            coefficient=self.morning_coefficient,
+            global_factor=self.calibration_factor if factor is None else factor,
+            limit=self._entry.options.get(CONF_INVERTER_MAX_POWER_KW),
+            timezone=str(self._entry.data[CONF_TIME_ZONE]),
+            latitude=self._entry.data[CONF_LATITUDE],
+            longitude=self._entry.data[CONF_LONGITUDE],
+        )
+        self.morning_applied = result is not baseline
+        return result
+
+    @callback
+    def async_set_morning(self, coefficient: float, candidate_id: str | None) -> None:
+        """Den freigegebenen Morgenstand auf die unveränderte Rohbasis anwenden."""
+        from .morning import COEFFICIENTS
+
+        if coefficient not in COEFFICIENTS or type(coefficient) is bool:
+            raise ValueError("Unbekannter Morgenkandidat")
+        if (coefficient, candidate_id) == (
+            self.morning_coefficient,
+            self.morning_candidate_id,
+        ):
+            return
+        self.morning_coefficient, self.morning_candidate_id = coefficient, candidate_id
+        if self.raw_data is not None:
+            baseline = apply_calibration(
+                self.raw_data,
+                self.calibration_factor,
+                self._entry.options.get(CONF_INVERTER_MAX_POWER_KW),
+                ZoneInfo(str(self._entry.data[CONF_TIME_ZONE])),
+            )
+            self.data = self._apply_morning(baseline)
         self.async_build_explanation()
         self.async_update_listeners()
 
@@ -315,6 +365,7 @@ class PvForecastCoordinator(TimestampDataUpdateCoordinator[ForecastResult]):
                 forecast, self.calibration_factor, inverter_limit, timezone
             )
             self.raw_data = forecast
+            effective = self._apply_morning(effective)
             self.temperature_data = None
             self.temperature_mountings = None
             if (

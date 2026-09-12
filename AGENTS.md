@@ -690,3 +690,33 @@ Die Tagesaussicht ergänzt im bestehenden Schema 1 das Alter der gemeinsamen Mes
 Auf ausdrücklichen Anwenderwunsch bleibt die Tagesaussicht bei fehlenden oder unvollständigen Messdaten sichtbar. Ein kompatibler, eigenständig versionierter `estimate`-Block in der bestehenden Messdatenantwort ergänzt belegte gemeinsame Messabschnitte der aktuellen Quellen-/Standortidentität mit der vorhandenen wirksamen Prognose für die übrigen Abschnitte. Messung, geschätzte Vergangenheit und Restprognose sind disjunkt; positive Zählerdifferenzen werden nicht aufgeteilt. Fehlende Quellen oder gemeinsame exakte Grenzen führen zur reinen Tagesprognose. Ohne Messleserechte verwendet die Karte ausschließlich die bereits berechtigte Tageskennzahl aus `get_forecast`.
 
 Die Karte zeigt die verfügbare Tagessumme und erklärt knapp, welche Anteile geschätzt sind. Ein älterer oder mit Eingabefallbacks berechneter vorhandener Prognosestand bleibt mit entsprechendem Hinweis sichtbar. Wenn auch die benötigte Prognoseabdeckung fehlt, werden keine Zahlen erfunden. Die bisherigen strengen `outlook`-Felder, Mess-, Archiv-, Lern-, Energy- und operativen Planungsregeln bleiben erhalten. Keine neuen Aktionen, Stores, Einstellungen, Wetter-/Geräteabrufe oder Browserberechnungen; Config-Entry-Schema 1.1 bleibt bestehen. Diese Entscheidung ersetzt die entgegenstehenden Anzeigevorgaben der bisherigen Tagesaussicht.
+
+
+## Morgenform und eigener Zeitnachweis aus #172
+
+Die ausdrücklich beauftragte optionale Morgenprüfung ergänzt Aus (Standard),
+Beobachten und nach erfolgreicher eigener Prüfung automatische Anwendung.
+`morning.py` enthält die reine, begrenzte Energieumverteilung innerhalb der
+vier Stunden nach standortbezogenem Sonnenaufgang und die festgelegte 30/14-
+Prüfung; `morning_runtime.py` verbindet rechtzeitige Vorabend-Archivstände mit
+bestätigten, höchstens 15 Minuten aufgelösten AC-Zählerdifferenzen. Tagesmengen
+sind keine Zeitbelege, positive Deltas werden nicht geteilt. Vollständige
+60-Minuten-Intervallmittel sind kein kontinuierliches Leistungsversprechen.
+
+Die primäre Metrik bleibt Anstiegszeit-MAE. Der Kandidat wird vor seinen späteren
+Prüffällen festgehalten; Fehler-/Ausfallmetriken und Morgen-/Tagesenergie begrenzen
+die Freigabe. Keine zweite globale Kalibrierung und keine Hauslastannahmen.
+Wirksame Dach-/Gesamtwerte entstehen vor den bisherigen AC-Grenzen aus derselben
+Rohbasis; Heute/Morgen bleiben vom weiter entfernten Horizont getrennt.
+Messkorrektur, Quellen-/Konfigurations-/Schwellen-/Globalfaktorwechsel, fehlender
+aktueller Prüfnachweis und bestehende Lernpausen entziehen die Morgenwirkung.
+
+`get_forecast.morning` und das quellenberechtigte `get_history.morning` sind
+additiv versioniert. Kandidaten und operative Serie bleiben getrennt. Keine
+Übertragung bisheriger Tages-/Stundenbänder. Ein eigener atomarer Store Version 1
+hält höchstens 90 Tagesreferenzen, je 96 Messabschnitte und 2 MiB; reguläre
+Schreibungen folgen festen Fünfminutenterminen. Archiv-Store 8 bewahrt die echte
+neu erfasste Morgenwirkung; Versionen 1–7 erhalten keine erfundenen Belege.
+Löschung/Entladen beenden abhängige Erfassung. Config Entry bleibt 1.1.
+Keine zusätzlichen Sensoren, Aktionen, Wetter-/Geräte-/Recorderabrufe.
+Details, feste Regeln und Grenzen: `docs/morgenprognose.md`.

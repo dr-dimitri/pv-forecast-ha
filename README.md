@@ -373,6 +373,23 @@ Bestätigung von vorn. [Regeln, Bedienung und Grenzen](docs/kalibrierung.md)
 erklären insbesondere, warum ältere Archivtage nicht nachträglich als Lerntage
 verwendet werden und warum eine Verbesserung nicht garantiert ist.
 
+## Morgenprognose (optional)
+
+Unter **Konfigurieren → Erweiterte Funktionen → Morgenprognose prüfen und verbessern**
+kannst du den zeitlichen PV-Anstieg beobachten. Ein globaler Anlagenfaktor und eine
+passende Tagesmenge allein belegen noch keinen richtigen Morgenverlauf.
+
+Die Funktion ist standardmäßig aus. Nach 30 geeigneten Morgen und mindestens
+14 späteren Prüfmorgen darf eine ausdrücklich gewählte Automatik eine begrenzte
+Morgenform auf die gemeinsame Prognose anwenden. Dazu braucht sie bestätigte
+AC-Erzeugung mit ausreichender Zeitauflösung und das aktivierte Archiv. Fehlende
+Zeitbelege bleiben unbekannt. Die geprüfte PV-Schwelle ist keine Hauslast; eine
+Speichersteuerung muss ihren Bedarf weiterhin selbst bestimmen.
+
+[Methode, Datenvertrag, Freigabe und Rückfall](docs/morgenprognose.md) erklären
+auch den Unterschied zwischen Beobachten und Automatik sowie die Grenzen der
+60-Minuten-Aussage.
+
 ## PV-Dashboard und eigene Karte (optional)
 
 Öffne **Einstellungen → Geräte & Dienste → PV-Ertragsprognose → Konfigurieren →

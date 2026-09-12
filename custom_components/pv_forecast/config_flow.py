@@ -87,6 +87,7 @@ from .horizon import (
 )
 from .inverter_configuration import InverterGroupFlowMixin, groups_for_remaining_roofs
 from .measurement_configuration import MeasurementFlowMixin
+from .morning_configuration import MorningFlowMixin
 from .reconfiguration import ReconfigurationChangedError, async_prepare_location_change
 from .runtime import async_get_open_meteo_client
 from .shading import CONF_HORIZON_PROFILES
@@ -1009,6 +1010,7 @@ class PvForecastConfigFlow(
 
 
 class PvForecastOptionsFlow(
+    MorningFlowMixin,
     CorrectionFlowMixin,
     DashboardFlowMixin,
     ShadingFlowMixin,
@@ -1277,6 +1279,7 @@ class PvForecastOptionsFlow(
             menu_options=[
                 "history",
                 "calibration",
+                "morning",
                 "forecast_horizon",
                 "forecast_cache",
                 "inverter_groups",

@@ -176,6 +176,10 @@ def evaluate_experience_band(
 
     now = _utc(as_of)
     result = unavailable_band("insufficient_training_days")
+    if target.morning is not None:
+        result["reasons"] = ["unsupported_model_version"]
+        result["variant"] = "morning_redistribution_v1"
+        return result
     calibrated = target.calibrated_energy_kwh is not None
     result.update(
         rule_version=2 if target.horizon in HOURLY_HORIZONS else RULE_VERSION,
@@ -254,6 +258,8 @@ def evaluate_experience_band(
             reason = "not_known_at_forecast"
         elif record.quality_flags or record.deleted_sources:
             reason = "invalid_basis"
+        elif record.morning is not None and calibrated:
+            reason = "different_forecast_method"
         elif calibrated and record.calibrated_energy_kwh is None:
             reason = "different_forecast_method"
         elif record.target_date in seen:

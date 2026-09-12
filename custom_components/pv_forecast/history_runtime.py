@@ -50,9 +50,10 @@ from .underperformance import empty_state, notification_due, observe
 
 if TYPE_CHECKING:
     from .calibration_runtime import CalibrationManager
+    from .morning_runtime import MorningManager
 
 _LOGGER = logging.getLogger(__name__)
-STORAGE_VERSION = 7
+STORAGE_VERSION = 8
 SAVE_DELAY = 300
 MAX_STORAGE_BYTES = 32 * 1024 * 1024
 MAX_RECORDS = 6000
@@ -84,7 +85,7 @@ class _HistoryStore(ConfirmedStore):
     async def _async_migrate_func(
         self, old_major_version: int, old_minor_version: int, old_data: dict[str, Any]
     ) -> dict[str, Any]:
-        if old_major_version not in (1, 2, 3, 4, 5, 6):
+        if old_major_version not in (1, 2, 3, 4, 5, 6, 7):
             raise NotImplementedError
         # Version 1 erhält weiterhin keine erfundene Kalibrierungsbasis.
         # Version 3 erlaubt verschiedene, je Record unverändert validierte
@@ -120,7 +121,9 @@ async def async_delete_history_data(hass: HomeAssistant, entry: ConfigEntry) -> 
     """Bewusst das gesamte Archiv auch bei pausierter Erfassung löschen."""
 
     from .calibration_runtime import async_delete_calibration_data
+    from .morning_runtime import async_delete_morning_data
 
+    await async_delete_morning_data(hass, entry)
     await async_delete_calibration_data(hass, entry)
     manager = getattr(getattr(entry, "runtime_data", None), "history", None)
     if manager is not None:
@@ -135,7 +138,9 @@ async def async_delete_history_source_data(
     """Messkopien einer bestätigten Quelle auch aus einem entladenen Archiv löschen."""
 
     from .calibration_runtime import async_delete_calibration_data
+    from .morning_runtime import async_delete_morning_data
 
+    await async_delete_morning_data(hass, entry)
     await async_delete_calibration_data(hass, entry)
     manager = getattr(getattr(entry, "runtime_data", None), "history", None)
     if manager is not None and manager.loaded:
@@ -273,6 +278,7 @@ class ArchiveManager:
         self._assessment_requested = False
         self._mutation_in_progress = False
         self.calibration: CalibrationManager | None = None
+        self.morning: MorningManager | None = None
         self._last_calibration_capture: tuple[Any, ...] | None = None
         self._observation_report: dict[str, Any] = {
             "schema_version": 1,
@@ -509,6 +515,8 @@ class ArchiveManager:
                 # Schreibfehler dürfen eine überholte Lernfreigabe nicht erhalten.
                 if self.calibration is not None:
                     self.calibration.async_reconcile()
+                if getattr(self, "morning", None) is not None:
+                    self.morning._updated(force=True)
             if changed or self._dirty or self._store.write_pending:
                 data = self._serialize()
                 if record_id not in self._archive.records:
@@ -537,7 +545,10 @@ class ArchiveManager:
             if self.calibration is not None
             else {}
         )
-        calibration_signature = tuple(calibration.items())
+        calibration_signature = (
+            *tuple(calibration.items()),
+            ("morning", getattr(self.coordinator, "morning_candidate_id", None)),
+        )
         if (
             self.coordinator.last_update_success
             and getattr(self.coordinator, "origin", "live") == "live"
@@ -563,6 +574,16 @@ class ArchiveManager:
                     CONF_INVERTER_MAX_POWER_KW
                 ),
                 **calibration,
+                morning_forecast=(
+                    self.coordinator.data
+                    if getattr(self.coordinator, "morning_applied", False)
+                    else None
+                ),
+                morning_candidate_id=(
+                    getattr(self.coordinator, "morning_candidate_id", None)
+                    if getattr(self.coordinator, "morning_applied", False)
+                    else None
+                ),
                 temperature_forecast=getattr(
                     self.coordinator, "temperature_data", None
                 ),
@@ -631,6 +652,8 @@ class ArchiveManager:
                 self._observe(now)
                 if self.calibration is not None:
                     self.calibration.async_reconcile()
+                if getattr(self, "morning", None) is not None:
+                    self.morning._updated(force=True)
         finally:
             self._assessment_task = None
 
@@ -724,6 +747,8 @@ class ArchiveManager:
         await self._store.async_save_checked(self._serialize())
         if self.calibration is not None:
             self.calibration.async_reconcile()
+        if getattr(self, "morning", None) is not None:
+            self.morning._updated(force=True)
 
     @callback
     def _comparison(self, now: datetime) -> dict[str, dict[str, Any]]:
@@ -847,6 +872,8 @@ class ArchiveManager:
         result["underperformance"] = observation
         if self.calibration is not None:
             result["calibration"] = self.calibration.snapshot()
+        if self.morning is not None:
+            result["morning"] = self.morning.snapshot()
         return result
 
     @callback
