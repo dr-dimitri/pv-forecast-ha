@@ -18,6 +18,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from . import PvForecastConfigEntry
 from .coordinator import PvForecastCoordinator
 from .entity import PvForecastEntity
+from .forecast_intervals import _valid_number
 from .models import ForecastDay
 
 PLANNING_SENSOR_DESCRIPTIONS = (
@@ -134,11 +135,20 @@ class PvForecastTotalSensor(PvForecastBaseSensor):
 
     @property
     @override
+    def available(self) -> bool:
+        """SAX liest nur den Zustand: veraltete oder unbrauchbare Daten ausblenden."""
+
+        return super().available and self.coordinator.is_energy_forecast_available(
+            self._day
+        )
+
+    @property
+    @override
     def native_value(self) -> float | None:
         """Aktuelle Tagesprognose aus dem Coordinator lesen."""
 
         value = self.coordinator.get_daily_yield(self._day)
-        return round(value, 2) if value is not None else None
+        return round(value, 2) if _valid_number(value) else None
 
 
 class PvForecastRoofSensor(PvForecastBaseSensor):
@@ -166,7 +176,7 @@ class PvForecastRoofSensor(PvForecastBaseSensor):
         """Aktuelle Tagesprognose der Dachfläche lesen."""
 
         value = self.coordinator.get_daily_yield(self._day, self._roof_id)
-        return round(value, 2) if value is not None else None
+        return round(value, 2) if _valid_number(value) else None
 
 
 class PvForecastPlanningSensor(PvForecastEntity, SensorEntity):
@@ -193,6 +203,11 @@ class PvForecastPlanningSensor(PvForecastEntity, SensorEntity):
             return False
         if self.entity_description.key == "peak_today":
             return self.coordinator.planning_values.peak_today_complete
+        if self.entity_description.key == "remaining_today":
+            return (
+                self.native_value is not None
+                and self.coordinator.is_energy_forecast_available("remaining_today")
+            )
         return self.native_value is not None
 
     @property
@@ -213,4 +228,4 @@ class PvForecastPlanningSensor(PvForecastEntity, SensorEntity):
                 return values.peak_today
             case _:
                 return None
-        return round(value, 2) if value is not None else None
+        return round(value, 2) if _valid_number(value) else None

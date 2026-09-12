@@ -206,6 +206,11 @@ async def test_restart_offline_preserves_raw_age_failure_and_recovers(
         assert coordinator.restored_at == NOW + timedelta(minutes=15)
         assert runtime.history._archive.records == {}
         assert await async_get_solar_forecast(hass, entry.entry_id) is None
+        # SAX darf auch einen erst 15 Minuten alten Offline-Cache nicht verwenden.
+        from .test_sensor_sax import states
+
+        offline_states = states(hass, entry)
+        assert all(state.state == "unavailable" for state in offline_states.values())
         result = await hass.services.async_call(
             "pv_forecast",
             "get_forecast",
@@ -228,6 +233,11 @@ async def test_restart_offline_preserves_raw_age_failure_and_recovers(
         assert coordinator.origin == "live"
         assert coordinator.restored_at is None
         assert coordinator.last_update_success_time == NOW + timedelta(minutes=15)
+        live_states = states(hass, entry)
+        assert all(state.state != "unavailable" for state in live_states.values())
+        assert {p: s.entity_id for p, s in offline_states.items()} == {
+            p: s.entity_id for p, s in live_states.items()
+        }
         assert fetch.call_count == 3
         await hass.config_entries.async_unload(entry.entry_id)
 

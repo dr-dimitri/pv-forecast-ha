@@ -186,13 +186,18 @@ async def test_sensors_follow_all_covered_days_after_midnight(hass, freezer, zon
                 assert sensor.native_value == (
                     round(expected, 2) if expected is not None else None
                 )
-                assert sensor.available is (expected is not None)
+                # Die rohe Mehrtagesansicht bleibt lesbar; SAX-Gesamtsensoren
+                # geben tagelang alte Daten trotz Abdeckung nicht operativ frei.
+                assert sensor.available is (
+                    expected is not None
+                    and (roof_id is not None or now - fetched_at <= timedelta(hours=1))
+                )
             assert coordinator.get_daily_yield("today", "entfernt") is None
         assert session.calls == 1
         assert coordinator.data is snapshot
         assert coordinator.last_update_success_time == fetched_at
 
-        # Ein Nulltag ist verfügbar; eine fehlende oder unvollständige Stunde nicht.
+        # Null bleibt intern lesbar; der Gesamtsensor sperrt auch alte Nulltage.
         zero_day = day + timedelta(days=2)
         zero_start = datetime.combine(zero_day, time.min, timezone).astimezone(UTC)
         freezer.move_to(zero_start)
@@ -214,6 +219,7 @@ async def test_sensors_follow_all_covered_days_after_midnight(hass, freezer, zon
         )
         coordinator.data = zero_snapshot
         assert all(sensor.native_value == 0 for sensor in sensors.values())
+        assert not sensors[("today", None)].available
         first_interval = next(
             i for i in zero_snapshot.total_intervals if i.start <= zero_start < i.end
         )

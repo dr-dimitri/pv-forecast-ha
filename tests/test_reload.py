@@ -158,7 +158,12 @@ async def test_options_saved_during_reload_trigger_consistent_followup(
         for unique_id, entity_id in entity_ids.items():
             state = hass.states.get(entity_id)
             assert state is not None
-            if unique_id in daily_unique_ids:
+            # Die Fixture enthält nur eine Stunde. Dachsummen bleiben lesbar,
+            # Gesamtenergie für SAX benötigt dagegen den vollständigen Zeitraum.
+            if unique_id in daily_unique_ids and unique_id not in {
+                f"{entry.entry_id}_total_today",
+                f"{entry.entry_id}_total_tomorrow",
+            }:
                 assert state.state not in (STATE_UNAVAILABLE, STATE_UNKNOWN)
             else:
                 assert state.state == STATE_UNAVAILABLE

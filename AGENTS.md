@@ -721,3 +721,22 @@ neu erfasste Morgenwirkung; Versionen 1–7 erhalten keine erfundenen Belege.
 Löschung/Entladen beenden abhängige Erfassung. Config Entry bleibt 1.1.
 Keine zusätzlichen Sensoren, Aktionen, Wetter-/Geräte-/Recorderabrufe.
 Details, feste Regeln und Grenzen: `docs/morgenprognose.md`.
+
+## Direkte PV-Prognosequelle für SAX Power aus #175
+
+Die bestehenden Gesamtsensoren „Prognose heute“, „Prognose morgen“ und
+„Restertrag heute“ bilden den SAX-Vertrag als numerischen Energiezustand in kWh
+mit `device_class: energy` und ohne `state_class` ab. Es entstehen keine doppelten
+Sensoren, Solcast-Attribute, Optionen oder Abrufe. SAX verwendet eine gemeinsame
+Quelle und wechselt nicht automatisch zwischen den dokumentierten Zeiträumen.
+
+Die drei Zustände benötigen einen erfolgreichen, bekannten, nicht zukünftigen,
+höchstens 60 Minuten alten Abruf und einen vollständig gültigen Zeitraum ohne
+Eingabefallbacks gemäß dem vorhandenen operativen Fenstervertrag. Ungültige Werte
+werden als `unavailable` ausgegeben; echte vollständige Null bleibt 0. Der
+bestehende Minutentakt führt die Verfügbarkeit spätestens zur nächsten Minute
+nach, ohne Abrufzeit, Pollingfrist oder Fehlerstatus zu ändern. Offline restaurierte
+Caches geben die Sensoren nicht frei. Anlagenzeitzone, UTC-Tagesgrenzen und stabile
+IDs bleiben maßgeblich. Dach-, übrige Planungssensoren und rohe Leseaktionen
+behalten ihre bisherigen Alters-/Qualitätsregeln. Der Sensor liefert erwartete
+AC-PV-Erzeugung; der SAX-Nutzungsanteil wird ausschließlich in SAX angewendet.
