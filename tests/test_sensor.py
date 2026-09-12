@@ -29,6 +29,7 @@ from custom_components.pv_forecast.models import (
     ForecastResult,
     PlanningValues,
     RoofForecast,
+    TotalForecastInterval,
 )
 from custom_components.pv_forecast.sensor import (
     PLANNING_SENSOR_DESCRIPTIONS,
@@ -73,8 +74,18 @@ def _sensor_setup(hass, roof_name: str = "Süddach"):
                 )
             },
             total=DailyYield(12.345, 20.126),
+            total_intervals=tuple(
+                TotalForecastInterval(
+                    datetime(2026, 8, 23 + offset, tzinfo=TIMEZONE),
+                    datetime(2026, 8, 24 + offset, tzinfo=TIMEZONE),
+                    energy,
+                    energy / 24,
+                )
+                for offset, energy in enumerate((12.345, 20.126))
+            ),
         )
     )
+    coordinator.last_update_success_time = datetime(2026, 8, 23, 12, tzinfo=UTC)
     return entry, coordinator
 
 
@@ -248,7 +259,10 @@ async def test_sensor_values_follow_local_date_without_fresh_forecast(
     for day_sensors, expected in zip(sensors, (today, tomorrow), strict=True):
         for sensor in day_sensors:
             assert sensor.native_value == expected
-            assert sensor.available is (expected is not None)
+            # Die Tageszuordnung bleibt lesbar; der Gesamtsensor sperrt alte Daten.
+            assert sensor.available is (
+                expected is not None and isinstance(sensor, PvForecastRoofSensor)
+            )
     assert coordinator.data is snapshot
     assert coordinator.last_update_success
 
@@ -338,16 +352,7 @@ async def test_sensor_setup_uses_roofs_from_snapshot(hass) -> None:
         sensor.translation_placeholders == {"roof_name": "Süddach"}
         for sensor in roof_sensors
     )
-    assert all(
-        sensor.available
-        for sensor in entities
-        if not isinstance(sensor, PvForecastPlanningSensor)
-    )
-    assert all(
-        not sensor.available
-        for sensor in entities
-        if isinstance(sensor, PvForecastPlanningSensor)
-    )
+    assert all(sensor.available for sensor in entities)
 
 
 @pytest.mark.asyncio

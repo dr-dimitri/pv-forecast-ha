@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 from datetime import UTC, datetime, time, timedelta
-from typing import TYPE_CHECKING, Any, override
+from typing import TYPE_CHECKING, Any, Literal, override
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from homeassistant.config_entries import ConfigEntry
@@ -39,6 +39,7 @@ from .const import (
 )
 from .explanation import ExplanationSnapshot, build_explanation
 from .forecast_intervals import window_energy
+from .forecast_window import query_forecast_window
 from .horizon import forecast_days_from_options
 from .models import ForecastDay, ForecastResult, PlanningValues
 from .morning import apply_morning
@@ -67,7 +68,8 @@ class PvForecastCoordinator(TimestampDataUpdateCoordinator[ForecastResult]):
             config_entry=entry,
             name=DOMAIN,
             update_interval=UPDATE_INTERVAL,
-            always_update=False,
+            # Auch identische Werte erhalten eine neue operative Gültigkeit.
+            always_update=True,
         )
         self._entry = entry
         self._client = client
@@ -275,6 +277,41 @@ class PvForecastCoordinator(TimestampDataUpdateCoordinator[ForecastResult]):
             self._cancel_minute()
             self._cancel_minute = None
         await super().async_shutdown()
+
+    @callback
+    def is_energy_forecast_available(
+        self, period: Literal["today", "tomorrow", "remaining_today"]
+    ) -> bool:
+        """Den operativen Zeitraum für Leser ohne Qualitätsattribute prüfen (#175)."""
+
+        if self.data is None or not self.last_update_success:
+            return False
+        now = dt_util.utcnow()
+        timezone_name = str(self._entry.data[CONF_TIME_ZONE])
+        timezone = ZoneInfo(timezone_name)
+        day = now.astimezone(timezone).date()
+        if period == "tomorrow":
+            day += timedelta(days=1)
+        start = (
+            now
+            if period == "remaining_today"
+            else datetime.combine(day, time.min, timezone).astimezone(UTC)
+        )
+        end = datetime.combine(day + timedelta(days=1), time.min, timezone).astimezone(
+            UTC
+        )
+        return (
+            query_forecast_window(
+                self.data,
+                timezone_name,
+                now,
+                self.last_update_success_time,
+                self.last_update_success,
+                start=start,
+                end=end,
+            )["status"]
+            == "available"
+        )
 
     @callback
     def get_daily_yield(

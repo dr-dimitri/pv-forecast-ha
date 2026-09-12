@@ -462,9 +462,89 @@ Die Zuordnung zu heute und morgen wechselt zur Mitternacht am Anlagenstandort.
 Bis neue Wetterdaten vorliegen, kann der bisherige Morgenwert als heutige
 Prognose dienen. Der neue morgige Tag bleibt ohne passende Daten nicht
 verfügbar; er wird weder als null noch als Wert eines falschen Tages angezeigt.
+Für die Gesamtsensoren `Prognose heute`, `Prognose morgen` und `Restertrag heute`
+gilt zusätzlich der unten beschriebene operative Gültigkeitsvertrag.
 Bei einem fehlgeschlagenen Update greift weiterhin die normale
 Home-Assistant-Nichtverfügbarkeit, während der letzte Datenstand intern erhalten
 bleibt.
+
+### PV-Prognose für SAX Power
+
+Die bestehenden Gesamtsensoren sind direkt als PV-Quelle für
+[SAX Power](https://github.com/dr-dimitri/sax-ha) auswählbar. Öffne
+**SAX Power → Konfigurieren → PV-Prognose-Sensor** und wähle den passenden
+Sensor deiner PV-Anlage. Ein Template-Sensor oder Solcast-Zugang ist nicht nötig.
+„Solcast-kompatibel“ bezeichnet hier den in [Issue #175](https://github.com/dr-dimitri/pv-forecast-ha/issues/175)
+festgelegten Energiezustand für SAX, keine Nachbildung der Solcast-Integration.
+
+| Gesamtanlagen-Sensor | Prognosezeitraum in der gespeicherten Anlagenzeitzone | Verwendung |
+| --- | --- | --- |
+| Prognose morgen | Nächster lokaler Kalendertag, Mitternacht bis folgende Mitternacht | Planung am Vorabend |
+| Prognose heute | Aktueller lokaler Kalendertag, einschließlich des bereits vergangenen Anteils | Gesamten Tagesertrag betrachten |
+| Restertrag heute | Jetzt bis zur nächsten lokalen Mitternacht | Entscheidungen im laufenden Tag |
+
+SAX verwendet aktuell **eine gemeinsame PV-Quelle für beide Ladefunktionen**.
+Es erkennt den Prognosetag nicht aus Attributen und wechselt nicht automatisch
+zwischen „morgen“ und „Restertrag heute“. Wähle deshalb den Zeitraum bewusst;
+getrennte Zeiträume für die beiden Funktionen benötigen eine Erweiterung in
+`sax-ha`. Verwende den Gesamtsensor der passenden Anlage, keinen einzelnen
+Dachsensor und keinen Leistungssensor in W/kW.
+
+Beispiel des tatsächlichen HA-Zustands (Entity-ID beispielhaft):
+
+```yaml
+entity_id: sensor.meine_anlage_prognose_morgen
+state: "12.34"
+attributes:
+  unit_of_measurement: kWh
+  device_class: energy
+```
+
+Der Zustand enthält nur die Zahl; `state_class` ist nicht gesetzt. SAX liest
+diesen Zustand und die Einheit. Große Prognoseattribute wie `detailedForecast`
+sind nicht erforderlich und werden nicht ergänzt. Die bestehenden Unique-IDs
+bleiben bei Neustart, Umbenennung und Tageswechsel erhalten.
+
+**Gültigkeit:** Die drei genannten Gesamtsensoren benötigen einen erfolgreichen
+Abruf mit bekanntem, nicht zukünftigem Abrufzeitpunkt und höchstens 60 Minuten
+Datenalter. Der jeweilige Zeitraum muss vollständig mit gültigen, endlichen,
+nichtnegativen Prognosewerten und ohne Eingabefallbacks abgedeckt sein. Fehlt eine
+dieser Voraussetzungen, ist der HA-Zustand `unavailable`, kein Ersatzwert `0`.
+Ein vollständig abgedeckter echter Nullertrag bleibt numerisch `0`.
+Die Prüfung betrifft nur den jeweiligen Zeitraum: Eine vergangene Datenlücke
+kann „Prognose heute“ sperren, während „Restertrag heute“ noch gültig ist.
+
+Der vorhandene Minutentakt führt Restertrag, Tageszuordnung und Verfügbarkeit
+auch ohne Wetterabruf nach. Eine Altersüberschreitung wird spätestens beim
+nächsten Minutentakt im Zustand sichtbar. Die Abruffrist wird dadurch nicht
+verändert. Tagesgrenzen folgen der Anlagenzeitzone einschließlich 23-/25-Stunden-
+Tagen. Nach Mitternacht wird ein neuer Morgenwert ohne passende Daten nicht aus
+dem alten Morgen übernommen.
+
+Nach einem Abruffehler werden die Sensoren nicht verfügbar, obwohl der letzte
+Stand intern erhalten bleibt. Nach Neustart oder Reload werden sie erst mit
+einem erfolgreichen gültigen Abruf verfügbar; ein bei Offline-Start restaurierter
+Prognosecache reicht nicht aus. Ein späterer erfolgreicher Abruf stellt die
+Verfügbarkeit wieder her. Diese Gültigkeitsregel ist bereits am Sensorzustand
+erkennbar, weil SAX keine zusätzlichen Alters- oder Qualitätsattribute prüft.
+
+Die Energie umfasst alle Dächer der Anlage nach deren Verlusten, gegebenenfalls
+wirksamer Kalibrierung und AC-Begrenzungen. Eigenverbrauch und Speicherverluste
+werden nicht als zusätzlicher SAX-Abschlag eingerechnet:
+
+- **Smart / preisoptimiertes Laden:** SAX zieht Prognose × nutzbaren Anteil vom
+  Speicherladebedarf ab, mindestens bleiben 0 kWh Netzladebedarf. Bei 6 kWh Bedarf,
+  5 kWh Sensorwert und 80 % nutzbarem Anteil bleiben `6 − 5 × 0,8 = 2 kWh`.
+- **Netzdienliches Laden:** SAX vergleicht den unveränderten Sensorwert mit der
+  Mindest-PV-Prognose. Eine Schwelle von 8 kWh wird mit 8 kWh erfüllt, mit 7,9 kWh
+  nicht. Der nutzbare Anteil gilt hier nicht. Ein ausgewählter ungültiger Sensor
+  gibt die prognoseabhängige Ladepause nicht frei; eine Schwelle von 0 kWh
+  deaktiviert die Prüfung.
+
+Die Offline-Kompatibilitätstests prüfen echte HA-Zustände und den dokumentierten
+SAX-Lesevertrag. Sie ersetzen keine Erprobung an einem realen SAX-Speicher.
+
+### Abrufpausen
 
 Bei einer Abrufbegrenzung oder einem vorübergehenden API-Ausfall berücksichtigt
 die Integration die von Open-Meteo angegebene Wartefrist. Fehlt eine verwendbare
