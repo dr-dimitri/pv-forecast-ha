@@ -451,6 +451,7 @@ class ArchiveManager(MorningRuntime):
         }
         self._dismiss_observation()
         self._last_fetched_at = self.coordinator.last_update_success_time
+        self._last_calibration_capture = None
         self._storage_error = None
         self._loaded = True
         self._save_scheduled = False

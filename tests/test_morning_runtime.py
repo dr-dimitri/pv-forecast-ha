@@ -180,11 +180,16 @@ async def test_delete_active_morning_never_captures_the_old_weather_again(
     # Die Löschung muss auch einen zu diesem Zeitpunkt angewendeten Faktor beenden.
     coordinator.morning_factor = 0.8
     coordinator.morning_candidate_id = "approved-morning"
+    manager._last_calibration_capture = (("morning", "approved-morning"),)
     await manager.async_delete_data()
     await hass.async_block_till_done()
     assert manager._archive.records == {}
     assert manager._archive.morning is None
     assert coordinator.morning_factor == 1
+    coordinator.async_update_listeners()
+    await hass.async_block_till_done()
+    assert manager._archive.records == {}
+    assert manager._archive.morning is None or manager._archive.morning.cases == {}
     assert fetch.call_count == 1
 
 
