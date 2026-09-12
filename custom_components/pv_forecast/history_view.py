@@ -76,6 +76,11 @@ def _record_view(
             else None
         ),
         "applied_factor": record.applied_factor,
+        "morning": (
+            {**record.morning, "energy_kwh": record.morning["energy_kwh"] * fraction}
+            if record.morning is not None
+            else None
+        ),
         "cutoff": record.cutoff.isoformat(),
         "fetched_at": record.fetched_at.isoformat(),
         "observed_at": record.observed_at.isoformat(),

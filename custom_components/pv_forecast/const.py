@@ -30,6 +30,7 @@ CONF_GROUP_ROOF_IDS: Final = "roof_ids"
 CONF_GROUP_MAX_POWER_KW: Final = "max_power_kw"
 CONF_ADD_ANOTHER: Final = "add_another"
 CONF_CONFIRM_REMOVE: Final = "confirm_remove"
+CONF_MORNING_MODE: Final = "morning_mode"
 
 DEFAULT_LOSS_PERCENT: Final = 10.0
 DEFAULT_SYSTEM_EFFICIENCY_PERCENT: Final = 100 - DEFAULT_LOSS_PERCENT

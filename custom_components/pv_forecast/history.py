@@ -11,7 +11,7 @@ from datetime import UTC, date, datetime, time, timedelta
 from hashlib import sha256
 from itertools import pairwise
 from math import fsum, isclose, isfinite
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 from zoneinfo import ZoneInfo
 
 from .calculations import calibrated_energy, forecast_basis
@@ -26,6 +26,9 @@ from .temperature_comparison import (
     validate_comparison,
 )
 from .underperformance import discard_invalid_references, empty_state, validate_state
+
+if TYPE_CHECKING:
+    from .morning import MorningState
 
 type Horizon = Literal[
     "daily_previous_18", "daily_same_06", "hourly_1h", "hourly_3h", "daily_remaining_12"
@@ -87,6 +90,32 @@ def _candidate_id(value: object) -> str:
     if not isinstance(value, str) or not value.strip():
         raise ValueError("Der archivierte Kandidat benötigt eine Identität")
     return value
+
+
+def _morning_factor(value: object) -> float:
+    result = _energy(value)
+    if not 0.8 <= result <= 1.2:
+        raise ValueError(
+            "Der archivierte Morgenfaktor muss zwischen 0,8 und 1,2 liegen"
+        )
+    return result
+
+
+def _morning_from_dict(value: object) -> dict[str, Any] | None:
+    """Nur die damals beobachtete Morgenwirkung ohne neue Berechnung übernehmen."""
+    if value is None:
+        return None
+    if not isinstance(value, Mapping) or set(value) != {
+        "factor",
+        "candidate_id",
+        "energy_kwh",
+    }:
+        raise ValueError("Die archivierte Morgenwirkung ist unvollständig")
+    return {
+        "factor": _morning_factor(value["factor"]),
+        "candidate_id": _candidate_id(value["candidate_id"]),
+        "energy_kwh": _energy(value["energy_kwh"]),
+    }
 
 
 def _day_bounds(day: date, timezone: ZoneInfo) -> tuple[datetime, datetime]:
@@ -276,6 +305,7 @@ class ArchiveRecord:
     short_term: dict[str, Any] | None = None
     temperature_comparison: dict[str, Any] | None = None
     measured_assessment: Assessment | None = None
+    morning: dict[str, Any] | None = None
 
     @property
     def config_fingerprint(self) -> str:
@@ -284,6 +314,8 @@ class ArchiveRecord:
     @property
     def effective_energy_kwh(self) -> float:
         """Den tatsächlich wirksamen, am Stichtag beobachteten Stand verwenden."""
+        if self.morning is not None:
+            return self.morning["energy_kwh"]
         if self.calibrated_energy_kwh is not None:
             return self.calibrated_energy_kwh
         return self.raw_energy_kwh
@@ -315,6 +347,7 @@ class ArchiveRecord:
             "candidate_energy_kwh": self.candidate_energy_kwh,
             "short_term": self.short_term,
             "temperature_comparison": self.temperature_comparison,
+            "morning": deepcopy(self.morning),
             "quality_flags": list(self.quality_flags),
             "comparison": self.comparison.to_dict() if self.comparison else None,
             "assessment": self.assessment.to_dict() if self.assessment else None,
@@ -339,11 +372,12 @@ class ArchiveRecord:
 class HistoryArchive:
     """Opt-in-Archiv ohne nachträgliche Prognosebeschaffung oder Trainingsfunktion."""
 
-    def __init__(self, timezone: str) -> None:
+    def __init__(self, timezone: str, *, morning: MorningState | None = None) -> None:
         self.timezone = ZoneInfo(timezone)
         self.records: dict[str, ArchiveRecord] = {}
         self.retention_truncated = False
         self.underperformance = empty_state()
+        self.morning = morning
         self._configuration_changes: list[tuple[datetime, str]] = []
         self._latest_observed_at: datetime | None = None
         # Ausschließlich entkoppelte, danach unveränderte Speicherbausteine.
@@ -403,6 +437,9 @@ class HistoryArchive:
         excluded_dates: set[date] | None = None,
         temperature_forecast: ForecastResult | None = None,
         temperature_mountings: dict[str, str] | None = None,
+        morning_forecast: ForecastResult | None = None,
+        morning_factor: float = 1.0,
+        morning_candidate_id: str | None = None,
     ) -> bool:
         """Nur vorab definierte und rechtzeitig beobachtete Stände auswählen."""
         fetched_at, observed_at = _utc(fetched_at), _utc(observed_at)
@@ -418,6 +455,17 @@ class HistoryArchive:
         if trial_factor is not None:
             trial_factor = _factor(trial_factor)
             trial_candidate_id = _candidate_id(trial_candidate_id)
+        if morning_forecast is None:
+            if morning_factor != 1 or morning_candidate_id is not None:
+                raise ValueError("Eine Morgenwirkung benötigt ihre wirksame Zeitreihe")
+        else:
+            morning_factor = _morning_factor(morning_factor)
+            morning_candidate_id = _candidate_id(morning_candidate_id)
+            if (
+                morning_forecast.local_date != forecast.local_date
+                or morning_forecast.forecast_days != forecast.forecast_days
+            ):
+                raise ValueError("Die Morgenwirkung gehört zu einem anderen Horizont")
         if (
             self._latest_observed_at is not None
             and observed_at < self._latest_observed_at
@@ -508,6 +556,9 @@ class HistoryArchive:
                     excluded_dates,
                     temperature_forecast,
                     temperature_mountings,
+                    morning_forecast,
+                    morning_factor,
+                    morning_candidate_id,
                 )
         for interval in intervals:
             start, end = _utc(interval.start), _utc(interval.end)
@@ -546,6 +597,9 @@ class HistoryArchive:
                     excluded_dates,
                     temperature_forecast,
                     temperature_mountings,
+                    morning_forecast,
+                    morning_factor,
+                    morning_candidate_id,
                 )
         return changed
 
@@ -574,6 +628,9 @@ class HistoryArchive:
         excluded_dates: set[date],
         temperature_forecast: ForecastResult | None,
         temperature_mountings: dict[str, str] | None,
+        morning_forecast: ForecastResult | None,
+        morning_factor: float,
+        morning_candidate_id: str | None,
     ) -> bool:
         if not cutoff - max_age <= fetched_at <= observed_at <= cutoff:
             return False
@@ -592,6 +649,19 @@ class HistoryArchive:
             if basis is not None and trial_factor is not None
             else None
         )
+        morning = None
+        if morning_forecast is not None:
+            morning_energy, morning_flags = _forecast_window(
+                morning_forecast.total_intervals, start, end
+            )
+            if morning_energy is None:
+                return False
+            morning = {
+                "factor": morning_factor,
+                "candidate_id": morning_candidate_id,
+                "energy_kwh": morning_energy,
+            }
+            flags = tuple(sorted({*flags, *morning_flags}))
         record = ArchiveRecord(
             record_id,
             start,
@@ -616,6 +686,7 @@ class HistoryArchive:
             candidate_factor=trial_factor if candidate is not None else None,
             candidate_id=trial_candidate_id if candidate is not None else None,
             candidate_energy_kwh=candidate,
+            morning=morning,
         )
         if short_term_enabled and horizon in (
             "hourly_1h",
@@ -662,6 +733,7 @@ class HistoryArchive:
                     "candidate_energy_kwh",
                     "short_term",
                     "temperature_comparison",
+                    "morning",
                 )
             ):
                 return False
@@ -678,6 +750,7 @@ class HistoryArchive:
                 candidate_energy_kwh=record.candidate_energy_kwh,
                 short_term=record.short_term,
                 temperature_comparison=record.temperature_comparison,
+                morning=record.morning,
             )
         self.records[record_id] = record
         return True
@@ -847,7 +920,11 @@ class HistoryArchive:
 
     def delete_measurement_source(self, source_id: str) -> bool:
         """Messkopien samt Revisionen löschen und ihre Wiedererfassung blockieren."""
-        changed = False
+        changed = (
+            self.morning.delete_measurement_source(source_id)
+            if self.morning is not None
+            else False
+        )
         for record_id, record in tuple(self.records.items()):
             if any(
                 source.source_id == source_id for source in record.measurement_sources
@@ -888,6 +965,16 @@ class HistoryArchive:
             for record in self.records.values()
             if record.comparison is not None
         )
+        if self.morning is not None:
+            sources.update(
+                (source.entity_id, source.registry_id)
+                for source in self.morning.sources
+            )
+            sources.update(
+                (source.upstream_entity_id, source.upstream_registry_id)
+                for source in self.morning.sources
+                if source.upstream_registry_id is not None
+            )
         return tuple(
             {"entity_id": entity, "registry_id": registry}
             for entity, registry in sorted(sources, key=str)
@@ -955,6 +1042,7 @@ class HistoryArchive:
                     "calibrated_energy_kwh": record.calibrated_energy_kwh,
                     "applied_factor": record.applied_factor,
                     "applied_candidate_id": record.applied_candidate_id,
+                    "morning": deepcopy(record.morning),
                     "quality_flags": list(record.quality_flags),
                     "fetched_at": record.fetched_at.isoformat(),
                     "cutoff": record.cutoff.isoformat(),
@@ -1009,6 +1097,20 @@ class HistoryArchive:
             calibrated = [
                 record for record in valid if record.calibrated_energy_kwh is not None
             ]
+            morning = [record for record in valid if record.morning is not None]
+            morning_baseline_errors = [
+                (
+                    record.calibrated_energy_kwh
+                    if record.calibrated_energy_kwh is not None
+                    else record.raw_energy_kwh
+                )
+                - record.assessment.actual_energy_kwh
+                for record in morning
+            ]
+            morning_errors = [
+                record.effective_energy_kwh - record.assessment.actual_energy_kwh
+                for record in morning
+            ]
             horizons[horizon] = {
                 "count_expected": expected,
                 "count_forecasts": len(selected),
@@ -1052,6 +1154,16 @@ class HistoryArchive:
                             for record in calibrated
                         ]
                     ),
+                },
+                "morning_comparison": {
+                    "method": "morning_rule_1",
+                    "count": len(morning),
+                    "baseline_mae_kwh": _mean(
+                        [abs(error) for error in morning_baseline_errors]
+                    ),
+                    "applied_mae_kwh": _mean([abs(error) for error in morning_errors]),
+                    "baseline_bias_kwh": _mean(morning_baseline_errors),
+                    "applied_bias_kwh": _mean(morning_errors),
                 },
                 "existing_comparison": {
                     "count": len(paired),
@@ -1205,6 +1317,11 @@ class HistoryArchive:
             "timezone": self.timezone.key,
             "retention_truncated": self.retention_truncated,
             "underperformance": deepcopy(self.underperformance),
+            **(
+                {"morning": deepcopy(self.morning.to_dict())}
+                if self.morning is not None
+                else {}
+            ),
             "latest_observed_at": (
                 self._latest_observed_at.isoformat()
                 if self._latest_observed_at
@@ -1222,11 +1339,12 @@ class HistoryArchive:
         if (
             previous is not None
             and previous[0] is record
-            # Diese beiden optionalen Versuchsblöcke sind trotz frozen Record
+            # Die optionalen Versuchs- und Wirkblöcke sind trotz frozen Record
             # verschachtelte Dicts. Auch eine Änderung darin darf weder einen
             # alten Cache verwenden noch einen laufenden Snapshot verändern.
             and previous[1]["short_term"] == record.short_term
             and previous[1]["temperature_comparison"] == record.temperature_comparison
+            and previous[1].get("morning") == record.morning
         ):
             return previous[1], previous[2]
         data = record.to_dict()
@@ -1275,6 +1393,10 @@ class HistoryArchive:
             archive = cls(timezone)
             archive.retention_truncated = data["retention_truncated"]
             archive.underperformance = validate_state(data.get("underperformance"))
+            if data.get("morning") is not None:
+                from .morning import MorningState
+
+                archive.morning = MorningState.from_dict(data["morning"])
             for item in data["configuration_changes"]:
                 instant = _timestamp(item["observed_at"])
                 if archive._configuration_changes and (
@@ -1336,6 +1458,8 @@ class HistoryArchive:
         if len(self.records) != previous_count:
             self.retention_truncated = True
         changed = len(self.records) != previous_count
+        if self.morning is not None:
+            changed |= self.morning.prune(now)
         ordered = sorted(
             self.records.values(), key=lambda item: (item.end, item.horizon)
         )
@@ -1609,4 +1733,5 @@ def _record_from_dict(data: Mapping[str, Any], timezone: ZoneInfo) -> ArchiveRec
         short_term=validate_trial(data.get("short_term")),
         temperature_comparison=validate_comparison(data.get("temperature_comparison")),
         measured_assessment=measured,
+        morning=_morning_from_dict(data.get("morning")),
     )

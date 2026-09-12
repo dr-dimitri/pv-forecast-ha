@@ -9,6 +9,7 @@ import io
 import json
 import logging
 from contextlib import suppress
+from copy import deepcopy
 from datetime import UTC, date, datetime, timedelta
 from math import isfinite
 from typing import TYPE_CHECKING, Any, Literal
@@ -41,6 +42,7 @@ from .history import HistoryArchive
 from .history_storage import ArchiveStorage
 from .measurement_runtime import MeasurementManager
 from .measurements import SourceConfig
+from .morning_runtime import MorningRuntime
 from .shading import CONF_HORIZON_PROFILES, HORIZON_RULE_VERSION
 from .short_term import trial_report
 from .storage import ConfirmedStore
@@ -52,7 +54,7 @@ if TYPE_CHECKING:
     from .calibration_runtime import CalibrationManager
 
 _LOGGER = logging.getLogger(__name__)
-STORAGE_VERSION = 7
+STORAGE_VERSION = 8
 SAVE_DELAY = 300
 MAX_STORAGE_BYTES = 32 * 1024 * 1024
 MAX_RECORDS = 6000
@@ -84,7 +86,7 @@ class _HistoryStore(ConfirmedStore):
     async def _async_migrate_func(
         self, old_major_version: int, old_minor_version: int, old_data: dict[str, Any]
     ) -> dict[str, Any]:
-        if old_major_version not in (1, 2, 3, 4, 5, 6):
+        if old_major_version not in (1, 2, 3, 4, 5, 6, 7):
             raise NotImplementedError
         # Version 1 erhält weiterhin keine erfundene Kalibrierungsbasis.
         # Version 3 erlaubt verschiedene, je Record unverändert validierte
@@ -93,6 +95,7 @@ class _HistoryStore(ConfirmedStore):
         # ergänzt nur neue Temperaturvergleiche, keine historischen Modellwerte.
         # Version 6 beginnt ohne rückwirkend erfundene Minderertragshinweise.
         # Version 7 bewahrt automatische Tagesbelege neben bewussten Korrekturen.
+        # Version 8 beginnt ohne nachträglich erfundene Morgenprofile und Freigaben.
         HistoryArchive.from_dict(old_data["archive"], old_data["archive"]["timezone"])
         return old_data
 
@@ -237,7 +240,7 @@ def _configuration_id(entry: ConfigEntry) -> str:
     return hashlib.sha256(encoded.encode()).hexdigest()
 
 
-class ArchiveManager:
+class ArchiveManager(MorningRuntime):
     """Tatsächlich beobachtete Prognosen ohne zusätzliche Abrufe archivieren."""
 
     def __init__(
@@ -253,6 +256,9 @@ class ArchiveManager:
         self.measurements = measurements
         self.timezone = str(entry.data[CONF_TIME_ZONE])
         self._capture_configuration_id = _configuration_id(entry)
+        self._morning_original_data = deepcopy(dict(entry.data))
+        self._morning_original_options = deepcopy(dict(entry.options))
+        self._morning_fresh_after: datetime | None = None
         self.enabled = entry.options.get("history_enabled") is True
         self._archive = HistoryArchive(self.timezone)
         self._store = _history_store(hass, entry.entry_id)
@@ -428,6 +434,8 @@ class ArchiveManager:
         self._mutation_in_progress = True
         try:
             await self._async_cancel_assessment()
+            self._morning_fresh_after = dt_util.utcnow()
+            self.coordinator.async_set_morning(1.0, None)
             await self._store.async_remove()
         finally:
             self._mutation_in_progress = False
@@ -461,8 +469,10 @@ class ArchiveManager:
             await self._async_cancel_assessment()
             changed = self._archive.delete_measurement_source(source_id)
             if changed:
+                self._morning_fresh_after = dt_util.utcnow()
                 self._dismiss_observation()
                 self._observe(dt_util.utcnow())
+                self._reconcile_morning(dt_util.utcnow())
                 self._dirty = True
             if changed or self._store.write_pending:
                 await self._store.async_save_checked(self._serialize())
@@ -509,6 +519,7 @@ class ArchiveManager:
                 # Schreibfehler dürfen eine überholte Lernfreigabe nicht erhalten.
                 if self.calibration is not None:
                     self.calibration.async_reconcile()
+                self._reconcile_morning(now)
             if changed or self._dirty or self._store.write_pending:
                 data = self._serialize()
                 if record_id not in self._archive.records:
@@ -537,7 +548,10 @@ class ArchiveManager:
             if self.calibration is not None
             else {}
         )
-        calibration_signature = tuple(calibration.items())
+        calibration_signature = (
+            *calibration.items(),
+            ("morning", getattr(self.coordinator, "morning_candidate_id", None)),
+        )
         if (
             self.coordinator.last_update_success
             and getattr(self.coordinator, "origin", "live") == "live"
@@ -563,6 +577,13 @@ class ArchiveManager:
                     CONF_INVERTER_MAX_POWER_KW
                 ),
                 **calibration,
+                morning_forecast=(
+                    self.coordinator.data
+                    if self.coordinator.morning_factor != 1
+                    else None
+                ),
+                morning_factor=self.coordinator.morning_factor,
+                morning_candidate_id=self.coordinator.morning_candidate_id,
                 temperature_forecast=getattr(
                     self.coordinator, "temperature_data", None
                 ),
@@ -578,6 +599,7 @@ class ArchiveManager:
             self._last_fetched_at = fetched_at
             self._last_calibration_capture = calibration_signature
             changed = True
+        changed |= self._capture_morning(now)
         if changed:
             self._dirty = True
             self._schedule_save()
@@ -631,6 +653,7 @@ class ArchiveManager:
                 self._observe(now)
                 if self.calibration is not None:
                     self.calibration.async_reconcile()
+                self._reconcile_morning(now)
         finally:
             self._assessment_task = None
 
@@ -845,6 +868,7 @@ class ArchiveManager:
                 )
             }
         result["underperformance"] = observation
+        result["morning"] = self.morning_snapshot(now or dt_util.utcnow())
         if self.calibration is not None:
             result["calibration"] = self.calibration.snapshot()
         return result

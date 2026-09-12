@@ -77,7 +77,13 @@ class _Coordinator:
         self.data = _forecast()
         self.last_update_success = True
         self.last_update_success_time = NOW
+        self.morning_factor = 1.0
+        self.morning_candidate_id = None
         self.listeners = []
+
+    def async_set_morning(self, factor, candidate_id):
+        self.morning_factor = factor
+        self.morning_candidate_id = candidate_id
 
     @callback
     def async_add_listener(self, listener):

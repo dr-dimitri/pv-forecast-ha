@@ -24,6 +24,7 @@ from custom_components.pv_forecast.models import (
     RoofForecastInterval,
     TotalForecastInterval,
 )
+from custom_components.pv_forecast.morning import apply_morning, morning_window
 
 from .helpers import roof
 
@@ -385,3 +386,115 @@ def test_missing_incompatible_and_nonfinite_basis_never_overwrites_forecast():
     huge = basis({"a": 1e307}, limit=8)
     assert explain(huge, 1.5, 8)[1]["status"] == "unavailable"
     assert raw.total_intervals[0].energy_kwh == 10
+
+
+@pytest.mark.parametrize(
+    "zone,day,hours",
+    [
+        ("UTC", date(2026, 9, 10), 24),
+        ("Europe/Berlin", date(2026, 3, 29), 23),
+        ("Europe/Berlin", date(2026, 10, 25), 25),
+        ("Asia/Kathmandu", date(2026, 9, 10), 24),
+    ],
+)
+@pytest.mark.parametrize("morning_factor", [0.8, 1.2])
+def test_morning_contribution_preserves_raw_global_and_both_clipping_stages(
+    zone, day, hours, morning_factor
+):
+    """Geteilte Sonnenaufgangsgrenzen erhalten Tagesbilanz und Rohenergie."""
+    timezone = ZoneInfo(zone)
+    groups = (
+        AcInverterGroup("g1", "Gruppe 1", 6, ("a", "b")),
+        AcInverterGroup("g2", "Gruppe 2", 3, ("c",)),
+    )
+    raw = basis({"a": 4, "b": 4, "c": 4, "d": 2}, 10, groups, zone, day)
+    windows = tuple(
+        morning_window(day + timedelta(days=offset), timezone, 52.52, 13.41)
+        for offset in range(raw.forecast_days)
+    )
+    effective = apply_morning(raw, morning_factor, 1.2, 10, timezone, 52.52, 13.41)
+    snapshot = build_explanation(
+        raw,
+        effective,
+        1.2,
+        10,
+        zone,
+        morning_factor=morning_factor,
+        morning_windows=windows,
+    )
+    assert snapshot.reason is None
+    assert len(snapshot.intervals) == len(effective.total_intervals)
+    assert len(effective.total_intervals) > len(raw.total_intervals)
+    now = datetime.combine(day, time(12), timezone).astimezone(UTC)
+    with patch(
+        "custom_components.pv_forecast.explanation.apply_inverter_limits",
+        side_effect=AssertionError("Lesen rechnet keine PV"),
+    ):
+        result = explanation_view(snapshot, raw, effective, zone, now, now, True)
+    assert result["status"] == "available"
+    assert result["morning_factor"] == morning_factor
+    totals = result["totals"]
+    assert totals["before_calibration_kwh"] == pytest.approx(14 * hours)
+    assert totals["morning_delta_kwh"] == pytest.approx(14 * (morning_factor - 1) * 4)
+    assert totals["calibration_delta_kwh"] == pytest.approx(
+        (14 * hours + totals["morning_delta_kwh"]) * 0.2
+    )
+    assert totals["raw_model_kwh"] == pytest.approx(raw.total.today)
+    assert sum(item["energy_kwh"] for item in result["raw_intervals"]) == pytest.approx(
+        raw.total.today
+    )
+    assert totals["effective_kwh"] == pytest.approx(effective.total.today)
+    assert totals["group_clipping_kwh"] > 0
+    assert totals["total_clipping_kwh"] > 0
+    for item in result["intervals"]:
+        assert (
+            item["before_calibration_kwh"]
+            + item["morning_delta_kwh"]
+            + item["calibration_delta_kwh"]
+            - item["group_clipping_kwh"]
+            - item["total_clipping_kwh"]
+        ) == pytest.approx(item["effective_kwh"])
+
+
+def test_disabled_morning_keeps_original_explanation_values_exact():
+    """Faktor 1 verändert weder Originalintervalle noch bestehende Bilanzwerte."""
+    raw = basis({"a": 2.718281828}, 3)
+    prior = apply_calibration(raw, 1.13, 3, ZoneInfo("UTC"))
+    effective = apply_morning(raw, 1, 1.13, 3, ZoneInfo("UTC"), 52.52, 13.41)
+    assert effective == prior
+    snapshot = build_explanation(raw, effective, 1.13, 3, "UTC")
+    assert snapshot == build_explanation(
+        raw, effective, 1.13, 3, "UTC", morning_factor=1, morning_windows=()
+    )
+    assert all(item.morning_delta_kwh == 0 for item in snapshot.intervals)
+
+
+@pytest.mark.parametrize("problem", ["missing_windows", "wrong_factor", "raw_dc"])
+def test_morning_explanation_rejects_a_different_factor_window_or_dc_basis(problem):
+    """Eine korrekte Endsumme genügt bei anderer Modellgrundlage weiterhin nicht."""
+    zone = ZoneInfo("UTC")
+    raw = basis({"a": 1})
+    effective = apply_morning(raw, 0.8, 1.1, None, zone, 52.52, 13.41)
+    windows = tuple(
+        morning_window(raw.local_date + timedelta(days=offset), zone, 52.52, 13.41)
+        for offset in range(raw.forecast_days)
+    )
+    if problem == "raw_dc":
+        altered = replace(
+            effective.roofs["a"],
+            intervals=tuple(
+                replace(item, dc_power_kw=item.dc_power_kw + 0.1)
+                for item in effective.roofs["a"].intervals
+            ),
+        )
+        effective = replace(effective, roofs={"a": altered})
+    snapshot = build_explanation(
+        raw,
+        effective,
+        1.1,
+        None,
+        "UTC",
+        morning_factor=0.9 if problem == "wrong_factor" else 0.8,
+        morning_windows=() if problem == "missing_windows" else windows,
+    )
+    assert snapshot.reason == "incompatible_raw_basis"

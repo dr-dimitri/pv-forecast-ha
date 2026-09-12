@@ -185,7 +185,11 @@ def evaluate_experience_band(
         forecast_observed_at=target.observed_at.isoformat(),
         start=target.start.isoformat(),
         end=target.end.isoformat(),
-        variant="applied_calibration_rule_1" if calibrated else "raw_model",
+        variant=(
+            "applied_morning_rule_1"
+            if target.morning is not None
+            else "applied_calibration_rule_1" if calibrated else "raw_model"
+        ),
         target_coverage=TARGET_COVERAGE,
         minimum_validation_coverage=MINIMUM_COVERAGE,
         minimum_training_days=TRAINING_DAYS,
@@ -197,6 +201,9 @@ def evaluate_experience_band(
             "coverage_uncertainty_assumes_independent_days",
         ],
     )
+    if target.morning is not None:
+        result["reasons"] = ["morning_method_not_validated"]
+        return result
     if target.horizon not in (*DAILY_HORIZONS, *HOURLY_HORIZONS):
         result["reasons"] = ["unsupported_horizon"]
         return result
@@ -254,7 +261,9 @@ def evaluate_experience_band(
             reason = "not_known_at_forecast"
         elif record.quality_flags or record.deleted_sources:
             reason = "invalid_basis"
-        elif calibrated and record.calibrated_energy_kwh is None:
+        elif record.morning is not None or (
+            calibrated and record.calibrated_energy_kwh is None
+        ):
             reason = "different_forecast_method"
         elif record.target_date in seen:
             reason = "duplicate_target_day"

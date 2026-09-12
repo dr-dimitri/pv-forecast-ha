@@ -60,6 +60,7 @@ def build_trial(
         return {**result, "reason": "outside_current_day"}
     if (
         target.basis is None
+        or target.morning is not None
         or target.quality_flags
         or target.target_date in excluded_dates
         or not target.measurement_sources
@@ -77,6 +78,7 @@ def build_trial(
             and now - timedelta(hours=5) <= item.end <= now
             and item.configuration_id == target.configuration_id
             and item.timezone == target.timezone
+            and item.morning is None
             and _sources(item) == _sources(target)
             and item.target_date not in excluded_dates
             and not item.quality_flags

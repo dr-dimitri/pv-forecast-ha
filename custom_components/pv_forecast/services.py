@@ -65,6 +65,7 @@ _GET_FORECAST_SCHEMA = vol.Schema(
         vol.Required(CONF_CONFIG_ENTRY_ID): vol.All(cv.string, vol.Length(min=1)),
         vol.Optional("include_view", default=False): cv.boolean,
         vol.Optional("include_explanation", default=False): cv.boolean,
+        vol.Optional("include_morning", default=False): cv.boolean,
         vol.Optional("day", default="today"): vol.In(("today", "tomorrow")),
         vol.Optional("roof_id"): vol.All(cv.string, vol.Length(min=1)),
         vol.Optional("planning"): _PLANNING_SCHEMA,
@@ -105,6 +106,22 @@ def async_setup_services(hass: HomeAssistant) -> None:
                 translation_key="forecast_unavailable",
             )
 
+        runtime = cast("PvForecastConfigEntry", entry).runtime_data
+        if call.data["include_morning"] and runtime.history is not None:
+            from .measurement_services import _async_check_source_permissions
+
+            await _async_check_source_permissions(hass, call, runtime.history)
+            if runtime.measurements is not None:
+                await _async_check_source_permissions(hass, call, runtime.measurements)
+            if (
+                entry.state is not ConfigEntryState.LOADED
+                or entry.runtime_data is not runtime
+                or coordinator.data is None
+            ):
+                raise ServiceValidationError(
+                    translation_domain=DOMAIN, translation_key="entry_not_loaded"
+                )
+
         result = _serialize_forecast(
             coordinator.data,
             str(entry.data[CONF_TIME_ZONE]),
@@ -116,6 +133,23 @@ def async_setup_services(hass: HomeAssistant) -> None:
             coordinator.restored_at.isoformat() if coordinator.restored_at else None
         )
         now = dt_util.utcnow()
+        result["morning"] = {
+            "schema_version": 1,
+            "method": "morning_factor_v1",
+            "mode": entry.options.get("morning_mode", "off"),
+            "applied": coordinator.morning_factor != 1,
+            "effective_factor": coordinator.morning_factor,
+            "candidate_id": coordinator.morning_candidate_id,
+            "window": "sunrise_to_plus_4h",
+            "cutoff": "daily_previous_18",
+            "uncertainty": {
+                "status": "unavailable",
+                "reason": "missing_window_evidence",
+            },
+        }
+        if call.data["include_morning"]:
+            if runtime.history is not None:
+                result["morning"] |= runtime.history.morning_snapshot(now)
         if call.data["include_explanation"]:
             result["explanation"] = explanation_view(
                 coordinator.explanation,

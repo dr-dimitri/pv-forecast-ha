@@ -38,8 +38,15 @@ async def async_get_solar_forecast(
     forecast = coordinator.data
     if forecast is None or not coordinator.last_update_success:
         return None
+    now = dt_util.utcnow()
+    fetched_at = coordinator.last_update_success_time
+    if fetched_at is None or not timedelta(0) <= now - fetched_at <= timedelta(
+        minutes=60
+    ):
+        # wh_hours kann fehlendes, zukünftiges oder zu hohes Datenalter nicht zeigen.
+        return None
     timezone = ZoneInfo(str(entry.data[CONF_TIME_ZONE]))
-    local_date = dt_util.utcnow().astimezone(timezone).date()
+    local_date = now.astimezone(timezone).date()
     # Ein älterer Ankertag kann beide aktuellen Tage vollständig überdecken.
     start = datetime.combine(local_date, time.min, timezone).astimezone(UTC)
     midnight = datetime.combine(
@@ -63,7 +70,7 @@ async def async_get_solar_forecast(
             for previous, following in pairwise(intervals)
         )
     ):
-        # wh_hours kann fehlende Abdeckung oder ältere Daten nicht kennzeichnen.
+        # wh_hours kann fehlende Abdeckung nicht kennzeichnen.
         return None
 
     wh_hours: dict[str, float | int] = {}

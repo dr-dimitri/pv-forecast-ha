@@ -163,7 +163,7 @@ def test_retention_counts_days_in_each_records_original_timezone():
     assert original.record_id in restored.records
 
 
-@pytest.mark.parametrize("old_version", [1, 2, 3, 4, 5, 6])
+@pytest.mark.parametrize("old_version", [1, 2, 3, 4, 5, 6, 7])
 async def test_current_store_migrates_previous_versions_without_changing_old_records(
     hass, old_version
 ):
@@ -190,7 +190,7 @@ async def test_current_store_migrates_previous_versions_without_changing_old_rec
     store = _history_store(hass, f"migration-{old_version}")
     assert await store._async_migrate_func(old_version, 1, payload) == before
     assert payload == before
-    assert STORAGE_VERSION == 7
+    assert STORAGE_VERSION == 8
 
 
 async def test_runtime_loads_paused_archive_under_new_zone_without_rewriting_old_data(

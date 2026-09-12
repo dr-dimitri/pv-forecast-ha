@@ -21,9 +21,18 @@ Offline-Nutzungstest stellt an den ersten Tagen 1 kW und am vierten Tag von
 das spätere Fenster mit 4 statt 2 kWh. Das ist ein überprüfter Planungspfad,
 kein Nachweis tatsächlicher Einsparung oder verbesserter Wetterprognose.
 
-Energy liefert weiterhin ausschließlich heute und morgen. Sensorzahl und
-Unique-IDs bleiben unverändert. Archiv, Lernen und Erfahrungsbänder behalten
-ihre bestehenden Stichtage und Aufbewahrungsgrenzen. Auch ein Wechsel von
+Energy liefert weiterhin ausschließlich heute und morgen. Beide aktuellen
+lokalen Tage müssen vollständig abgedeckt sein; ein noch frischer Stand vom
+Vortag bleibt dadurch nach Mitternacht nutzbar. Zusätzlich muss der letzte
+Wetterabruf erfolgreich gewesen sein und sein Abrufzeitpunkt zwischen jetzt und
+einschließlich 60 Minuten zurückliegen. Fehlende oder zukünftige Abrufzeitpunkte
+und ältere Stände ergeben keine Energy-Prognose, auch wenn bei ausgeschaltetem
+Polling noch mehrere Tage abgedeckt wären. Der native Vertrag kann Alter und
+Fehler nicht anzeigen. Diese Prüfung liest nur vorhandene Daten und löst keine
+Aktualisierung aus.
+
+Sensorzahl und Unique-IDs bleiben unverändert. Archiv, Lernen und Erfahrungsbänder
+behalten ihre bestehenden Stichtage und Aufbewahrungsgrenzen. Auch ein Wechsel von
 sieben zurück zu zwei Tagen verändert keine historische Anlagenidentität.
 
 ## Datenumfang und Kontingent

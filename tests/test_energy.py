@@ -213,7 +213,7 @@ async def test_energy_preserves_local_days_and_absolute_starts(
     assert forecast_client.await_count == 1
 
 
-@pytest.mark.parametrize("forecast_days", [3, 7])
+@pytest.mark.parametrize("forecast_days", [2, 3, 7])
 @pytest.mark.parametrize(
     ("timezone_name", "current_day", "today_hours"),
     [
@@ -232,11 +232,11 @@ async def test_energy_uses_covered_days_after_snapshot_midnight(
     current_day,
     today_hours,
 ) -> None:
-    """Ein Mehrtagesstand bleibt bis zum letzten vollständig belegten Paar lesbar."""
+    """Über Mitternacht entscheidet bei frischem Stand allein die aktuelle Abdeckung."""
 
     timezone = ZoneInfo(timezone_name)
     snapshot_day = current_day - timedelta(days=1)
-    freezer.move_to(datetime.combine(snapshot_day, time(12), timezone))
+    freezer.move_to(datetime.combine(snapshot_day, time(23, 45), timezone))
     entry = await _load_plant(
         hass, forecast_client, timezone_name, snapshot_day, forecast_days
     )
@@ -246,6 +246,16 @@ async def test_energy_uses_covered_days_after_snapshot_midnight(
 
     freezer.move_to(datetime.combine(current_day, time(0, 1), timezone))
     result = await async_get_solar_forecast(hass, entry.entry_id)
+
+    assert coordinator.data is snapshot
+    assert coordinator.last_update_success_time == fetched_at
+    assert forecast_client.await_count == 1
+    if forecast_days == 2:
+        # Der frische Zweitagesstand enthält nach Mitternacht nur noch heute.
+        assert coordinator.get_daily_yield("today") is not None
+        assert coordinator.get_daily_yield("tomorrow") is None
+        assert result is None
+        return
 
     assert result is not None
     totals = {}
@@ -261,10 +271,60 @@ async def test_energy_uses_covered_days_after_snapshot_midnight(
     ):
         assert totals[day] == pytest.approx(coordinator.get_daily_yield(key) * 1000)
 
-    last_pair = snapshot_day + timedelta(days=forecast_days - 2)
-    freezer.move_to(datetime.combine(last_pair, time(12), timezone))
-    assert await async_get_solar_forecast(hass, entry.entry_id) is not None
-    freezer.move_to(datetime.combine(last_pair + timedelta(days=1), time.min, timezone))
+
+@pytest.mark.parametrize(
+    ("age", "available"),
+    [
+        (None, False),
+        (timedelta(microseconds=-1), False),
+        (timedelta(0), True),
+        (timedelta(minutes=60), True),
+        (timedelta(minutes=60, microseconds=1), False),
+    ],
+    ids=["abrufzeit-fehlt", "zukunft", "frisch", "genau-60-minuten", "zu-alt"],
+)
+async def test_energy_requires_known_fetch_age_within_one_hour(
+    hass, freezer, forecast_client, age, available
+) -> None:
+    """Die Altersgrenze ist inklusive und gilt auch ohne weiteren Abrufversuch."""
+
+    entry = await _load_plant(hass, forecast_client)
+    coordinator = entry.runtime_data.coordinator
+    snapshot = coordinator.data
+    fetched_at = coordinator.last_update_success_time
+    if age is None:
+        coordinator.last_update_success_time = None
+    else:
+        freezer.move_to(fetched_at + age)
+
+    result = await async_get_solar_forecast(hass, entry.entry_id)
+
+    assert (result is not None) is available
+    assert coordinator.data is snapshot
+    assert coordinator.last_update_success
+    assert coordinator.last_update_success_time == (None if age is None else fetched_at)
+    assert forecast_client.await_count == 1
+
+
+@pytest.mark.parametrize("forecast_days", [3, 7])
+async def test_energy_rejects_old_snapshot_despite_remaining_multiday_coverage(
+    hass, freezer, forecast_client, forecast_days
+) -> None:
+    """Bei ausgeschaltetem Polling verlängert ein längerer Horizont nicht das Alter."""
+
+    timezone = ZoneInfo("Europe/Berlin")
+    freezer.move_to(datetime.combine(DAY, time(0, 5), timezone))
+    entry = await _load_plant(hass, forecast_client, forecast_days=forecast_days)
+    coordinator = entry.runtime_data.coordinator
+    snapshot = coordinator.data
+    fetched_at = coordinator.last_update_success_time
+
+    last_pair = DAY + timedelta(days=forecast_days - 2)
+    freezer.move_to(datetime.combine(last_pair, time(23, 5), timezone))
+
+    assert coordinator.get_daily_yield("today") == pytest.approx(24 * 15)
+    assert coordinator.get_daily_yield("tomorrow") == pytest.approx(24 * 15)
+    assert coordinator.last_update_success
     assert await async_get_solar_forecast(hass, entry.entry_id) is None
     assert coordinator.data is snapshot
     assert coordinator.last_update_success_time == fetched_at
@@ -277,6 +337,7 @@ async def test_energy_still_rejects_unusable_multiday_snapshot_after_midnight(
 ) -> None:
     """Ein längerer Horizont bewahrt die Fehler- und Abdeckungsprüfungen."""
 
+    freezer.move_to("2026-08-23T21:45:00+00:00")
     entry = await _load_plant(hass, forecast_client, forecast_days=7)
     coordinator = entry.runtime_data.coordinator
     snapshot = coordinator.data
@@ -391,7 +452,7 @@ async def test_energy_hides_failed_or_expired_snapshot(
 
     await coordinator.async_refresh()
     assert await async_get_solar_forecast(hass, entry.entry_id) is not None
-    freezer.move_to("2026-08-23T22:00:00+00:00")
+    freezer.move_to("2026-08-23T13:01:00+00:00")
     assert coordinator.last_update_success
     assert await async_get_solar_forecast(hass, entry.entry_id) is None
     assert forecast_client.await_count == 2

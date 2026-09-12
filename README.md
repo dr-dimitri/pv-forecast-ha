@@ -26,6 +26,7 @@ vorgesehen.
 - freiwilliges PV-Dashboard direkt über die Integrationsoptionen; Lovelace-Karte
   mit visuellem Editor, Tageskurven und Dachauswahl auch einzeln nutzbar
 - optionale Selbstkalibrierung mit getrennten Lern- und späteren Prüftagen
+- optionaler Morgenvergleich mit eigenem prospektivem Nachweis des PV-Anstiegs
 - empirische Tagesbänder nach Prüfung passender eingefrorener Archivstände
 - zusammenhängende Solarzeitfenster und getrennte Tagesaussicht aus Messung,
   geschätzter Brücke und Restprognose
@@ -373,6 +374,20 @@ Bestätigung von vorn. [Regeln, Bedienung und Grenzen](docs/kalibrierung.md)
 erklären insbesondere, warum ältere Archivtage nicht nachträglich als Lerntage
 verwendet werden und warum eine Verbesserung nicht garantiert ist.
 
+## Morgenvergleich (optional)
+
+Unter **Konfigurieren → Erweiterte Einstellungen → Morgenvergleich** kannst du
+zunächst **Beobachten** wählen. Die Funktion prüft den Morgenverlauf und den
+PV-Anstieg gegen ausreichend fein erfasste AC-Erzeugung. Tagesgesamtwerte allein
+reichen dafür nicht. Ein eingeschränktes Morgenmodell benötigt nach 30 Lerntagen
+mindestens 14 neue prospektive Prüftage und eine ausdrückliche Wahl der Automatik,
+bevor es die gemeinsame Prognose verändert. Standard ist **Aus**.
+
+Die [Anleitung zum Morgenvergleich](docs/morgenvergleich.md) beschreibt die feste
+0,5-kW-Schwelle, die Intervallmittelregel, Voraussetzungen, Prüfmetriken, Grenzen
+und Rückfallregeln. Reine Moduswechsel erzeugen keine Wetterabrufe.
+Ein realer Gütevorteil oder die Versorgung des Haushalts wird damit nicht behauptet.
+
 ## PV-Dashboard und eigene Karte (optional)
 
 Öffne **Einstellungen → Geräte & Dienste → PV-Ertragsprognose → Konfigurieren →
@@ -493,10 +508,12 @@ das Backend sie nur einmal abruft ([bekannte Grenze #52](https://github.com/dr-d
 Die Energy-Anbindung liest dieselben geclippten Gesamtintervalle wie die
 Tagessensoren. Sie rechnet kWh in Wh um und erhält lokale Tagesanteile sowie
 eindeutige UTC-Zeitpunkte. Es entstehen keine zusätzlichen Wetterabrufe oder
-Entities. Nach einem Abruffehler, während des Entladens oder solange die beiden
+Entities. Bei fehlendem, zukünftigem oder mehr als 60 Minuten altem Abrufzeitpunkt,
+nach einem Abruffehler, während des Entladens oder solange die beiden
 aktuellen lokalen Tage nicht vollständig abgedeckt sind, wird keine Kurve
 geliefert. Das native Format kann ältere oder unvollständige Daten nicht als
 solche kennzeichnen. Die Leseaktion bietet weiterhin die beschriebenen Metadaten.
+Ein noch frischer Stand darf auch nach lokaler Mitternacht verwendet werden.
 
 Bei der Herbst-Zeitumstellung und in Teilstundenzeitzonen kann das native
 HA-Frontend verschiedene Prognoseintervalle in einem Stundenpunkt zusammenfassen.

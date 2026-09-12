@@ -159,8 +159,14 @@ async def _async_update_listener(
 
     runtime = getattr(entry, "runtime_data", None)
     dashboard = getattr(runtime, "dashboard", None)
+    history = getattr(runtime, "history", None)
+    local_morning_update = (
+        history is not None and history.async_update_morning_options()
+    )
     if dashboard is not None and dashboard.only_dashboard_options_changed():
         if dashboard.display_options_changed():
             await dashboard.async_sync()
+        return
+    if local_morning_update:
         return
     await hass.config_entries.async_reload(entry.entry_id)

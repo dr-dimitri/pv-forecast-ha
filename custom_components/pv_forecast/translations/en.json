@@ -339,7 +339,7 @@
           "plant_options": "Dachflächen und maximale Wechselrichterleistung bearbeiten.",
           "measurements": "Vorhandenes KSEM auswählen oder PV-Sensoren manuell zuordnen. Optional.",
           "dashboard": "Eigene PV-Seite einrichten oder deren Titel ändern.",
-          "advanced_options": "Archiv, Kalibrierung, Prognosehorizont, AC-Gruppen und experimentelles Horizontprofil.",
+          "advanced_options": "Archiv, Kalibrierung, Morgenvergleich, Prognosehorizont, AC-Gruppen und experimentelles Horizontprofil.",
           "daily_correction": "Einen abgeschlossenen Archivtag bestätigen, ändern oder auf den Messwert zurücksetzen."
         }
       },
@@ -733,7 +733,8 @@
           "inverter_groups": "AC-Wechselrichtergruppen zuordnen",
           "horizon_profile": "Horizontprofil je Dach (experimentell)",
           "init": "Zurück zur Übersicht",
-          "forecast_cache": "Letzte Prognose speichern"
+          "forecast_cache": "Letzte Prognose speichern",
+          "morning": "Morgenvergleich (optional)"
         }
       },
       "forecast_cache": {
@@ -777,6 +778,34 @@
       "daily_correction_saved": {
         "title": "Tagesertrag gespeichert",
         "description": "Der bestätigte Tageswert bzw. die Rücknahme wurde gespeichert. Tagesauswertungen verwenden den maßgeblichen Wert; abhängige Kalibrierungsnachweise wurden erneut geprüft. Eine bereits geöffnete historische Kartenansicht kannst du mit „Aktualisieren“ neu laden."
+      },
+      "morning": {
+        "title": "Morgenvergleich",
+        "description": "Vergleicht rechtzeitig am Vorabend gespeicherte Morgenprofile mit bestätigter AC-PV-Erzeugung.\n\n**Gewählter Modus:** {mode}\n\n**Anlagenzeitzone:** {timezone}\n\nBeobachten verändert die Prognose nicht. Automatik benötigt einen eigenen Nachweis an späteren Morgenfällen; die globale Kalibrierungsfreigabe genügt dafür nicht. Bekannte Abregelung und Wartung werden über die gemeinsamen Tagesmarkierungen der Selbstkalibrierung ausgeschlossen.",
+        "menu_options": {
+          "morning_settings": "Modus auswählen",
+          "morning_status": "Morgenvergleich und Prüfstatus ansehen",
+          "reset_morning": "Morgenversuch zurücksetzen",
+          "morning_done": "Fertig"
+        }
+      },
+      "morning_settings": {
+        "title": "Morgenvergleich auswählen",
+        "description": "Standard ist Aus. Beobachten und Automatik benötigen ein aktiviertes Archiv und bestätigte, überschneidungsfreie AC-PV-Energiequellen. Ein Leistungssensor allein genügt nicht. Ein täglicher Zähler ohne belegten Tagesabschluss liefert keinen vollständigen Tagesnachweis.\n\nVergleichsregel: Sonnenaufgang bis vier Stunden danach, 0,5 kW über ein ganzes 60-Minuten-Fenster nach derselben Intervallmittelregel. Messintervalle dürfen höchstens 15 Minuten lang sein; das belegt keine kontinuierliche Mindestleistung.\n\n30 geeignete Lerntage in 60 Tagen und danach 14 neue Prüftage in 28 Tagen prüfen den begrenzten Morgenfaktor von 0,8 bis 1,2. Automatik wendet ihn ausschließlich bei weiterhin gültigem eigenständigem Nachweis an. Hauslast und verfügbarer Überschuss sind damit nicht belegt.",
+        "data": {
+          "morning_mode": "Modus"
+        }
+      },
+      "morning_status": {
+        "title": "Morgenvergleich und Prüfstatus",
+        "description": "{report}\n\nDie Vergleichszahlen gehören der Reihe nach zu Rohmodell, bisher wirksamer Prognose ohne Morgenkorrektur und Morgenkandidat. Hauptziel ist der Morgenenergie-MAE. Ein positiver Ausgangsfehler der bisher wirksamen Prognose muss sich um mindestens 5 Prozent verbessern; alle zusätzlichen Zeit- und Tageskriterien müssen ebenfalls erfüllt sein.\n\nUnsicherheit für das konkrete Morgen- oder 60-Minuten-Fenster ist ohne passenden eigenen Nachweis nicht verfügbar. Synthetische Tests belegen die Regeln; die reale prospektive Güte ist offen."
+      },
+      "reset_morning": {
+        "title": "Morgenversuch zurücksetzen",
+        "description": "Die Bestätigung löscht die eigenen Morgenprofile und Lern-/Prüfbelege und beginnt ab jetzt neu. Eine Morgenfreigabe wird aufgehoben. Übrige Archivdaten, Messwerte, globale Kalibrierung und Anwenderoptionen bleiben erhalten. Der gewählte Modus bleibt bestehen; vor einer erneuten Anwendung ist ein neuer vollständiger Morgen-Nachweis erforderlich.",
+        "data": {
+          "confirm_reset": "Morgenversuch jetzt bewusst zurücksetzen"
+        }
       }
     },
     "error": {
@@ -818,7 +847,11 @@
       "daily_correction_confirmation_required": "Bitte den endgültigen Tagesertrag bzw. die Rücknahme ausdrücklich bestätigen.",
       "daily_correction_save_failed": "Der Wert ist noch nicht sicher gespeichert. Bitte erneut bestätigen. Bis zum erfolgreichen Schreiben kann er nur vorübergehend angewendet sein.",
       "required_custom_azimuth": "Bitte gib bei freier Ausrichtung einen genauen Kompasswinkel ein.",
-      "invalid_custom_azimuth": "Bitte gib einen endlichen Kompasswinkel von 0° bis 360° ein. 360° wird als 0° (Nord) gespeichert."
+      "invalid_custom_azimuth": "Bitte gib einen endlichen Kompasswinkel von 0° bis 360° ein. 360° wird als 0° (Nord) gespeichert.",
+      "morning_history_required": "Aktiviere zuerst das Prognosearchiv in den Anlagenoptionen. Der Morgenvergleich aktiviert es nicht automatisch.",
+      "morning_energy_required": "Ordne zuerst mindestens eine vollständig bestätigte und überschneidungsfreie AC-PV-Energiequelle zu. Ein Leistungssensor allein genügt nicht.",
+      "morning_unavailable": "Der Morgenstatus ist derzeit nicht geladen. Prüfe die Anlage und das Prognosearchiv.",
+      "morning_reset_failed": "Der Morgenversuch konnte nicht sicher zurückgesetzt werden. Prüfe die lokale Archivspeicherung und versuche es erneut."
     },
     "abort": {
       "reconfigure_entry_changed": "Die Anlage wurde während der Bearbeitung anderweitig geändert. Bitte starte die Bearbeitung erneut.",
@@ -867,6 +900,13 @@
         "daily": "Täglich zurückgesetzter Energiezähler",
         "power": "Momentane Leistung (keine Energieintegration)"
       }
+    },
+    "morning_mode": {
+      "options": {
+        "off": "Aus",
+        "observe": "Beobachten, ohne die Prognose zu verändern",
+        "auto": "Nach eigenständiger Morgenprüfung automatisch anwenden"
+      }
     }
   },
   "services": {
@@ -901,6 +941,10 @@
         "include_explanation": {
           "name": "Prognose erklären",
           "description": "Die aktuelle Gesamtprognose des ausgewählten Tages mit Grundmodell, angewendeter Kalibrierung und AC-Begrenzung erklären."
+        },
+        "include_morning": {
+          "name": "Morgenvergleich ergänzen",
+          "description": "Optional den vollständigen Morgenvergleich mit Lern- und Prüfstatus lesen. Prüft zusätzlich die Leserechte aller aktuellen und verwendeten historischen Messquellen; löst keinen Abruf aus."
         }
       }
     },
@@ -1128,7 +1172,75 @@
     "health_severity_info": "Information",
     "health_severity_warning": "Hinweis",
     "health_severity_error": "Fehler",
-    "daily_correction_missing": "Kein bestätigter Wert vorhanden"
+    "daily_correction_missing": "Kein bestätigter Wert vorhanden",
+    "morning_missing": "noch kein Nachweis",
+    "morning_unavailable": "Für diese Anlage ist derzeit kein Morgenstatus geladen.",
+    "morning_status_report": "**Laufender Modus:** {mode}\n\n**Zustand:** {status}\n\n**Wirksamer Morgenfaktor:** {effective_factor}\n\n**Kandidatenfaktor:** {candidate_factor}\n\n**Lerntage:** {training_days} / 30 · **Prüftage:** {validation_days} / 14",
+    "morning_metrics_report": "**Morgenenergie-MAE (kWh):** {raw_morning_mae_kwh} / {baseline_morning_mae_kwh} / {candidate_morning_mae_kwh}\n\n**Anstiegszeit-MAE (Minuten):** {raw_rise_mae_minutes} / {baseline_rise_mae_minutes} / {candidate_rise_mae_minutes}\n\n**Tagesenergie-MAE (kWh):** {raw_day_mae_kwh} / {baseline_day_mae_kwh} / {candidate_day_mae_kwh}\n\n**Rate fälschlich vorhergesagter Anstiege:** {raw_false_rise_rate} / {baseline_false_rise_rate} / {candidate_false_rise_rate}\n\n**P90 zu früher Anstiegsfehler (Minuten):** {raw_early_p90_minutes} / {baseline_early_p90_minutes} / {candidate_early_p90_minutes}",
+    "morning_reasons": "**Gründe:** {reasons}",
+    "morning_exclusions": "**Datenbasis und Ausschlüsse:** {exclusions}",
+    "morning_status_unknown": "Weitere geeignete Daten erforderlich",
+    "morning_status_off": "Ausgeschaltet",
+    "morning_status_disabled": "Ausgeschaltet",
+    "morning_status_collecting": "Geeignete Morgenfälle werden gesammelt",
+    "morning_status_learning": "Geeignete Morgenfälle werden gesammelt",
+    "morning_status_testing": "Ein fester Kandidat wird an späteren Morgenfällen geprüft",
+    "morning_status_validating": "Ein fester Kandidat wird an späteren Morgenfällen geprüft",
+    "morning_status_approved": "Eigenständige Morgenprüfung bestanden",
+    "morning_status_active": "Geprüfter Morgenfaktor wird angewendet",
+    "morning_status_rejected": "Kein ausreichender zusätzlicher Nutzen belegt",
+    "morning_status_expired": "Prüfnachweis ist abgelaufen",
+    "morning_status_invalidated": "Geänderte Daten haben die bisherige Morgenfreigabe aufgehoben",
+    "morning_status_blocked": "Voraussetzungen derzeit nicht erfüllt",
+    "morning_status_prerequisites_missing": "Voraussetzungen derzeit nicht erfüllt",
+    "morning_status_storage_unavailable": "Morgenarchiv derzeit nicht verfügbar",
+    "morning_reason_unknown": "Weitere dokumentierte Voraussetzung nicht erfüllt",
+    "morning_reason_history_disabled": "Das Prognosearchiv ist nicht aktiviert",
+    "morning_reason_no_energy_sources": "Keine bestätigte AC-PV-Energiequelle zugeordnet",
+    "morning_reason_no_measurement_sources": "Keine bestätigte AC-PV-Energiequelle zugeordnet",
+    "morning_reason_insufficient_training_days": "Noch keine 30 geeigneten Morgen-Lerntage vorhanden",
+    "morning_reason_insufficient_validation_days": "Noch keine 14 späteren Morgen-Prüftage vorhanden",
+    "morning_reason_measurement_incomplete": "Die Messung deckt das Vergleichsfenster nicht vollständig ab",
+    "morning_reason_measurements_incomplete": "Die Messung deckt das Vergleichsfenster nicht vollständig ab",
+    "morning_reason_measurement_resolution": "Die Messintervalle sind für den Anstiegsnachweis zu grob",
+    "morning_reason_sunrise_missing": "Für diesen Tag ist kein Sonnenaufgang bestimmt",
+    "morning_reason_forecast_missing": "Ein rechtzeitig beobachtetes vollständiges Vorabendprofil fehlt",
+    "morning_reason_candidate_forecast_missing": "Ein rechtzeitig eingefrorenes Kandidatenprofil fehlt",
+    "morning_reason_configuration_changed": "Die physische Anlagenkonfiguration wurde geändert",
+    "morning_reason_measurement_boundary_changed": "Die bestätigte Messgrenze wurde geändert",
+    "morning_reason_assessment_changed": "Ein verwendeter Messnachweis wurde korrigiert",
+    "morning_reason_evidence_changed": "Ein verwendeter Lern- oder Prüfnachweis wurde geändert",
+    "morning_reason_measurement_source_deleted": "Benötigte Messbelege wurden gelöscht",
+    "morning_reason_curtailment": "Der Tag ist als bekannte Abregelung markiert",
+    "morning_reason_maintenance": "Der Tag ist als Wartung markiert",
+    "morning_reason_known_curtailment": "Der Tag ist als bekannte Abregelung oder Wartung markiert",
+    "morning_reason_weather_quality": "Die Prognoseeingaben sind nicht ausreichend belegt",
+    "morning_reason_insufficient_improvement": "Die Morgenenergie-MAE-Verbesserung erreicht nicht 5 Prozent",
+    "morning_reason_rise_timing_worsened": "Die Anstiegszeitfehler überschreiten die zulässige Grenze",
+    "morning_reason_false_rise_worsened": "Der Kandidat sagt häufiger einen unbelegten Anstieg vorher",
+    "morning_reason_early_rise_worsened": "Zu frühe Anstiegsfehler haben sich verschlechtert",
+    "morning_reason_daily_energy_worsened": "Die Tagesenergiefehler überschreiten die zulässige Grenze",
+    "morning_reason_baseline_mae_zero": "Die bisher wirksame Prognose hat keinen Morgenenergie-MAE-Fehler",
+    "morning_reason_timing_unavailable": "Die Anstiegszeitmetrik ist nicht ausreichend belegbar",
+    "morning_reason_validation_expired": "Der Prüfzeitraum ist ohne ausreichenden Nachweis abgelaufen",
+    "morning_reason_storage_unavailable": "Der lokale Archivspeicher ist nicht lesbar",
+    "morning_reason_prerequisites_missing": "Archiv oder bestätigte AC-PV-Energiequelle fehlt",
+    "morning_cases_report": "**Vergleichstage:** {sample_days} · **Anstieg in Messung und allen Varianten belegt:** {paired_rise_days}\n\n**Fälschlich vorhergesagte Anstiege:** {raw_false_rises} / {baseline_false_rises} / {candidate_false_rises}\n\n**Verpasste beobachtete Anstiege:** {raw_missed_rises} / {baseline_missed_rises} / {candidate_missed_rises}\n\n**Kein Anstieg auf beiden Seiten:** {raw_neither_rises} / {baseline_neither_rises} / {candidate_neither_rises}",
+    "morning_retention_truncated": "**Aufbewahrungsgrenze:** Ältere Morgenbelege wurden gekürzt. Fehlende Belege ersetzen keinen Prüfnachweis.",
+    "morning_reason_insufficient_morning_improvement": "Die Morgenenergie-Verbesserung erreicht nicht 5 Prozent oder der bisherige MAE ist null",
+    "morning_reason_rise_mae_minutes_worse": "Die Anstiegszeitfehler überschreiten die zulässige Grenze",
+    "morning_reason_day_mae_kwh_worse": "Die Tagesenergiefehler überschreiten die zulässige Grenze",
+    "morning_reason_false_rise_rate_worse": "Der Kandidat sagt häufiger einen tatsächlich ausgebliebenen Anstieg vorher",
+    "morning_reason_early_p90_minutes_worse": "Zu frühe Anstiegsfehler haben sich verschlechtert",
+    "morning_reason_rise_metric_unavailable": "Kein gemeinsamer Anstieg in Messung und allen drei Prognosevarianten belegt",
+    "morning_reason_daily_measurement_unavailable": "Ein vollständig belegter Tagesmesswert ohne manuelle Korrektur fehlt",
+    "morning_reason_source_identity_changed": "Die bestätigte Quellenidentität wurde geändert",
+    "morning_reason_measurement_corrected": "Ein verwendeter Messnachweis wurde korrigiert",
+    "morning_reason_measurements_missing": "Die benötigten Morgenmessungen fehlen",
+    "morning_reason_morning_coverage_missing": "Der Morgenkern ist nicht vollständig und ausreichend genau belegt",
+    "morning_reason_measurement_resolution_too_coarse": "Die Messintervalle sind für den Anstiegsnachweis zu grob",
+    "morning_reason_measurement_segment_changed": "Das Morgenfenster überlappt einen Messsegmentwechsel",
+    "morning_reason_future_evidence": "Der gespeicherte Nachweis liegt aus Sicht der aktuellen Uhr noch in der Zukunft."
   },
   "issues": {
     "dashboard_update": {

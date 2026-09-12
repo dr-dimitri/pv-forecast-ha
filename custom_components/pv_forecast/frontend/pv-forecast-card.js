@@ -558,14 +558,15 @@ export function currentExplanation(state) {
 }
 
 const explanationLabels = {
-  before_calibration_kwh: "Basis vor Selbstkalibrierung",
-  calibration_delta_kwh: "+ Beitrag des angewendeten Faktors",
+  before_calibration_kwh: "Basis vor Kalibrierung",
+  morning_delta_kwh: "+ Beitrag des geprüften Morgenfaktors",
+  calibration_delta_kwh: "+ Beitrag des globalen Anlagenfaktors",
   group_clipping_kwh: "− Kürzung durch AC-Gruppen",
   total_clipping_kwh: "− Zusätzliche Kürzung durch Anlagenlimit",
   effective_kwh: "= Wirksame AC-Prognose",
 };
 function renderBalance(values) {
-  return `<dl class="interval-values">${Object.entries(explanationLabels).map(([key,label]) => `<div><dt>${label}</dt><dd>${energyText(values[key])} kWh</dd></div>`).join("")}</dl>`;
+  return `<dl class="interval-values">${Object.entries(explanationLabels).filter(([key]) => key !== "morning_delta_kwh" || finite(values[key])).map(([key,label]) => `<div><dt>${label}</dt><dd>${energyText(values[key])} kWh</dd></div>`).join("")}</dl>`;
 }
 
 export function renderExplanation(state, selectedKey = null) {

@@ -36,6 +36,20 @@ test("Erklärung bleibt derselben Tagesgeneration zugeordnet, heutige Messbasis 
   assert.equal(currentExplanation(state),null);
 });
 
+test("Morgenbeitrag steht vor globaler Kalibrierung und verändert keine Grafikwerte",async()=>{
+  const {state}=await load({include_explanation:true});
+  const data=state.forecast.envelope.explanation;
+  const original=renderContent(config,state);
+  assert.doesNotMatch(original,/Beitrag des geprüften Morgenfaktors/);
+  const chart=original.match(/<svg id="interval-chart"[\s\S]*?<\/svg>/)[0];
+  data.morning_factor=0.8;
+  data.totals.morning_delta_kwh=-1.25;
+  const html=renderContent(config,state);
+  assert.match(html,/Beitrag des geprüften Morgenfaktors<\/dt><dd>-1[,.]25 kWh/);
+  assert.ok(html.indexOf("Beitrag des geprüften Morgenfaktors") < html.indexOf("Beitrag des globalen Anlagenfaktors"));
+  assert.equal(html.match(/<svg id="interval-chart"[\s\S]*?<\/svg>/)[0],chart);
+});
+
 test("Mehrere Karten teilen identische Erklärung einschließlich Tag",async()=>{
   const cache=new SharedReadCache(),calls=[],hass=fixtureHass("sunny",{calls});
   const active={...config,include_explanation:true};
