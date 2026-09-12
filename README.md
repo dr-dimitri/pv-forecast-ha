@@ -510,10 +510,12 @@ das Backend sie nur einmal abruft ([bekannte Grenze #52](https://github.com/dr-d
 Die Energy-Anbindung liest dieselben geclippten Gesamtintervalle wie die
 Tagessensoren. Sie rechnet kWh in Wh um und erhält lokale Tagesanteile sowie
 eindeutige UTC-Zeitpunkte. Es entstehen keine zusätzlichen Wetterabrufe oder
-Entities. Nach einem Abruffehler, während des Entladens oder solange die beiden
+Entities. Bei fehlendem, zukünftigem oder mehr als 60 Minuten altem Abrufzeitpunkt,
+nach einem Abruffehler, während des Entladens oder solange die beiden
 aktuellen lokalen Tage nicht vollständig abgedeckt sind, wird keine Kurve
 geliefert. Das native Format kann ältere oder unvollständige Daten nicht als
 solche kennzeichnen. Die Leseaktion bietet weiterhin die beschriebenen Metadaten.
+Ein noch frischer Stand darf auch nach lokaler Mitternacht verwendet werden.
 
 Bei der Herbst-Zeitumstellung und in Teilstundenzeitzonen kann das native
 HA-Frontend verschiedene Prognoseintervalle in einem Stundenpunkt zusammenfassen.

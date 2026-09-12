@@ -70,8 +70,9 @@ Der native, rein lesende Integrationsadapter `energy.py` stellt über
 `async_get_solar_forecast` die gemeinsame Gesamtzeitreihe als `wh_hours` bereit.
 UTC-Intervallbeginne bleiben eindeutig; kWh werden genau einmal in Wh umgerechnet.
 Innere lokale Tagesgrenzen innerhalb eines Intervalls werden proportional geteilt.
-Ohne einen erfolgreichen, vollständigen Stand für die beiden aktuellen lokalen
-Tage gibt der Adapter keine Prognose aus, da der native Vertrag weder Alter noch
+Ohne einen erfolgreichen, höchstens 60 Minuten alten Abruf mit vorhandenem,
+nicht zukünftigem Abrufzeitpunkt und vollständiger Abdeckung der beiden aktuellen
+lokalen Tage gibt der Adapter keine Prognose aus (#171), da der native Vertrag weder Alter noch
 Fehler oder Abdeckung kenntlich machen kann. Es entstehen keine zusätzlichen
 Entities, Abrufe, Konfigurationsfelder oder Statistikklassen.
 
