@@ -733,7 +733,8 @@
           "inverter_groups": "AC-Wechselrichtergruppen zuordnen",
           "horizon_profile": "Horizontprofil je Dach (experimentell)",
           "init": "Zurück zur Übersicht",
-          "forecast_cache": "Letzte Prognose speichern"
+          "forecast_cache": "Letzte Prognose speichern",
+          "morning": "Morgenprognose prüfen und verbessern (optional)"
         }
       },
       "forecast_cache": {
@@ -777,6 +778,35 @@
       "daily_correction_saved": {
         "title": "Tagesertrag gespeichert",
         "description": "Der bestätigte Tageswert bzw. die Rücknahme wurde gespeichert. Tagesauswertungen verwenden den maßgeblichen Wert; abhängige Kalibrierungsnachweise wurden erneut geprüft. Eine bereits geöffnete historische Kartenansicht kannst du mit „Aktualisieren“ neu laden."
+      },
+      "morning": {
+        "title": "Morgenprognose",
+        "description": "Ein zeitlich richtiger PV-Anstieg hilft bei der Nachtplanung. Eine passende Tagesmenge allein genügt dafür nicht. Diese Funktion beobachtet zunächst echte AC-Erzeugungsmessungen; Hausverbrauch wird daraus nicht abgeleitet.",
+        "menu_options": {
+          "morning_settings": "Modus und AC-Schwelle",
+          "morning_status": "Lern- und Prüfstatus",
+          "morning_reset": "Morgenbelege zurücksetzen",
+          "advanced_options": "Zurück"
+        }
+      },
+      "morning_settings": {
+        "title": "Morgenprognose einstellen",
+        "description": "Standard ist Aus. Beobachten benötigt ein aktiviertes Archiv und bestätigte AC-Energiequellen. Automatik verändert die gemeinsame Prognose erst nach mindestens 30 Lerntagen und 14 späteren Prüftagen. Die gewählte AC-Schwelle gilt für 60 Minuten Intervallmittel innerhalb der ersten vier Stunden nach Sonnenaufgang; sie ist keine Hauslast und kein kontinuierliches Leistungsversprechen. Eine andere Schwelle beginnt einen neuen Nachweis.",
+        "data": {
+          "morning_mode": "Modus",
+          "morning_threshold_kw": "AC-Leistungsschwelle"
+        }
+      },
+      "morning_status": {
+        "title": "Morgenvergleich: aktueller Nachweis",
+        "description": "**Zustand:** {status}\n\n**Korrektur angewendet:** {applied}\n\n**Lerntage:** {training} / 30 · **Spätere Prüftage:** {validation} / 14\n\n**Anstiegszeit-MAE:** bisher {baseline_time} min · Kandidat {candidate_time} min\n\n**Morgenenergie-MAE:** bisher {baseline_energy} kWh · Kandidat {candidate_energy} kWh\n\n**Fälschlich vorhergesagte Anstiege:** {false_rise} · **Verpasste Anstiege:** {missing_rise}\n\nFehlende Messung ist kein Nullertrag. Die Zahlen vergleichen dieselben späteren Morgen. Die Rohdatenauflösung und vollständige Zeitgrenzen begrenzen den Nachweis. Keine Aussage über Hausversorgung oder eine gesicherte Bandbreite für kurze Fenster."
+      },
+      "morning_reset": {
+        "title": "Morgenbelege zurücksetzen",
+        "description": "Der Morgenkandidat und seine Belege werden gelöscht. Die Morgenkorrektur endet sofort. Das übrige Prognosearchiv und eine unabhängig gültige globale Selbstkalibrierung bleiben erhalten. Neue Morgenbelege beginnen ab jetzt.",
+        "data": {
+          "confirm": "Morgenvergleich bewusst zurücksetzen"
+        }
       }
     },
     "error": {
@@ -866,6 +896,13 @@
         "total": "Fortlaufender Energiezähler",
         "daily": "Täglich zurückgesetzter Energiezähler",
         "power": "Momentane Leistung (keine Energieintegration)"
+      }
+    },
+    "morning_mode": {
+      "options": {
+        "off": "Aus",
+        "observe": "Beobachten – Prognose unverändert",
+        "auto": "Nach erfolgreicher Prüfung automatisch anwenden"
       }
     }
   },
@@ -1128,7 +1165,21 @@
     "health_severity_info": "Information",
     "health_severity_warning": "Hinweis",
     "health_severity_error": "Fehler",
-    "daily_correction_missing": "Kein bestätigter Wert vorhanden"
+    "daily_correction_missing": "Kein bestätigter Wert vorhanden",
+    "morning_status_unknown": "Noch kein prüfbarer Zustand",
+    "morning_status_off": "Ausgeschaltet",
+    "morning_status_insufficient_training": "Noch keine 30 geeigneten Morgen vorhanden",
+    "morning_status_validating": "Fester Kandidat wird an späteren Morgen geprüft",
+    "morning_status_approved": "Nutzenprüfung bestanden",
+    "morning_status_rejected": "Kein ausreichender Zusatznutzen belegt",
+    "morning_status_evidence_changed": "Geänderter Nachweis hat die Freigabe aufgehoben",
+    "morning_status_no_training_benefit": "Kein geeigneter Kandidat aus den Lerndaten",
+    "morning_status_storage_unavailable": "Morgenspeicher nicht verfügbar; keine Korrektur",
+    "morning_status_prerequisites_missing": "Archiv oder belastbare AC-Messquelle fehlt",
+    "morning_status_learning_paused": "Lernen wegen eines bestehenden Anlagenhinweises pausiert",
+    "morning_status_expired": "Prüffrist ohne ausreichenden Nachweis abgelaufen",
+    "morning_yes": "Ja",
+    "morning_no": "Nein"
   },
   "issues": {
     "dashboard_update": {

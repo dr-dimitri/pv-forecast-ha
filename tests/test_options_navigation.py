@@ -43,6 +43,7 @@ async def test_four_native_groups_and_return_preserve_options(hass):
             {
                 "history",
                 "calibration",
+                "morning",
                 "forecast_horizon",
                 "forecast_cache",
                 "inverter_groups",

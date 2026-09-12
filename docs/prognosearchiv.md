@@ -323,3 +323,15 @@ Die Auswahl liest nur das bestehende Archiv unter denselben Quellenrechten.
 Sie bewirkt keine Speicherung, Messbewertung, Wetter-/Recorderabfrage oder
 Verlängerung der Aufbewahrung. Auswahl und bewusstes Aktualisieren teilen
 identische Anfragen zwischen Karten; es gibt keine neue Pollingschleife.
+
+
+## Archiv-Store 8: geprüfte Morgenwirkung
+
+Die optionale [Morgenprüfung](morgenprognose.md) ergänzt bei tatsächlich neu
+beobachteter Anwendung einen versionierten `morning`-Block mit Kandidaten-ID,
+Methode und wirksamer AC-Energie des jeweiligen Zielintervalls. Rohbasis und
+separater globaler Kalibrierungsvergleich bleiben erhalten. Die historische
+wirksame Kurve verwendet diesen tatsächlich beobachteten Stand. Versionen 1–7
+migrieren ohne rückwirkende Morgenkandidaten; die bestehenden Größen- und
+Aufbewahrungsgrenzen ändern sich nicht. Erfahrungsbänder für bisherige Varianten
+werden nicht als Nachweis dieser neuen Methode ausgegeben.

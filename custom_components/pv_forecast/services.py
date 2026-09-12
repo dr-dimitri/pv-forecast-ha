@@ -111,6 +111,9 @@ def async_setup_services(hass: HomeAssistant) -> None:
             coordinator.last_update_success_time,
             coordinator.last_update_success,
         )
+        morning = getattr(entry.runtime_data, "morning", None)
+        if morning is not None:
+            result["morning"] = morning.snapshot(public=True)
         result["origin"] = coordinator.origin
         result["restored_at"] = (
             coordinator.restored_at.isoformat() if coordinator.restored_at else None

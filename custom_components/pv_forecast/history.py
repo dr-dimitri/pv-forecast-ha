@@ -276,6 +276,7 @@ class ArchiveRecord:
     short_term: dict[str, Any] | None = None
     temperature_comparison: dict[str, Any] | None = None
     measured_assessment: Assessment | None = None
+    morning: dict[str, Any] | None = None
 
     @property
     def config_fingerprint(self) -> str:
@@ -284,6 +285,8 @@ class ArchiveRecord:
     @property
     def effective_energy_kwh(self) -> float:
         """Den tatsächlich wirksamen, am Stichtag beobachteten Stand verwenden."""
+        if self.morning is not None:
+            return self.morning["energy_kwh"]
         if self.calibrated_energy_kwh is not None:
             return self.calibrated_energy_kwh
         return self.raw_energy_kwh
@@ -307,6 +310,7 @@ class ArchiveRecord:
             ],
             "raw_energy_kwh": self.raw_energy_kwh,
             "calibrated_energy_kwh": self.calibrated_energy_kwh,
+            **({"morning": self.morning} if self.morning is not None else {}),
             "basis": self.basis.to_dict() if self.basis else None,
             "applied_factor": self.applied_factor,
             "applied_candidate_id": self.applied_candidate_id,
@@ -403,6 +407,8 @@ class HistoryArchive:
         excluded_dates: set[date] | None = None,
         temperature_forecast: ForecastResult | None = None,
         temperature_mountings: dict[str, str] | None = None,
+        morning_forecast: ForecastResult | None = None,
+        morning_candidate_id: str | None = None,
     ) -> bool:
         """Nur vorab definierte und rechtzeitig beobachtete Stände auswählen."""
         fetched_at, observed_at = _utc(fetched_at), _utc(observed_at)
@@ -508,6 +514,8 @@ class HistoryArchive:
                     excluded_dates,
                     temperature_forecast,
                     temperature_mountings,
+                    morning_forecast,
+                    morning_candidate_id,
                 )
         for interval in intervals:
             start, end = _utc(interval.start), _utc(interval.end)
@@ -546,6 +554,8 @@ class HistoryArchive:
                     excluded_dates,
                     temperature_forecast,
                     temperature_mountings,
+                    morning_forecast,
+                    morning_candidate_id,
                 )
         return changed
 
@@ -574,6 +584,8 @@ class HistoryArchive:
         excluded_dates: set[date],
         temperature_forecast: ForecastResult | None,
         temperature_mountings: dict[str, str] | None,
+        morning_forecast: ForecastResult | None,
+        morning_candidate_id: str | None,
     ) -> bool:
         if not cutoff - max_age <= fetched_at <= observed_at <= cutoff:
             return False
@@ -617,6 +629,20 @@ class HistoryArchive:
             candidate_id=trial_candidate_id if candidate is not None else None,
             candidate_energy_kwh=candidate,
         )
+        if morning_forecast is not None and morning_candidate_id is not None:
+            effective_energy, effective_flags = _forecast_window(
+                morning_forecast.total_intervals, start, end
+            )
+            if effective_energy is not None and not effective_flags:
+                record = replace(
+                    record,
+                    morning={
+                        "schema_version": 1,
+                        "method": "morning_redistribution_v1",
+                        "candidate_id": _candidate_id(morning_candidate_id),
+                        "energy_kwh": effective_energy,
+                    },
+                )
         if short_term_enabled and horizon in (
             "hourly_1h",
             "hourly_3h",
@@ -662,6 +688,7 @@ class HistoryArchive:
                     "candidate_energy_kwh",
                     "short_term",
                     "temperature_comparison",
+                    "morning",
                 )
             ):
                 return False
@@ -678,6 +705,7 @@ class HistoryArchive:
                 candidate_energy_kwh=record.candidate_energy_kwh,
                 short_term=record.short_term,
                 temperature_comparison=record.temperature_comparison,
+                morning=record.morning,
             )
         self.records[record_id] = record
         return True
@@ -1609,4 +1637,24 @@ def _record_from_dict(data: Mapping[str, Any], timezone: ZoneInfo) -> ArchiveRec
         short_term=validate_trial(data.get("short_term")),
         temperature_comparison=validate_comparison(data.get("temperature_comparison")),
         measured_assessment=measured,
+        morning=_morning_from_dict(data.get("morning")),
     )
+
+
+def _morning_from_dict(data: Any) -> dict[str, Any] | None:
+    """Alte Archive bleiben unverändert; neue Wirkung braucht ihre echte Identität."""
+    if data is None:
+        return None
+    if (
+        not isinstance(data, dict)
+        or type(data.get("schema_version")) is not int
+        or data["schema_version"] != 1
+        or data.get("method") != "morning_redistribution_v1"
+    ):
+        raise ValueError("Unbekannter Morgenvergleich")
+    return {
+        "schema_version": 1,
+        "method": data["method"],
+        "candidate_id": _candidate_id(data["candidate_id"]),
+        "energy_kwh": _energy(data["energy_kwh"]),
+    }
