@@ -27,6 +27,7 @@ from .history import MODEL_VERSION
 from .history_runtime import STORAGE_VERSION as HISTORY_STORAGE_VERSION
 from .measurement_runtime import STORAGE_VERSION as MEASUREMENT_STORAGE_VERSION
 from .models import ForecastResult
+from .morning_runtime import STORAGE_VERSION as MORNING_STORAGE_VERSION
 
 if TYPE_CHECKING:
     from . import PvForecastConfigEntry
@@ -137,6 +138,7 @@ async def async_get_config_entry_diagnostics(
             "measurements": MEASUREMENT_STORAGE_VERSION,
             "history": HISTORY_STORAGE_VERSION,
             "calibration": CALIBRATION_STORAGE_VERSION,
+            "morning": MORNING_STORAGE_VERSION,
         },
         "calibration_rule_version": RULE_VERSION,
         "entry_state": entry.state.value,

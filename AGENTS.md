@@ -70,8 +70,9 @@ Der native, rein lesende Integrationsadapter `energy.py` stellt über
 `async_get_solar_forecast` die gemeinsame Gesamtzeitreihe als `wh_hours` bereit.
 UTC-Intervallbeginne bleiben eindeutig; kWh werden genau einmal in Wh umgerechnet.
 Innere lokale Tagesgrenzen innerhalb eines Intervalls werden proportional geteilt.
-Ohne einen erfolgreichen, vollständigen Stand für die beiden aktuellen lokalen
-Tage gibt der Adapter keine Prognose aus, da der native Vertrag weder Alter noch
+Ohne einen erfolgreichen, höchstens 60 Minuten alten Abruf mit vorhandenem,
+nicht zukünftigem Abrufzeitpunkt und vollständiger Abdeckung der beiden aktuellen
+lokalen Tage gibt der Adapter keine Prognose aus (#171), da der native Vertrag weder Alter noch
 Fehler oder Abdeckung kenntlich machen kann. Es entstehen keine zusätzlichen
 Entities, Abrufe, Konfigurationsfelder oder Statistikklassen.
 
@@ -691,16 +692,32 @@ Auf ausdrücklichen Anwenderwunsch bleibt die Tagesaussicht bei fehlenden oder u
 
 Die Karte zeigt die verfügbare Tagessumme und erklärt knapp, welche Anteile geschätzt sind. Ein älterer oder mit Eingabefallbacks berechneter vorhandener Prognosestand bleibt mit entsprechendem Hinweis sichtbar. Wenn auch die benötigte Prognoseabdeckung fehlt, werden keine Zahlen erfunden. Die bisherigen strengen `outlook`-Felder, Mess-, Archiv-, Lern-, Energy- und operativen Planungsregeln bleiben erhalten. Keine neuen Aktionen, Stores, Einstellungen, Wetter-/Geräteabrufe oder Browserberechnungen; Config-Entry-Schema 1.1 bleibt bestehen. Diese Entscheidung ersetzt die entgegenstehenden Anzeigevorgaben der bisherigen Tagesaussicht.
 
-## Beauftragter Umsetzungsschnitt zu #171 und #172 vom 12.09.2026
 
-Der Anwender hat die beiden offenen Issues zur Implementierung beauftragt. Energy übernimmt aus #171 die empfohlene gemeinsame Altersgrenze: ausschließlich erfolgreiche, vorhandene, nicht zukünftige und höchstens 60 Minuten alte Abrufe mit vollständiger Abdeckung für heute/morgen. Ein frischer Stand darf weiter über seinen Ankertag hinaus verwendet werden; keine zusätzliche Aktualisierung und keine neue Option.
+## Morgenform und eigener Zeitnachweis aus #172
 
-Der optionale Morgenvergleich aus #172 erhält aus (Standard), beobachten und nach eigener Freigabe automatisch anwenden. Voraussetzung sind Archiv und bestätigte AC-Energiequellen. Regel 1 legt vor Auswertung fest: geometrischer Sonnenaufgang nach vorhandener NOAA-Näherung bis vier absolute Stunden danach, feste Schwelle 0,5 kW über mindestens 60 Minuten nach derselben Intervallmittelregel auf Prognose- und Messseite. Gemeinsame originale Zählergrenzen aller Quellen müssen höchstens 15 Minuten auseinanderliegen; der bewertete Kern liegt vollständig im Morgenfenster, mit höchstens 15 Minuten unbekanntem Rand je Seite. Positive Differenzen werden nicht geteilt. Intervallmittel belegen keine kontinuierliche Mindestleistung. Tageskorrekturen ersetzen keine Morgenform.
+Die ausdrücklich beauftragte optionale Morgenprüfung ergänzt Aus (Standard),
+Beobachten und nach erfolgreicher eigener Prüfung automatische Anwendung.
+`morning.py` enthält die reine, begrenzte Energieumverteilung innerhalb der
+vier Stunden nach standortbezogenem Sonnenaufgang und die festgelegte 30/14-
+Prüfung; `morning_runtime.py` verbindet rechtzeitige Vorabend-Archivstände mit
+bestätigten, höchstens 15 Minuten aufgelösten AC-Zählerdifferenzen. Tagesmengen
+sind keine Zeitbelege, positive Deltas werden nicht geteilt. Vollständige
+60-Minuten-Intervallmittel sind kein kontinuierliches Leistungsversprechen.
 
-Genau eine Kandidatenfamilie verwendet einen Morgenfaktor von 0,8 bis 1,2 in Schritten von 0,01 auf die ursprüngliche DC-Basis im Morgenfenster, danach den unabhängig gültigen globalen Faktor und die vorhandenen Gruppen-/Anlagenlimits. Die Anwendung bleibt auf heute und morgen begrenzt; spätere Tendenztage erhalten keine ungeprüfte Morgenkorrektur. Außerhalb des Fensters bleibt Faktor 1. Primäre Zielmetrik ist der Morgenenergie-MAE auf demselben belegten Kern. 30 gültige Morgen innerhalb von 60 Tagen bestimmen den festen Kandidaten; 14 erst danach rechtzeitig eingefrorene Fälle innerhalb von 28 Tagen prüfen ihn gegen die damals wirksame Baseline ohne Morgenkorrektur. Mindestens 5 Prozent Verbesserung bei positiver Baseline, keine höhere Falschanstiegsrate oder P90 zu früher Anstiege sowie höchstens 5 Prozent höherer Anstiegszeit- und Tagesenergie-MAE sind nötig; eine Nullfehler-Nebenbaseline erlaubt keinen Zusatzfehler. Einseitig fehlender Anstieg erhält vorab 240 Minuten Zeitfehler, beidseitiges Ausbleiben null; ohne gemeinsam belegten Anstieg gibt es keine Zeitfreigabe. Fehlende Messung bleibt ausgeschlossen und sichtbar.
+Die primäre Metrik bleibt Anstiegszeit-MAE. Der Kandidat wird vor seinen späteren
+Prüffällen festgehalten; Fehler-/Ausfallmetriken und Morgen-/Tagesenergie begrenzen
+die Freigabe. Keine zweite globale Kalibrierung und keine Hauslastannahmen.
+Wirksame Dach-/Gesamtwerte entstehen vor den bisherigen AC-Grenzen aus derselben
+Rohbasis; Heute/Morgen bleiben vom weiter entfernten Horizont getrennt.
+Messkorrektur, Quellen-/Konfigurations-/Schwellen-/Globalfaktorwechsel, fehlender
+aktueller Prüfnachweis und bestehende Lernpausen entziehen die Morgenwirkung.
 
-Vollständige Morgen-/Tages-DC-Profile werden ausschließlich tatsächlich beobachtet bis 18 Uhr am Vortag bei höchstens zwei Stunden Alter eingefroren. Stundenarchive werden nicht zu Vorabendprofilen zusammengesetzt. Abruf, Beobachtung, Stichtag, UTC-Zielgrenzen und HA-Messmeldezeit bleiben getrennt; Wetterausgabe und verifizierter Gerätezeitpunkt bleiben unbekannt. Der bestehende Archiv-Store 8 migriert Versionen 1–7 ohne erfundene Profile. Das eingebettete Morgenarchiv hält höchstens 96 Tage/96 Tagesprofile, je 50 DC-Intervalle und 500 gemeinsame Messintervalle, 30 Trainings- und 28 Prüfbelege, zusätzlich höchstens 2 MiB innerhalb der bestehenden 32 MiB. Keine neuen Stores oder Schreibtermine.
-
-Die Freigabe wird mit den jüngsten 14 Fällen in 28 Tagen fortgeführt. Veralteter Nachweis, Quellen-/Konfigurationswechsel, relevante Messkorrekturen und gelöschte Belege entziehen sie; ein neuer Versuch beginnt frühestens nach 14 Tagen. Rücksetzen beginnt ab jetzt ein neues Segment. Aus und Beobachten verändern keine Prognose. Reine Modus- und Faktorwechsel bleiben lokal ohne Wetterabruf. Eine separat weiter gültige globale Kalibrierung bleibt beim Rückfall erhalten.
-
-Die vorhandene Forecast-Aktion ergänzt versionierte Methodik-/Anwendungsmetadaten und optional ausführliche Vergleichsdaten mit Quellenrechten; get_history verwendet seine bisherigen Rechte. Die gemeinsame wirksame Zeitreihe bleibt Grundlage für Sensoren, Energy, Karte und Archiv; wirksame Morgenkorrekturen werden im Archiv ausdrücklich kenntlich gemacht. Bestehende Erfahrungsbänder und der andere kurzfristige Versuch erhalten daraus keine ungeprüfte neue Methode. Keine SAX-spezifische API, zusätzlichen Sensoren oder Aktionen, keine weiteren Wetter- oder Geräteabrufe. Schema 1.1 bleibt bestehen. Unsicherheit für konkrete Morgen-/60-Minuten-Fenster und reale Güte bleiben ohne passenden Nachweis nicht verfügbar; Haushaltsversorgung wird nicht aus PV-Erzeugung abgeleitet.
+`get_forecast.morning` und das quellenberechtigte `get_history.morning` sind
+additiv versioniert. Kandidaten und operative Serie bleiben getrennt. Keine
+Übertragung bisheriger Tages-/Stundenbänder. Ein eigener atomarer Store Version 1
+hält höchstens 90 Tagesreferenzen, je 96 Messabschnitte und 2 MiB; reguläre
+Schreibungen folgen festen Fünfminutenterminen. Archiv-Store 8 bewahrt die echte
+neu erfasste Morgenwirkung; Versionen 1–7 erhalten keine erfundenen Belege.
+Löschung/Entladen beenden abhängige Erfassung. Config Entry bleibt 1.1.
+Keine zusätzlichen Sensoren, Aktionen, Wetter-/Geräte-/Recorderabrufe.
+Details, feste Regeln und Grenzen: `docs/morgenprognose.md`.

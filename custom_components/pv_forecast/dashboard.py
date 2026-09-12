@@ -66,7 +66,7 @@ class DashboardManager:
             {
                 key: value
                 for key, value in entry.options.items()
-                if key not in DASHBOARD_OPTIONS | {"morning_mode"}
+                if key not in DASHBOARD_OPTIONS
             }
         )
         self._lock = asyncio.Lock()
@@ -82,7 +82,7 @@ class DashboardManager:
         ) and self._original_options == {
             key: value
             for key, value in self.entry.options.items()
-            if key not in DASHBOARD_OPTIONS | {"morning_mode"}
+            if key not in DASHBOARD_OPTIONS
         }
 
     def display_options_changed(self) -> bool:

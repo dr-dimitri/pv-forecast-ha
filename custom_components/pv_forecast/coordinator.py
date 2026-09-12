@@ -24,6 +24,7 @@ from .api import OpenMeteoClient, OpenMeteoError, OpenMeteoRetryError
 from .calculations import (
     InvalidConfigurationError,
     aggregate_energy_for_day,
+    apply_calibration,
     calculate_forecast,
     calculate_planning_values,
 )
@@ -40,7 +41,7 @@ from .explanation import ExplanationSnapshot, build_explanation
 from .forecast_intervals import window_energy
 from .horizon import forecast_days_from_options
 from .models import ForecastDay, ForecastResult, PlanningValues
-from .morning import apply_morning, morning_window
+from .morning import apply_morning
 from .temperature_comparison import COEFFICIENTS, mountings_from_options
 
 if TYPE_CHECKING:
@@ -81,33 +82,11 @@ class PvForecastCoordinator(TimestampDataUpdateCoordinator[ForecastResult]):
         self.forecast_cache: ForecastCacheManager | None = None
         self.temperature_data: ForecastResult | None = None
         self.temperature_mountings: dict[str, str] | None = None
+        self.morning_applied = False
+        self.morning_coefficient = 0.0
+        self.morning_candidate_id: str | None = None
         self.calibration_factor = 1.0
         self.calibration_candidate_id: str | None = None
-        self.morning_factor = 1.0
-        self.morning_candidate_id: str | None = None
-
-    def _effective_forecast(self, forecast: ForecastResult) -> ForecastResult:
-        """Beide freigegebenen Faktoren einmal auf die DC-Basis anwenden."""
-        return apply_morning(
-            forecast,
-            self.morning_factor,
-            self.calibration_factor,
-            self._entry.options.get(CONF_INVERTER_MAX_POWER_KW),
-            ZoneInfo(str(self._entry.data[CONF_TIME_ZONE])),
-            float(self._entry.data[CONF_LATITUDE]),
-            float(self._entry.data[CONF_LONGITUDE]),
-        )
-
-    @callback
-    def async_set_morning(self, factor: float, candidate_id: str | None) -> None:
-        """Eine eigenständige Morgenfreigabe lokal übernehmen oder zurücknehmen."""
-        if (factor, candidate_id) == (self.morning_factor, self.morning_candidate_id):
-            return
-        self.morning_factor, self.morning_candidate_id = factor, candidate_id
-        if self.raw_data is not None:
-            self.data = self._effective_forecast(self.raw_data)
-        self.async_build_explanation()
-        self.async_update_listeners()
 
     @callback
     @override
@@ -133,10 +112,60 @@ class PvForecastCoordinator(TimestampDataUpdateCoordinator[ForecastResult]):
         if forecast is not None and (
             factor != self.calibration_factor or self.data is None
         ):
-            self.calibration_factor = factor
-            self.data = self._effective_forecast(forecast)
+            self.data = self._apply_morning(
+                apply_calibration(
+                    forecast,
+                    factor,
+                    self._entry.options.get(CONF_INVERTER_MAX_POWER_KW),
+                    ZoneInfo(str(self._entry.data[CONF_TIME_ZONE])),
+                ),
+                factor=factor,
+            )
         self.calibration_factor = factor
         self.calibration_candidate_id = candidate_id
+        self.async_build_explanation()
+        self.async_update_listeners()
+
+    def _apply_morning(
+        self, baseline: ForecastResult, *, factor: float | None = None
+    ) -> ForecastResult:
+        if self.raw_data is None or self.morning_coefficient == 0:
+            self.morning_applied = False
+            return baseline
+        result = apply_morning(
+            self.raw_data,
+            baseline,
+            coefficient=self.morning_coefficient,
+            global_factor=self.calibration_factor if factor is None else factor,
+            limit=self._entry.options.get(CONF_INVERTER_MAX_POWER_KW),
+            timezone=str(self._entry.data[CONF_TIME_ZONE]),
+            latitude=self._entry.data[CONF_LATITUDE],
+            longitude=self._entry.data[CONF_LONGITUDE],
+        )
+        self.morning_applied = result is not baseline
+        return result
+
+    @callback
+    def async_set_morning(self, coefficient: float, candidate_id: str | None) -> None:
+        """Den freigegebenen Morgenstand auf die unveränderte Rohbasis anwenden."""
+        from .morning import COEFFICIENTS
+
+        if coefficient not in COEFFICIENTS or type(coefficient) is bool:
+            raise ValueError("Unbekannter Morgenkandidat")
+        if (coefficient, candidate_id) == (
+            self.morning_coefficient,
+            self.morning_candidate_id,
+        ):
+            return
+        self.morning_coefficient, self.morning_candidate_id = coefficient, candidate_id
+        if self.raw_data is not None:
+            baseline = apply_calibration(
+                self.raw_data,
+                self.calibration_factor,
+                self._entry.options.get(CONF_INVERTER_MAX_POWER_KW),
+                ZoneInfo(str(self._entry.data[CONF_TIME_ZONE])),
+            )
+            self.data = self._apply_morning(baseline)
         self.async_build_explanation()
         self.async_update_listeners()
 
@@ -150,7 +179,6 @@ class PvForecastCoordinator(TimestampDataUpdateCoordinator[ForecastResult]):
             and self.explanation.raw is self.raw_data
             and self.explanation.effective is current
             and self.explanation.factor == self.calibration_factor
-            and self.explanation.morning_factor == self.morning_factor
             and self.explanation.timezone == timezone
         ):
             return
@@ -160,24 +188,6 @@ class PvForecastCoordinator(TimestampDataUpdateCoordinator[ForecastResult]):
             self.calibration_factor,
             self._entry.options.get(CONF_INVERTER_MAX_POWER_KW),
             str(self._entry.data[CONF_TIME_ZONE]),
-            morning_factor=self.morning_factor,
-            morning_windows=(
-                tuple(
-                    window
-                    for offset in range(2)
-                    if (
-                        window := morning_window(
-                            self.raw_data.local_date + timedelta(days=offset),
-                            ZoneInfo(timezone),
-                            float(self._entry.data[CONF_LATITUDE]),
-                            float(self._entry.data[CONF_LONGITUDE]),
-                        )
-                    )
-                    is not None
-                )
-                if self.morning_factor != 1 and self.raw_data is not None
-                else ()
-            ),
         )
 
     @callback
@@ -351,8 +361,11 @@ class PvForecastCoordinator(TimestampDataUpdateCoordinator[ForecastResult]):
                     or dt_util.now().astimezone(timezone).date() == requested_date
                 ):
                     break
-            effective = self._effective_forecast(forecast)
+            effective = apply_calibration(
+                forecast, self.calibration_factor, inverter_limit, timezone
+            )
             self.raw_data = forecast
+            effective = self._apply_morning(effective)
             self.temperature_data = None
             self.temperature_mountings = None
             if (

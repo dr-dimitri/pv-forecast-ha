@@ -9,7 +9,6 @@ import io
 import json
 import logging
 from contextlib import suppress
-from copy import deepcopy
 from datetime import UTC, date, datetime, timedelta
 from math import isfinite
 from typing import TYPE_CHECKING, Any, Literal
@@ -42,7 +41,6 @@ from .history import HistoryArchive
 from .history_storage import ArchiveStorage
 from .measurement_runtime import MeasurementManager
 from .measurements import SourceConfig
-from .morning_runtime import MorningRuntime
 from .shading import CONF_HORIZON_PROFILES, HORIZON_RULE_VERSION
 from .short_term import trial_report
 from .storage import ConfirmedStore
@@ -52,6 +50,7 @@ from .underperformance import empty_state, notification_due, observe
 
 if TYPE_CHECKING:
     from .calibration_runtime import CalibrationManager
+    from .morning_runtime import MorningManager
 
 _LOGGER = logging.getLogger(__name__)
 STORAGE_VERSION = 8
@@ -95,7 +94,6 @@ class _HistoryStore(ConfirmedStore):
         # ergänzt nur neue Temperaturvergleiche, keine historischen Modellwerte.
         # Version 6 beginnt ohne rückwirkend erfundene Minderertragshinweise.
         # Version 7 bewahrt automatische Tagesbelege neben bewussten Korrekturen.
-        # Version 8 beginnt ohne nachträglich erfundene Morgenprofile und Freigaben.
         HistoryArchive.from_dict(old_data["archive"], old_data["archive"]["timezone"])
         return old_data
 
@@ -123,7 +121,9 @@ async def async_delete_history_data(hass: HomeAssistant, entry: ConfigEntry) -> 
     """Bewusst das gesamte Archiv auch bei pausierter Erfassung löschen."""
 
     from .calibration_runtime import async_delete_calibration_data
+    from .morning_runtime import async_delete_morning_data
 
+    await async_delete_morning_data(hass, entry)
     await async_delete_calibration_data(hass, entry)
     manager = getattr(getattr(entry, "runtime_data", None), "history", None)
     if manager is not None:
@@ -138,7 +138,9 @@ async def async_delete_history_source_data(
     """Messkopien einer bestätigten Quelle auch aus einem entladenen Archiv löschen."""
 
     from .calibration_runtime import async_delete_calibration_data
+    from .morning_runtime import async_delete_morning_data
 
+    await async_delete_morning_data(hass, entry)
     await async_delete_calibration_data(hass, entry)
     manager = getattr(getattr(entry, "runtime_data", None), "history", None)
     if manager is not None and manager.loaded:
@@ -240,7 +242,7 @@ def _configuration_id(entry: ConfigEntry) -> str:
     return hashlib.sha256(encoded.encode()).hexdigest()
 
 
-class ArchiveManager(MorningRuntime):
+class ArchiveManager:
     """Tatsächlich beobachtete Prognosen ohne zusätzliche Abrufe archivieren."""
 
     def __init__(
@@ -256,9 +258,6 @@ class ArchiveManager(MorningRuntime):
         self.measurements = measurements
         self.timezone = str(entry.data[CONF_TIME_ZONE])
         self._capture_configuration_id = _configuration_id(entry)
-        self._morning_original_data = deepcopy(dict(entry.data))
-        self._morning_original_options = deepcopy(dict(entry.options))
-        self._morning_fresh_after: datetime | None = None
         self.enabled = entry.options.get("history_enabled") is True
         self._archive = HistoryArchive(self.timezone)
         self._store = _history_store(hass, entry.entry_id)
@@ -279,6 +278,7 @@ class ArchiveManager(MorningRuntime):
         self._assessment_requested = False
         self._mutation_in_progress = False
         self.calibration: CalibrationManager | None = None
+        self.morning: MorningManager | None = None
         self._last_calibration_capture: tuple[Any, ...] | None = None
         self._observation_report: dict[str, Any] = {
             "schema_version": 1,
@@ -434,8 +434,6 @@ class ArchiveManager(MorningRuntime):
         self._mutation_in_progress = True
         try:
             await self._async_cancel_assessment()
-            self._morning_fresh_after = dt_util.utcnow()
-            self.coordinator.async_set_morning(1.0, None)
             await self._store.async_remove()
         finally:
             self._mutation_in_progress = False
@@ -451,7 +449,6 @@ class ArchiveManager(MorningRuntime):
         }
         self._dismiss_observation()
         self._last_fetched_at = self.coordinator.last_update_success_time
-        self._last_calibration_capture = None
         self._storage_error = None
         self._loaded = True
         self._save_scheduled = False
@@ -470,10 +467,8 @@ class ArchiveManager(MorningRuntime):
             await self._async_cancel_assessment()
             changed = self._archive.delete_measurement_source(source_id)
             if changed:
-                self._morning_fresh_after = dt_util.utcnow()
                 self._dismiss_observation()
                 self._observe(dt_util.utcnow())
-                self._reconcile_morning(dt_util.utcnow())
                 self._dirty = True
             if changed or self._store.write_pending:
                 await self._store.async_save_checked(self._serialize())
@@ -520,7 +515,8 @@ class ArchiveManager(MorningRuntime):
                 # Schreibfehler dürfen eine überholte Lernfreigabe nicht erhalten.
                 if self.calibration is not None:
                     self.calibration.async_reconcile()
-                self._reconcile_morning(now)
+                if getattr(self, "morning", None) is not None:
+                    self.morning._updated(force=True)
             if changed or self._dirty or self._store.write_pending:
                 data = self._serialize()
                 if record_id not in self._archive.records:
@@ -550,7 +546,7 @@ class ArchiveManager(MorningRuntime):
             else {}
         )
         calibration_signature = (
-            *calibration.items(),
+            *tuple(calibration.items()),
             ("morning", getattr(self.coordinator, "morning_candidate_id", None)),
         )
         if (
@@ -580,11 +576,14 @@ class ArchiveManager(MorningRuntime):
                 **calibration,
                 morning_forecast=(
                     self.coordinator.data
-                    if self.coordinator.morning_factor != 1
+                    if getattr(self.coordinator, "morning_applied", False)
                     else None
                 ),
-                morning_factor=self.coordinator.morning_factor,
-                morning_candidate_id=self.coordinator.morning_candidate_id,
+                morning_candidate_id=(
+                    getattr(self.coordinator, "morning_candidate_id", None)
+                    if getattr(self.coordinator, "morning_applied", False)
+                    else None
+                ),
                 temperature_forecast=getattr(
                     self.coordinator, "temperature_data", None
                 ),
@@ -600,7 +599,6 @@ class ArchiveManager(MorningRuntime):
             self._last_fetched_at = fetched_at
             self._last_calibration_capture = calibration_signature
             changed = True
-        changed |= self._capture_morning(now)
         if changed:
             self._dirty = True
             self._schedule_save()
@@ -654,7 +652,8 @@ class ArchiveManager(MorningRuntime):
                 self._observe(now)
                 if self.calibration is not None:
                     self.calibration.async_reconcile()
-                self._reconcile_morning(now)
+                if getattr(self, "morning", None) is not None:
+                    self.morning._updated(force=True)
         finally:
             self._assessment_task = None
 
@@ -748,6 +747,8 @@ class ArchiveManager(MorningRuntime):
         await self._store.async_save_checked(self._serialize())
         if self.calibration is not None:
             self.calibration.async_reconcile()
+        if getattr(self, "morning", None) is not None:
+            self.morning._updated(force=True)
 
     @callback
     def _comparison(self, now: datetime) -> dict[str, dict[str, Any]]:
@@ -869,9 +870,10 @@ class ArchiveManager(MorningRuntime):
                 )
             }
         result["underperformance"] = observation
-        result["morning"] = self.morning_snapshot(now or dt_util.utcnow())
         if self.calibration is not None:
             result["calibration"] = self.calibration.snapshot()
+        if self.morning is not None:
+            result["morning"] = self.morning.snapshot()
         return result
 
     @callback

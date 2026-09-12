@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from datetime import UTC, datetime, time, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -24,7 +24,6 @@ class ExplanationInterval:
     group_clipping_kwh: float
     total_clipping_kwh: float
     effective_kwh: float
-    morning_delta_kwh: float = 0.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -37,7 +36,6 @@ class ExplanationSnapshot:
     factor: float
     intervals: tuple[ExplanationInterval, ...] = ()
     reason: str | None = None
-    morning_factor: float = 1.0
 
 
 def _same(a: float, b: float) -> bool:
@@ -54,29 +52,14 @@ def build_explanation(
     factor: float,
     limit: float | None,
     timezone: str,
-    *,
-    morning_factor: float = 1.0,
-    morning_windows: tuple[tuple[datetime, datetime], ...] = (),
 ) -> ExplanationSnapshot:
     """Einmal je Generation die produktiven Clippingstufen nachvollziehen."""
-    base = ExplanationSnapshot(
-        raw, effective, timezone, factor, morning_factor=morning_factor
-    )
+    base = ExplanationSnapshot(raw, effective, timezone, factor)
     if raw is None or effective is None or not raw.roofs:
-        return replace(base, reason="missing_raw_basis")
+        return ExplanationSnapshot(
+            raw, effective, timezone, factor, reason="missing_raw_basis"
+        )
     try:
-        morning_active = morning_factor != 1
-        if not 0.8 <= morning_factor <= 1.2:
-            raise ValueError("Ungültiger Morgenfaktor")
-        windows = sorted(morning_windows) if morning_active else ()
-        for index, (left, right) in enumerate(windows):
-            if (
-                left.utcoffset() is None
-                or right.utcoffset() is None
-                or left >= right
-                or (index and windows[index - 1][1] > left)
-            ):
-                raise ValueError("Ungültige Morgenfenster")
         if (
             not 0.5 <= factor <= 1.5
             or raw.local_date != effective.local_date
@@ -84,63 +67,27 @@ def build_explanation(
             or raw.horizon_shading != effective.horizon_shading
             or raw.inverter_groups != effective.inverter_groups
             or raw.roofs.keys() != effective.roofs.keys()
-            or (
-                not morning_active
-                and len(raw.total_intervals) != len(effective.total_intervals)
-            )
+            or len(raw.total_intervals) != len(effective.total_intervals)
         ):
             raise ValueError("Inkompatible Generation")
         for key, roof in raw.roofs.items():
             other = effective.roofs[key]
-            if roof.roof != other.roof or (
-                not morning_active
-                and [(i.start, i.end, i.dc_power_kw) for i in roof.intervals]
-                != [(i.start, i.end, i.dc_power_kw) for i in other.intervals]
-            ):
+            if roof.roof != other.roof or [
+                (i.start, i.end, i.dc_power_kw) for i in roof.intervals
+            ] != [(i.start, i.end, i.dc_power_kw) for i in other.intervals]:
                 raise ValueError("Inkompatible Rohbeiträge")
-            if morning_active:
-                for item in other.intervals:
-                    originals = [
-                        i
-                        for i in roof.intervals
-                        if i.start <= item.start and i.end >= item.end
-                    ]
-                    if (
-                        len(originals) != 1
-                        or originals[0].dc_power_kw != item.dc_power_kw
-                    ):
-                        raise ValueError("Inkompatible Morgen-Rohbeiträge")
         intervals = []
         previous_end = None
-        for index, output in enumerate(effective.total_intervals):
-            if morning_active:
-                originals = [
-                    item
-                    for item in raw.total_intervals
-                    if item.start <= output.start and item.end >= output.end
-                ]
-                if len(originals) != 1:
-                    raise ValueError("Fehlende gemeinsame Rohabdeckung")
-                original = originals[0]
-            else:
-                original = raw.total_intervals[index]
-            if not morning_active and (original.start, original.end) != (
-                output.start,
-                output.end,
-            ):
+        for original, output in zip(
+            raw.total_intervals, effective.total_intervals, strict=True
+        ):
+            if (original.start, original.end) != (output.start, output.end):
                 raise ValueError("Inkompatible UTC-Grenzen")
             start, end = output.start.astimezone(UTC), output.end.astimezone(UTC)
             hours = (end - start).total_seconds() / 3600
             if hours <= 0 or (previous_end is not None and start < previous_end):
                 raise ValueError("Ungültige Dauer")
             previous_end = end
-            if any(start < boundary < end for window in windows for boundary in window):
-                raise ValueError("Das Intervall überlappt eine Morgenfenstergrenze")
-            local_morning_factor = (
-                morning_factor
-                if any(left <= start and end <= right for left, right in windows)
-                else 1.0
-            )
             powers = {}
             for key, roof in raw.roofs.items():
                 matches = [
@@ -153,33 +100,24 @@ def build_explanation(
                 powers[key] = matches[0].dc_power_kw
             if any(not math.isfinite(p) or p < 0 for p in powers.values()):
                 raise ValueError("Ungültige Rohleistung")
-            morning_powers = (
-                {key: power * local_morning_factor for key, power in powers.items()}
-                if local_morning_factor != 1
-                else powers
-            )
-            scaled = {key: power * factor for key, power in morning_powers.items()}
+            scaled = {key: power * factor for key, power in powers.items()}
             stages = apply_inverter_limits(
                 scaled, limit, raw.inverter_groups, include_stages=True
             )
             before = sum(powers.values()) * hours
-            after_morning = sum(morning_powers.values()) * hours
-            morning_delta = after_morning - before
             adjusted = sum(scaled.values()) * hours
             grouped = sum(stages.grouped.values()) * hours
             after = sum(stages.effective.values()) * hours
             group_loss, total_loss = max(0.0, adjusted - grouped), max(
                 0.0, grouped - after
             )
-            delta = adjusted - after_morning
+            delta = adjusted - before
             if (
                 not all(
-                    math.isfinite(v)
-                    for v in (before, morning_delta, delta, group_loss, total_loss)
+                    math.isfinite(v) for v in (before, delta, group_loss, total_loss)
                 )
                 or not _same(
-                    before + morning_delta + delta - group_loss - total_loss,
-                    output.energy_kwh,
+                    before + delta - group_loss - total_loss, output.energy_kwh
                 )
                 or not _same(after, output.energy_kwh)
             ):
@@ -191,26 +129,18 @@ def build_explanation(
                 for i in roof.intervals
                 if i.start.astimezone(UTC) <= start and i.end.astimezone(UTC) >= end
             )
-            raw_energy = original.energy_kwh * (
-                (end - start) / (original.end - original.start)
-            )
-            if not _same(raw_power * hours, raw_energy):
+            if not _same(raw_power * hours, original.energy_kwh):
                 raise ValueError("Widersprüchliche Rohkurve")
             intervals.append(
                 ExplanationInterval(
-                    start,
-                    end,
-                    before,
-                    delta,
-                    group_loss,
-                    total_loss,
-                    output.energy_kwh,
-                    morning_delta,
+                    start, end, before, delta, group_loss, total_loss, output.energy_kwh
                 )
             )
-        return replace(base, intervals=tuple(intervals))
+        return ExplanationSnapshot(raw, effective, timezone, factor, tuple(intervals))
     except (ValueError, OverflowError, KeyError, TypeError):
-        return replace(base, reason="incompatible_raw_basis")
+        return ExplanationSnapshot(
+            base.raw, base.effective, timezone, factor, reason="incompatible_raw_basis"
+        )
 
 
 def explanation_view(
@@ -281,7 +211,6 @@ def explanation_view(
         return result | {"reason": "incomplete_coverage"}
     fields = (
         "before_calibration_kwh",
-        "morning_delta_kwh",
         "calibration_delta_kwh",
         "group_clipping_kwh",
         "total_clipping_kwh",
@@ -289,7 +218,7 @@ def explanation_view(
     )
     intervals, raw_intervals = [], []
     covered = 0.0
-    for index, item in enumerate(snapshot.intervals):
+    for item, original in zip(snapshot.intervals, raw.total_intervals, strict=True):
         left, right = max(start, item.start), min(end, item.end)
         if left >= right:
             continue
@@ -302,24 +231,11 @@ def explanation_view(
                 **{field: getattr(item, field) * fraction for field in fields},
             }
         )
-        if snapshot.morning_factor == 1:
-            original = raw.total_intervals[index]
-            raw_fraction = fraction
-        else:
-            originals = [
-                original
-                for original in raw.total_intervals
-                if original.start <= left and original.end >= right
-            ]
-            if len(originals) != 1:
-                return result | {"reason": "incomplete_coverage"}
-            original = originals[0]
-            raw_fraction = (right - left) / (original.end - original.start)
         raw_intervals.append(
             {
                 "start": left.isoformat(),
                 "end": right.isoformat(),
-                "energy_kwh": original.energy_kwh * raw_fraction,
+                "energy_kwh": original.energy_kwh * fraction,
                 "is_complete": original.is_complete,
                 "quality_flags": list(original.quality_flags),
             }
@@ -351,7 +267,6 @@ def explanation_view(
         "status": "available",
         "reason": None,
         "factor": snapshot.factor,
-        "morning_factor": snapshot.morning_factor,
         "totals": totals
         | {
             "raw_model_kwh": baseline,

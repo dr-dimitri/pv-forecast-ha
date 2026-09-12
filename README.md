@@ -26,7 +26,6 @@ vorgesehen.
 - freiwilliges PV-Dashboard direkt über die Integrationsoptionen; Lovelace-Karte
   mit visuellem Editor, Tageskurven und Dachauswahl auch einzeln nutzbar
 - optionale Selbstkalibrierung mit getrennten Lern- und späteren Prüftagen
-- optionaler Morgenvergleich mit eigenem prospektivem Nachweis des PV-Anstiegs
 - empirische Tagesbänder nach Prüfung passender eingefrorener Archivstände
 - zusammenhängende Solarzeitfenster und getrennte Tagesaussicht aus Messung,
   geschätzter Brücke und Restprognose
@@ -374,19 +373,22 @@ Bestätigung von vorn. [Regeln, Bedienung und Grenzen](docs/kalibrierung.md)
 erklären insbesondere, warum ältere Archivtage nicht nachträglich als Lerntage
 verwendet werden und warum eine Verbesserung nicht garantiert ist.
 
-## Morgenvergleich (optional)
+## Morgenprognose (optional)
 
-Unter **Konfigurieren → Erweiterte Einstellungen → Morgenvergleich** kannst du
-zunächst **Beobachten** wählen. Die Funktion prüft den Morgenverlauf und den
-PV-Anstieg gegen ausreichend fein erfasste AC-Erzeugung. Tagesgesamtwerte allein
-reichen dafür nicht. Ein eingeschränktes Morgenmodell benötigt nach 30 Lerntagen
-mindestens 14 neue prospektive Prüftage und eine ausdrückliche Wahl der Automatik,
-bevor es die gemeinsame Prognose verändert. Standard ist **Aus**.
+Unter **Konfigurieren → Erweiterte Funktionen → Morgenprognose prüfen und verbessern**
+kannst du den zeitlichen PV-Anstieg beobachten. Ein globaler Anlagenfaktor und eine
+passende Tagesmenge allein belegen noch keinen richtigen Morgenverlauf.
 
-Die [Anleitung zum Morgenvergleich](docs/morgenvergleich.md) beschreibt die feste
-0,5-kW-Schwelle, die Intervallmittelregel, Voraussetzungen, Prüfmetriken, Grenzen
-und Rückfallregeln. Reine Moduswechsel erzeugen keine Wetterabrufe.
-Ein realer Gütevorteil oder die Versorgung des Haushalts wird damit nicht behauptet.
+Die Funktion ist standardmäßig aus. Nach 30 geeigneten Morgen und mindestens
+14 späteren Prüfmorgen darf eine ausdrücklich gewählte Automatik eine begrenzte
+Morgenform auf die gemeinsame Prognose anwenden. Dazu braucht sie bestätigte
+AC-Erzeugung mit ausreichender Zeitauflösung und das aktivierte Archiv. Fehlende
+Zeitbelege bleiben unbekannt. Die geprüfte PV-Schwelle ist keine Hauslast; eine
+Speichersteuerung muss ihren Bedarf weiterhin selbst bestimmen.
+
+[Methode, Datenvertrag, Freigabe und Rückfall](docs/morgenprognose.md) erklären
+auch den Unterschied zwischen Beobachten und Automatik sowie die Grenzen der
+60-Minuten-Aussage.
 
 ## PV-Dashboard und eigene Karte (optional)
 
