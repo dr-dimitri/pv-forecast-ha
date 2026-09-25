@@ -73,12 +73,7 @@ def test_failures_pause_age_and_optional_features_remain_separate():
     assert result["provider_pause"].value == 90
     assert result["stale"].value == 75
     assert result["polling_disabled"].severity == "info"
-    assert (
-        result["no_sources"].severity
-        == result["archive_off"].severity
-        == result["learning_off"].severity
-        == "info"
-    )
+    assert result["no_sources"].severity == "info"
 
 
 @pytest.mark.parametrize(
@@ -88,7 +83,7 @@ def test_unknown_or_future_age_is_not_healthy(stamp):
     assert "age_unknown" in codes(state(fetched_at=stamp))
 
 
-def test_sources_archive_and_learning_states_are_actionable_without_evaluation():
+def test_source_states_are_actionable_without_evaluation():
     result = codes(
         state(
             source_count=2,
@@ -99,19 +94,11 @@ def test_sources_archive_and_learning_states_are_actionable_without_evaluation()
                 "source_derived",
                 "source_daily",
             ),
-            archive_enabled=True,
-            archive_available=True,
-            archive_storage_error=True,
-            archive_truncated=True,
-            calibration_mode="observe",
-            calibration_status="prerequisites_missing",
             cache_status="unsupported_version",
         )
     )
     assert result["source_removed"].severity == "warning"
     assert result["source_daily"].severity == "info"
-    assert result["archive_store"].severity == "error"
-    assert result["learning_prerequisites"].severity == "info"
     assert result["cache_unsupported_version"].severity == "error"
 
 
@@ -162,16 +149,12 @@ async def test_missing_runtime_never_infers_removed_sources(hass):
         options=dict(entry.options)
         | {
             "measurement_sources": [{"registry_id": "not-an-identity"}],
-            "history_enabled": True,
-            "calibration_mode": "observe",
         },
     )
     captured = capture_health(hass, entry, NOW)
     result = codes(captured)
     assert "measurements_unknown" in result
     assert "source_removed" not in result
-    assert "archive_unknown" in result
-    assert "learning_unknown" in result
 
 
 def test_complete_forecast_with_gap_or_fallback_is_classified():
@@ -270,7 +253,6 @@ async def test_current_day_retention_loss_overrides_fresh_source_until_local_mid
     with (
         patch("homeassistant.helpers.storage.Store.async_load") as load,
         patch("homeassistant.helpers.storage.Store.async_save") as save,
-        patch("custom_components.pv_forecast.history.HistoryArchive.assess") as assess,
     ):
         result = codes(capture_health(hass, entry, now))
         assert result["source_retention_gap"].severity == "warning"
@@ -288,4 +270,3 @@ async def test_current_day_retention_loss_overrides_fresh_source_until_local_mid
             assert "source_ok" in result
         load.assert_not_called()
         save.assert_not_called()
-        assess.assert_not_called()

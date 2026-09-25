@@ -72,7 +72,6 @@ def query_forecast_window(
         "energy_kwh": None,
         "mean_ac_power_kw": None,
         "assumption": "constant_interval_mean_power",
-        "uncertainty": {"status": "unavailable", "reason": "unsupported_horizon"},
     }
     if step is not None:
         result.update(step_minutes=step_minutes, intervals=[])

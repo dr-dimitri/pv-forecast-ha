@@ -54,7 +54,6 @@ def test_shifted_window_analytic_energy_and_power():
     assert result["scope"] == "total"
     assert result["coverage"]["complete"]
     assert "intervals" not in result
-    assert result["uncertainty"]["reason"] == "unsupported_horizon"
 
 
 @pytest.mark.parametrize("step", [5, 15, 30, 60])

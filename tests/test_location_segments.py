@@ -10,16 +10,10 @@ import pytest
 from homeassistant.helpers.storage import Store
 from homeassistant.util.file import WriteError
 
-from custom_components.pv_forecast.calibration_runtime import _calibration_store
 from custom_components.pv_forecast.configuration import location_fingerprint
 from custom_components.pv_forecast.const import (
     CONF_LOCATION_SOURCE,
     LOCATION_SOURCE_HOME_ASSISTANT,
-)
-from custom_components.pv_forecast.history import HistoryArchive
-from custom_components.pv_forecast.history_runtime import (
-    _history_store,
-    async_delete_history_data,
 )
 from custom_components.pv_forecast.measurement_runtime import (
     STORAGE_VERSION,
@@ -31,10 +25,8 @@ from custom_components.pv_forecast.measurements import SourceConfig, SourceHisto
 from custom_components.pv_forecast.reconfiguration import (
     ReconfigurationChangedError,
     _async_validate_stores,
-    async_prepare_location_change,
 )
 
-from .test_history import capture_day
 from .test_reconfiguration import FETCH, NOW, _begin, _entry
 
 
@@ -213,45 +205,6 @@ async def test_store_read_detects_changed_entry_context(hass):
         await _async_validate_stores(hass, entry)
     save.assert_not_called()
     assert store.location_data["time_zone"] == "UTC"
-
-
-async def test_confirmed_archive_deletion_during_prepare_is_not_restored(hass):
-    """Eine Löschung während der Prüfung hat Vorrang vor zuvor gelesenen Daten."""
-
-    entry = _entry(hass)
-    measurement = SourceHistory(_source(), "UTC", 20)
-    measurement.bind_location(location_fingerprint(entry.data), "UTC", NOW)
-    await _measurement_store(hass, entry.entry_id).async_save(
-        {"sources": {"source": measurement.to_dict()}}
-    )
-    archive = HistoryArchive("UTC")
-    capture_day(archive)
-    await _history_store(hass, entry.entry_id).async_save(
-        {"archive": archive.to_dict(), "last_fetched_at": None}
-    )
-    calibration_store = _calibration_store(hass, entry.entry_id)
-    original_load = calibration_store.async_load
-    loads = 0
-
-    async def delete_while_reading():
-        nonlocal loads
-        loads += 1
-        if loads == 2:
-            # Ein anderer Options-Flow bestätigt nach dem Archivlesen die Löschung.
-            await async_delete_history_data(hass, entry)
-            assert await _history_store(hass, entry.entry_id).async_load() is None
-        return await original_load()
-
-    with (
-        patch(
-            "custom_components.pv_forecast.reconfiguration._calibration_store",
-            return_value=calibration_store,
-        ),
-        patch.object(calibration_store, "async_load", side_effect=delete_while_reading),
-    ):
-        await async_prepare_location_change(hass, entry)
-    assert loads == 2
-    assert await _history_store(hass, entry.entry_id).async_load() is None
 
 
 async def test_failed_migration_write_keeps_old_location_context(hass, freezer):

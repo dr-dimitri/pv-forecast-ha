@@ -13,15 +13,9 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.storage import Store
 
-from .calibration import CalibrationState
-from .calibration_runtime import _calibration_store
 from .const import CONF_TIME_ZONE
-from .history import HistoryArchive
-from .history_runtime import _history_store
 from .measurement_runtime import _measurement_store
 from .measurements import SourceConfig, SourceHistory
-from .morning_runtime import _store as _morning_store
-from .morning_runtime import validate_morning_store
 
 
 class ReconfigurationChangedError(HomeAssistantError):
@@ -40,7 +34,7 @@ def _checked_store_exists(store_path: str) -> bool:
 
 
 async def _async_validate_stores(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Alle Speicher im alten Standortkontext lesen, bevor eine Änderung erlaubt ist."""
+    """Messspeicher im alten Standortkontext lesen, bevor eine Änderung erlaubt ist."""
 
     timezone = str(entry.data[CONF_TIME_ZONE])
     original_data = deepcopy(dict(entry.data))
@@ -89,15 +83,6 @@ async def _async_validate_stores(hass: HomeAssistant, entry: ConfigEntry) -> Non
                 raise ValueError(
                     "Der Messspeicher hat keinen bestätigten Standortbezug"
                 )
-    history = await load_persisted(_history_store(hass, entry.entry_id))
-    if history is not None:
-        HistoryArchive.from_dict(history["archive"], timezone)
-    calibration = await load_persisted(_calibration_store(hass, entry.entry_id))
-    if calibration is not None:
-        CalibrationState.from_dict(calibration["state"])
-    morning = await load_persisted(_morning_store(hass, entry.entry_id))
-    if morning is not None:
-        validate_morning_store(morning)
 
 
 async def async_prepare_location_change(

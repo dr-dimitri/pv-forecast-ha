@@ -138,6 +138,8 @@ async function runCase(browser, origin, test) {
     }, customTheme);
     const card = page.locator("pv-forecast-card").first();
     await card.locator(".kpis").first().waitFor();
+    assert.equal(await card.locator("#archive-day, #report, #uncertainty, #raw-toggle").count(), 0);
+    assert.equal(await page.evaluate(() => window.demo.calls.some(call => call.service === "get_history")), false);
     await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
     const closed = await card.evaluate(inspectCard);
     const screenshot = `${prefix}-${test.name}.png`;
@@ -179,7 +181,6 @@ async function checkNavigation(page, card, test) {
     assert.equal(await card.evaluate((element) => element.shadowRoot.activeElement?.id), target, "Sprungziel übernimmt den Tastaturfokus");
   }
   if (test.scenario !== "roof") {
-    await card.locator("#report-days").selectOption("30");
     await card.locator("#planning-duration").fill("90");
   }
   await card.locator(test.scenario === "roof" ? "#values-toggle" : "#planning-duration").focus();
@@ -193,7 +194,6 @@ async function checkNavigation(page, card, test) {
       open: [...element.shadowRoot.querySelectorAll("details[open]")].map((item) => item.id).sort(),
       day: element.shadowRoot.querySelector('[data-day][aria-pressed="true"]').dataset.day,
       roof: element.shadowRoot.getElementById("roof").value,
-      report: element.shadowRoot.getElementById("report-days")?.value || null,
       duration: element.shadowRoot.getElementById("planning-duration")?.value || null,
     });
     const previous = snapshot();
@@ -208,7 +208,6 @@ async function checkNavigation(page, card, test) {
       open: [...element.shadowRoot.querySelectorAll("details[open]")].map((item) => item.id).sort(),
       day: element.shadowRoot.querySelector('[data-day][aria-pressed="true"]').dataset.day,
       roof: element.shadowRoot.getElementById("roof").value,
-      report: element.shadowRoot.getElementById("report-days")?.value || null,
       duration: element.shadowRoot.getElementById("planning-duration")?.value || null };
   });
   assert.ok(before.previous.scrollTop > 0, "Scrollprüfung benötigt tatsächlich verschobenen Inhalt");
@@ -373,7 +372,7 @@ async function checkChart(page, card, test) {
 async function checkDataStates(browser, origin) {
   const page = await browser.newPage({ viewport: { width: 360, height: 900 } });
   try {
-    for (const [scenario, expected] of [["no-source", "Keine Messquelle zugeordnet"], ["no-measurement", "Noch keine Messung"], ["archive-off", "Archiv ausgeschaltet"], ["archive-empty", "Archiv noch leer"], ["acl", "Leseberechtigung fehlt"], ["old", "Datenversion nicht kompatibel"], ["outage", "Prognose derzeit nicht erreichbar"], ["zero", "Ist heute"]]) {
+    for (const [scenario, expected] of [["no-source", "Keine Messquelle zugeordnet"], ["no-measurement", "Noch keine Messung"], ["acl", "Leseberechtigung fehlt"], ["old", "Datenversion nicht kompatibel"], ["outage", "Prognose derzeit nicht erreichbar"], ["zero", "Ist heute"]]) {
       await page.goto(`${origin}/tests/frontend/demo.html?scenario=${scenario}&width=360`);
       const card = page.locator("pv-forecast-card");
       await card.getByText(expected, { exact: false }).first().waitFor();
@@ -403,7 +402,7 @@ async function checkDataStates(browser, origin) {
       const { retainReadState, sourceError } = await import("/custom_components/pv_forecast/frontend/pv-forecast-card.js");
       const original = element._state;
       const live = element.shadowRoot.getElementById("data-status");
-      const error = { forecast: sourceError({}, "Prognosedaten"), measurement: { status: "idle" }, history: { status: "idle" } };
+      const error = { forecast: sourceError({}, "Prognosedaten"), measurement: { status: "idle" } };
       element._state = retainReadState(original, error); element._render();
       const retained = element.shadowRoot.textContent.includes("23,14") && element.shadowRoot.textContent.includes("Letzte gelesene Ansicht");
       const first = live.textContent;
@@ -415,7 +414,7 @@ async function checkDataStates(browser, origin) {
       return { retained, repeated, cleared, recovered: live.textContent === "Daten verfügbar." };
     });
     assert.deepEqual(transitions, { retained: true, repeated: true, cleared: true, recovered: true });
-    console.log("Datenzustände: 8 Fälle, stille Wiederholung und Fehler/Erholung bestanden");
+    console.log("Datenzustände: 6 Fälle, stille Wiederholung und Fehler/Erholung bestanden");
   } finally { await page.close(); }
 }
 
@@ -458,7 +457,7 @@ async function checkDelayedRoofFocus(browser, origin) {
       // Bei kürzerer Dachansicht begrenzt der Browser die Dokumentposition nativ.
       const maxScroll = await page.evaluate(() => document.scrollingElement.scrollHeight - innerHeight);
       assert.equal(after.scroll, Math.min(before.scroll, maxScroll));
-      assert.equal(await page.evaluate(() => window.demo.calls.length), 4, "Fokuskorrektur erzeugt keine weiteren Leseaufrufe");
+      assert.equal(await page.evaluate(() => window.demo.calls.length), 3, "Fokuskorrektur erzeugt keine weiteren Leseaufrufe");
     } finally { await page.close(); }
   }
   console.log("Verzögerter Dachwechsel: Summary, Tabellenregion und Bereichsnavigation behalten den Fokus");
@@ -564,7 +563,7 @@ async function checkAccessibility(browser, origin) {
   try {
     await page.goto(`${origin}/tests/frontend/demo.html?width=360&multiple=1`);
     await page.waitForFunction(() => [...document.querySelectorAll("pv-forecast-card")].every((card) => card._state?.loading === false));
-    assert.equal(await page.evaluate(() => window.demo.calls.length), 3);
+    assert.equal(await page.evaluate(() => window.demo.calls.length), 2);
     await page.locator("pv-forecast-card").evaluateAll((cards) => cards.forEach((card) => { card.style.display = "none"; }));
     await page.waitForFunction(() => [...document.querySelectorAll("pv-forecast-card")].every((card) => !card._visible));
     const stopped = await page.evaluate(async () => {
@@ -574,7 +573,7 @@ async function checkAccessibility(browser, origin) {
     });
     assert.deepEqual(stopped, { listeners: 0, timer: null });
     await page.locator("pv-forecast-card").evaluateAll((cards) => cards.forEach((card) => card.remove()));
-    results.push({ multiple: true, readCalls: 3, stopped });
+    results.push({ multiple: true, readCalls: 2, stopped });
   } finally { await page.close(); }
   fs.writeFileSync(path.join(output, "accessibility.json"), JSON.stringify(results, null, 2));
   console.log("Bedienung: Cursor, native Auswahl, Details, Scrollen, 320 px/200 % Text, Fokus bei Dachlöschung und geteilte Abrufe bestanden");

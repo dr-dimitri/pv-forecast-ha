@@ -22,8 +22,8 @@ from .forecast_cache import (
     decode_forecast,
     encode_forecast,
 )
-from .history_runtime import _configuration_id
 from .horizon import forecast_days_from_options
+from .model_context import configuration_id
 
 if TYPE_CHECKING:
     from homeassistant.config_entries import ConfigEntry
@@ -75,7 +75,7 @@ class ForecastCacheManager:
     ) -> None:
         self.hass, self.entry, self.coordinator = hass, entry, coordinator
         self._store = _store(hass, entry.entry_id)
-        self.configuration_id = _configuration_id(entry)
+        self.configuration_id = configuration_id(entry)
         self._lock = asyncio.Lock()
         self._tasks: set[asyncio.Task[None]] = set()
         self._generation = 0
@@ -132,7 +132,7 @@ class ForecastCacheManager:
 
     @callback
     def async_capture(self) -> None:
-        """Eine kohärente Generation vor lokalen Faktorwechseln festhalten."""
+        """Eine kohärente Generation nach erfolgreichem Wetterabruf festhalten."""
         if (
             self._closed
             or self._blocked
@@ -140,7 +140,7 @@ class ForecastCacheManager:
             or self.coordinator.raw_data is None
         ):
             return
-        if _configuration_id(self.entry) != self.configuration_id:
+        if configuration_id(self.entry) != self.configuration_id:
             return
         try:
             payload = encode_forecast(

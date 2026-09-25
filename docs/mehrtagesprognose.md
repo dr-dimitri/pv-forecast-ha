@@ -31,9 +31,8 @@ Polling noch mehrere Tage abgedeckt wären. Der native Vertrag kann Alter und
 Fehler nicht anzeigen. Diese Prüfung liest nur vorhandene Daten und löst keine
 Aktualisierung aus.
 
-Sensorzahl und Unique-IDs bleiben unverändert. Archiv, Lernen und Erfahrungsbänder
-behalten ihre bestehenden Stichtage und Aufbewahrungsgrenzen. Auch ein Wechsel von
-sieben zurück zu zwei Tagen verändert keine historische Anlagenidentität.
+Sensorzahl und Unique-IDs bleiben unverändert. Auch ein Wechsel von
+sieben zurück zu zwei Tagen verändert keine physische Anlagenidentität.
 
 ## Datenumfang und Kontingent
 
@@ -59,7 +58,7 @@ Es werden keine zusätzlichen Requests zur Kontingentmessung gesendet.
 ## Prüfung
 
 Offline-Tests prüfen 2/7 Tage, 23-/25-Stunden-Tage und Kathmandu, letzte GTI-Stunde,
-Clipping und Kalibrierung, Optionsgrenzen und unveränderte Entity-Zahl.
+Clipping, Optionsgrenzen und unveränderte Entity-Zahl.
 Die mobile Karte wurde bei 360 px in Hell/Dunkel, mit einer Datenlücke und
 Tastaturbedienung geprüft. Die Darstellungen enthalten ausschließlich Testdaten.
 

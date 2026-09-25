@@ -12,7 +12,7 @@ from zoneinfo import ZoneInfo
 
 from .calculations import aggregate_energy_for_day, apply_inverter_limits
 from .forecast_intervals import _utc, _valid_number, window_energy
-from .history import MODEL_VERSION
+from .model_context import MODEL_VERSION
 from .models import (
     AcInverterGroup,
     DailyYield,

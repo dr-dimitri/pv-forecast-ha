@@ -1,6 +1,6 @@
 """Kleine, deterministische Testdaten-Helfer."""
 
-from datetime import datetime, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
 from custom_components.pv_forecast.const import (
@@ -11,9 +11,61 @@ from custom_components.pv_forecast.const import (
     CONF_ROOF_ID,
     CONF_TILT,
 )
-from custom_components.pv_forecast.models import PvRoof, WeatherInterval
+from custom_components.pv_forecast.measurements import SourceConfig
+from custom_components.pv_forecast.models import (
+    DailyYield,
+    ForecastResult,
+    PvRoof,
+    RoofForecast,
+    RoofForecastInterval,
+    TotalForecastInterval,
+    WeatherInterval,
+)
 
 TIMEZONE = ZoneInfo("Europe/Berlin")
+
+HOUR = timedelta(hours=1)
+DAY = date(2026, 9, 9)
+SOURCE = SourceConfig(
+    "pv", "sensor.pv", "total", "Gesamte AC-PV ohne Speicher", "registry-pv"
+)
+
+
+def forecast(
+    day: date = DAY,
+    power: float = 1,
+    timezone: str = "UTC",
+    *,
+    dc_power: float | None = None,
+) -> ForecastResult:
+    """Zwei lokale Tage mit UTC-Stunden und begrenzten Randintervallen."""
+    zone = ZoneInfo(timezone)
+    start = datetime.combine(day, time.min, zone).astimezone(UTC)
+    end = datetime.combine(day + timedelta(days=2), time.min, zone).astimezone(UTC)
+    cursor = start.replace(minute=0, second=0, microsecond=0)
+    intervals = []
+    while cursor < end:
+        left, right = max(start, cursor), min(end, cursor + HOUR)
+        intervals.append(
+            TotalForecastInterval(
+                left, right, power * (right - left).total_seconds() / 3600, power
+            )
+        )
+        cursor += HOUR
+    roofs = {}
+    if dc_power is not None:
+        roof = PvRoof("roof", "Dach", 5, 180, 30, 0.1)
+        roofs[roof.id] = RoofForecast(
+            roof,
+            tuple(
+                RoofForecastInterval(
+                    item.start, item.end, dc_power, item.ac_power_kw, item.energy_kwh
+                )
+                for item in intervals
+            ),
+            DailyYield(0, 0),
+        )
+    return ForecastResult(day, roofs, DailyYield(0, 0), tuple(intervals))
 
 
 def roof(

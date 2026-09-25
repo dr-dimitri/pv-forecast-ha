@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta, tzinfo
 from itertools import pairwise
 from types import MappingProxyType
@@ -15,8 +15,6 @@ from .horizon import validate_forecast_days
 from .models import (
     AcInverterGroup,
     DailyYield,
-    ForecastBasisInterval,
-    ForecastCalibrationBasis,
     ForecastResult,
     PlanningValues,
     PvRoof,
@@ -107,28 +105,7 @@ def temperature_factor(
     return max(0.0, factor)
 
 
-def ross_cell_temperature(
-    ambient_temperature_c: float | None, gti_w_m2: float, coefficient: float
-) -> float | None:
-    """Ross-Näherung mit explizitem k; kein gemessener Wind oder Temperaturwert."""
-
-    if (
-        isinstance(coefficient, bool)
-        or not math.isfinite(coefficient)
-        or not 0 < coefficient <= 0.1
-    ):
-        raise InvalidConfigurationError("Ungültiger Ross-Vergleichsparameter")
-    if ambient_temperature_c is None or not math.isfinite(ambient_temperature_c):
-        return None
-    irradiance = max(0.0, gti_w_m2) if math.isfinite(gti_w_m2) else 0.0
-    return _finite_result(
-        ambient_temperature_c + coefficient * irradiance, "Ross-Zelltemperatur"
-    )
-
-
-def calculate_dc_power_kw(
-    roof: PvRoof, weather: WeatherInterval, *, ross_coefficient: float | None = None
-) -> float:
+def calculate_dc_power_kw(roof: PvRoof, weather: WeatherInterval) -> float:
     """Verlust- und temperaturkorrigierte DC-Leistung berechnen."""
 
     validate_roof(roof)
@@ -137,8 +114,6 @@ def calculate_dc_power_kw(
         roof.installed_power_kwp * gti_w_m2 / 1000, "Rohleistung"
     )
     temperature = weather.ambient_temperature_c
-    if ross_coefficient is not None:
-        temperature = ross_cell_temperature(temperature, gti_w_m2, ross_coefficient)
     corrected_power_kw = _finite_result(
         raw_power_kw * temperature_factor(temperature),
         "temperaturkorrigierte Leistung",
@@ -272,9 +247,7 @@ def calculate_forecast(
     local_date: date,
     timezone: tzinfo,
     *,
-    calibration_factor: float = 1.0,
     inverter_groups: tuple[AcInverterGroup, ...] = (),
-    temperature_coefficients: Mapping[str, float] | None = None,
     forecast_days: int = 2,
     latitude: float | None = None,
     longitude: float | None = None,
@@ -288,11 +261,6 @@ def calculate_forecast(
     for roof in roofs:
         validate_roof(roof)
     validate_inverter_groups(inverter_groups, tuple(roof.id for roof in roofs))
-    if temperature_coefficients is not None and set(temperature_coefficients) != {
-        roof.id for roof in roofs
-    }:
-        raise InvalidConfigurationError("Der Temperaturvergleich benötigt alle Dächer")
-
     horizon_shading = any(any(roof.horizon_profile) for roof in roofs)
     if horizon_shading:
         if latitude is None or longitude is None:
@@ -334,17 +302,7 @@ def calculate_forecast(
         for roof in roofs:
             point = points[roof.id]
             dc_by_roof[roof.id] = (
-                calculate_dc_power_kw(
-                    roof,
-                    point,
-                    ross_coefficient=(
-                        temperature_coefficients[roof.id]
-                        if temperature_coefficients is not None
-                        else None
-                    ),
-                )
-                if point is not None
-                else 0.0
+                calculate_dc_power_kw(roof, point) if point is not None else 0.0
             )
         ac_by_roof = apply_inverter_limits(
             dc_by_roof, inverter_max_power_kw, inverter_groups
@@ -390,12 +348,6 @@ def calculate_forecast(
                 continue
             power = sum(ac_by_roof[roof_id] for roof_id in covered)
             flags = {flag for point in covered.values() for flag in point.quality_flags}
-            if temperature_coefficients is not None and any(
-                point.ambient_temperature_c is None
-                or not math.isfinite(point.ambient_temperature_c)
-                for point in covered.values()
-            ):
-                flags.add("missing_temperature")
             is_complete = len(covered) == len(roofs)
             if not is_complete:
                 flags.add("missing_roof_data")
@@ -439,261 +391,7 @@ def calculate_forecast(
         forecast_days=forecast_days,
         horizon_shading=horizon_shading,
     )
-    return apply_calibration(
-        result, calibration_factor, inverter_max_power_kw, timezone
-    )
-
-
-def _validate_calibration_factor(factor: float) -> None:
-    if (
-        isinstance(factor, bool)
-        or not math.isfinite(factor)
-        or not 0.5 <= factor <= 1.5
-    ):
-        raise InvalidConfigurationError(
-            "Der Anlagenfaktor muss zwischen 0,5 und 1,5 liegen"
-        )
-
-
-def apply_calibration(
-    raw_forecast: ForecastResult,
-    factor: float,
-    inverter_max_power_kw: float | None,
-    timezone: tzinfo,
-) -> ForecastResult:
-    """Einen Anlagenfaktor lokal vor Clipping anwenden und die Roh-DC-Werte bewahren."""
-
-    _validate_calibration_factor(factor)
-    if factor == 1.0:
-        return raw_forecast
-    by_end = {
-        roof_id: {item.end.astimezone(UTC): item for item in roof.intervals}
-        for roof_id, roof in raw_forecast.roofs.items()
-    }
-    powers = {
-        end: apply_inverter_limits(
-            {
-                roof_id: _finite_result(
-                    (items[end].dc_power_kw if end in items else 0.0) * factor,
-                    "kalibrierte Dachleistung",
-                )
-                for roof_id, items in by_end.items()
-                if end in items or raw_forecast.inverter_groups
-            },
-            inverter_max_power_kw,
-            raw_forecast.inverter_groups,
-        )
-        for end in {end for items in by_end.values() for end in items}
-    }
-    roofs = {}
-    for roof_id, roof in raw_forecast.roofs.items():
-        intervals = tuple(
-            replace(
-                item,
-                ac_power_kw=powers[item.end.astimezone(UTC)][roof_id],
-                energy_kwh=_finite_result(
-                    powers[item.end.astimezone(UTC)][roof_id]
-                    * max(
-                        0.0,
-                        (
-                            item.end.astimezone(UTC) - item.start.astimezone(UTC)
-                        ).total_seconds()
-                        / 3600,
-                    ),
-                    "kalibrierte Intervallenergie",
-                ),
-            )
-            for item in roof.intervals
-        )
-        roofs[roof_id] = replace(
-            roof,
-            intervals=intervals,
-            daily=DailyYield(
-                aggregate_energy_for_day(intervals, raw_forecast.local_date, timezone),
-                aggregate_energy_for_day(
-                    intervals, raw_forecast.local_date + timedelta(days=1), timezone
-                ),
-            ),
-        )
-    total_intervals = []
-    for item in raw_forecast.total_intervals:
-        start, end = item.start.astimezone(UTC), item.end.astimezone(UTC)
-        power = _finite_result(
-            sum(
-                interval.ac_power_kw
-                for roof in roofs.values()
-                for interval in roof.intervals
-                if interval.start.astimezone(UTC) <= start
-                and interval.end.astimezone(UTC) >= end
-            ),
-            "kalibrierte Gesamtleistung",
-        )
-        total_intervals.append(
-            replace(
-                item,
-                ac_power_kw=power,
-                energy_kwh=_finite_result(
-                    power * (end - start).total_seconds() / 3600,
-                    "kalibrierte Gesamtenergie",
-                ),
-            )
-        )
-    intervals = tuple(total_intervals)
-    return replace(
-        raw_forecast,
-        roofs=roofs,
-        total_intervals=intervals,
-        total=DailyYield(
-            aggregate_energy_for_day(intervals, raw_forecast.local_date, timezone),
-            aggregate_energy_for_day(
-                intervals, raw_forecast.local_date + timedelta(days=1), timezone
-            ),
-        ),
-    )
-
-
-def forecast_basis(
-    forecast: ForecastResult,
-    start: datetime,
-    end: datetime,
-    inverter_max_power_kw: float | None,
-) -> ForecastCalibrationBasis | None:
-    """Die vollständige Rohleistung eines UTC-Fensters ohne Rückrechnung einfrieren."""
-
-    if start.utcoffset() is None or end.utcoffset() is None:
-        raise InvalidConfigurationError(
-            "Die Kalibrierungsbasis benötigt absolute Zeitpunkte"
-        )
-    start, end = start.astimezone(UTC), end.astimezone(UTC)
-    if not forecast.roofs or end <= start:
-        return None
-    cursor = start
-    result = []
-    groups = forecast.inverter_groups
-    grouped_roofs = {roof_id for group in groups for roof_id in group.roof_ids}
-    if not grouped_roofs <= set(forecast.roofs):
-        return None
-    for item in forecast.total_intervals:
-        left, right = max(start, item.start.astimezone(UTC)), min(
-            end, item.end.astimezone(UTC)
-        )
-        if right <= left:
-            continue
-        if left != cursor or not item.is_complete:
-            return None
-        powers = []
-        roof_powers = {}
-        for roof_id, roof in forecast.roofs.items():
-            matches = [
-                interval.dc_power_kw
-                for interval in roof.intervals
-                if interval.start.astimezone(UTC) <= left
-                and interval.end.astimezone(UTC) >= right
-            ]
-            if len(matches) != 1:
-                return None
-            powers.extend(matches)
-            roof_powers[roof_id] = matches[0]
-        result.append(
-            ForecastBasisInterval(
-                left,
-                right,
-                _finite_result(sum(powers), "ungekürzte Gesamtleistung"),
-                tuple(
-                    _finite_result(
-                        sum(roof_powers[roof_id] for roof_id in sorted(group.roof_ids)),
-                        "ungekürzte Gruppenleistung",
-                    )
-                    for group in groups
-                ),
-                (
-                    _finite_result(
-                        sum(
-                            power
-                            for roof_id, power in roof_powers.items()
-                            if roof_id not in grouped_roofs
-                        ),
-                        "ungekürzte unzugeordnete Leistung",
-                    )
-                    if groups
-                    else None
-                ),
-            )
-        )
-        cursor = right
-    if cursor != end:
-        return None
-    return ForecastCalibrationBasis(
-        tuple(result),
-        inverter_max_power_kw,
-        tuple((group.id, group.max_power_kw) for group in groups),
-        bool(groups and set(forecast.roofs) - grouped_roofs),
-    )
-
-
-def calibrated_energy(basis: ForecastCalibrationBasis, factor: float) -> float:
-    """Den Faktor vor dem damaligen AC-Limit auf eingefrorene Rohleistung anwenden."""
-
-    _validate_calibration_factor(factor)
-    values = []
-    for interval in basis.intervals:
-        if basis.group_limits:
-            power_before_total = _finite_result(
-                math.fsum(
-                    min(
-                        limit,
-                        _finite_result(power * factor, "kalibrierte Gruppenleistung"),
-                    )
-                    for (_, limit), power in zip(
-                        basis.group_limits, interval.group_dc_power_kw, strict=True
-                    )
-                )
-                + _finite_result(
-                    interval.ungrouped_dc_power_kw * factor,
-                    "kalibrierte unzugeordnete Leistung",
-                ),
-                "gruppenbegrenzte Gesamtleistung",
-            )
-        else:
-            power_before_total = _finite_result(
-                interval.dc_power_kw * factor, "kalibrierte Leistung"
-            )
-        power = proportional_clipping(
-            {"plant": power_before_total},
-            basis.inverter_max_power_kw,
-        )["plant"]
-        values.append(
-            power
-            * (
-                interval.end.astimezone(UTC) - interval.start.astimezone(UTC)
-            ).total_seconds()
-            / 3600
-        )
-    return _finite_result(math.fsum(values), "kalibrierte Tagesenergie")
-
-
-def fit_calibration_factor(
-    samples: Sequence[tuple[ForecastCalibrationBasis, float]],
-) -> float:
-    """Fest nach Tages-MAE suchen; Gleichstände bevorzugen das Grundmodell."""
-
-    if not samples or any(
-        not math.isfinite(actual) or actual < 0 for _, actual in samples
-    ):
-        raise InvalidConfigurationError("Der Lernlauf benötigt gültige Tagesmessungen")
-    best_factor, best_error = 1.0, math.inf
-    for step in range(50, 151):
-        factor = step / 100
-        error = math.fsum(
-            abs(calibrated_energy(basis, factor) - actual) / len(samples)
-            for basis, actual in samples
-        )
-        tied = math.isclose(error, best_error, rel_tol=1e-12, abs_tol=1e-12)
-        if (error < best_error and not tied) or (
-            tied and abs(factor - 1) < abs(best_factor - 1)
-        ):
-            best_factor, best_error = factor, error
-    return best_factor
+    return result
 
 
 def aggregate_energy_for_day(

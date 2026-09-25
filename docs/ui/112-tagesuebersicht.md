@@ -7,7 +7,7 @@ einer noch laufenden Auswahl darf er nicht bereits den angeforderten Tag nennen.
 
 Sprungschaltflächen führen zu fokussierbaren Überschriften. „Planen“ bündelt
 die ausdrücklich heutige Tagesaussicht und das Solarzeitfenster; „Vergleichen“
-bündelt Erfahrungsband, Intervalltabelle und Archiv. Bestehende Details bleiben
+enthält die Intervalltabelle für Prognose und Messung. Bestehende Details bleiben
 zunächst geschlossen und behalten ihren Öffnungszustand bei Updates. Warnungen
 bleiben in der Übersicht sichtbar. Dachansichten zeigen nur verfügbare Aufgaben.
 
@@ -22,7 +22,7 @@ ist freiwillig; die technische Prüfung belegt weder reale Erträge noch Güte.
 
 16 Browserfälle bestanden: bestehende Breiten-/Themematrix sowie die neuen
 Aufgabenabläufe im Dokument und Panel. Nach einem Rendern bleiben 450 px
-Scrollposition, Fokus, fünf offene Details, 30-Tage-Auswahl und eine eingegebene
+Scrollposition, Fokus, offene Details und eine eingegebene
 90-Minuten-Laufdauer erhalten. Sprungziele erhalten Tastaturfokus. Morgen- und
 Dachauswahl wurden geprüft. Das unabhängige Review fand den Zwischenzustand des
 Diagrammtitels; er ist korrigiert und durch einen eigenen Test abgesichert.

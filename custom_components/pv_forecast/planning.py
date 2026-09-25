@@ -72,7 +72,6 @@ def plan_solar_window(
         ).astimezone(UTC),
         "assumption": "constant_interval_mean_power",
         "hysteresis_applied": False,
-        "uncertainty": {"status": "unavailable", "reason": "unsupported_horizon"},
     }
 
     def unavailable(reason: str) -> dict[str, Any]:

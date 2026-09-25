@@ -5,12 +5,8 @@ import inspect
 from datetime import UTC, datetime
 
 from custom_components.pv_forecast import (
-    calibration,
-    calibration_configuration,
-    calibration_runtime,
     diagnostics,
     forecast_cache_runtime,
-    history_runtime,
     measurement_runtime,
     storage,
 )
@@ -65,7 +61,6 @@ def _health_statuses(group, field):
             loaded=True,
             forecast=None,
             timezone="UTC",
-            calibration_mode="off" if value == "off" else "observe",
             **{field: value},
         )
         findings = check_health(state, datetime(2026, 8, 23, tzinfo=UTC))
@@ -77,15 +72,6 @@ def _health_statuses(group, field):
     return recognized
 
 
-def test_calibration_statuses_match_producers_and_health():
-    """Erzeugte und im Betriebscheck bekannte Lernstatus müssen exportierbar sein."""
-    produced = _assigned_strings(calibration, {"status"}) | _assigned_strings(
-        calibration_runtime, {"status"}
-    )
-    assert produced == diagnostics._CALIBRATION_STATUSES
-    assert _health_statuses("calibration", "calibration_status") == produced
-
-
 def test_forecast_cache_statuses_match_producers_and_health():
     """Auch Speicherfehler des Cache-Schreibpfads gehören zum Statusvertrag."""
     produced = _assigned_strings(forecast_cache_runtime, {"status", "write_status"})
@@ -94,13 +80,8 @@ def test_forecast_cache_statuses_match_producers_and_health():
 
 
 def test_storage_errors_match_all_optional_managers():
-    """Mess-, Archiv- und Lernmanager samt gemeinsamem Schreibpfad bleiben abgedeckt."""
+    """Messmanager und gemeinsamer Schreibpfad bleiben abgedeckt."""
     produced = set()
-    for module in (measurement_runtime, history_runtime, calibration_runtime, storage):
+    for module in (measurement_runtime, storage):
         produced.update(_assigned_strings(module, {"_storage_error", "write_error"}))
     assert produced == diagnostics._STORAGE_ERRORS
-
-
-def test_calibration_modes_match_configuration():
-    """Neue angebotene Lernmodi benötigen eine bewusste Aufnahme in die Diagnose."""
-    assert diagnostics._CALIBRATION_MODES == calibration_configuration._MODES.keys()

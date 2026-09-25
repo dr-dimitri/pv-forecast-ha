@@ -3,7 +3,7 @@
 Die Karte unterscheidet Information, Einschränkung und Fehler ausdrücklich im
 Text. Jeder Datenhinweis enthält eine Überschrift, Erklärung und bei Bedarf
 nächste Schritte. Fehlende Quelle, noch fehlende Messung, unvollständige Messung,
-veraltete Prognose, deaktiviertes/leeres Archiv, Rechte und Datenversion sind
+veraltete Prognose, Rechte und Datenversion sind
 getrennt. Gleiche Rechte-/Versionsfehler werden zusammengefasst. Einrichtungshilfe
 ist bewusst textlich; es gibt keine neuen Links oder schreibenden Aktionen.
 
@@ -20,7 +20,7 @@ Hinweistexte selbst sind keine bei jedem Rendern wiederholten Live-Regionen.
 
 61 Frontendtests, 1.173 Python-Tests, Ruff, Black und Übersetzungsabgleich bestehen.
 Die vollständige Browsermatrix umfasst 20 Fälle in Hell/Dunkel/eigenem Theme,
-Mobilansicht, Panel, DST, Teilstunden und Touch. Zusätzlich prüfen acht
+Mobilansicht, Panel, DST, Teilstunden und Touch. Zusätzlich prüfen mehrere
 Zustandsfixtures unveränderte Meldungen und einen Ablauf Erfolg → Fehler →
 Wiederholung → Rechteentzug → Erholung. Synthetische Daten, keine Feldprüfung.
 

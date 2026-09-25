@@ -10,7 +10,7 @@
 </style>
 <div class="toolbar"><h1>PV Forecast <span style="font-weight:400;opacity:.6">/ Kartenprüfung</span></h1><label>Fall <select id="scenario"></select></label><label>Breite <select id="width"><option value="660">660 px</option><option value="360">360 px</option><option value="768">768 px</option><option value="1440">1440 px</option></select></label><button id="theme">Dunkles Design</button><button id="visibility" aria-pressed="false">Erste Karte ausblenden</button></div>
 <main class="cards" id="cards"></main>
-<p class="demo-note">Deterministische Offline-Demo mit synthetischen Werten. Die Karte liest ausschließlich die drei simulierten HA-Aktionen. <span id="requests"></span></p>
+<p class="demo-note">Deterministische Offline-Demo mit synthetischen Werten. Die Karte liest ausschließlich die zwei simulierten HA-Aktionen. <span id="requests"></span></p>
 <script type="module">
   import { fixtureHass, SCENARIOS } from './fixtures.mjs';
   import '../../custom_components/pv_forecast/frontend/pv-forecast-card.js';

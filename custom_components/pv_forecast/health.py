@@ -37,14 +37,6 @@ class HealthState:
     source_count: int = 0
     measurements_available: bool = False
     measurement_storage_error: bool = False
-    archive_enabled: bool = False
-    archive_available: bool = False
-    archive_loaded: bool = False
-    archive_count: int = 0
-    archive_storage_error: bool = False
-    archive_truncated: bool = False
-    calibration_status: str | None = None
-    calibration_mode: str = "off"
     cache_status: str | None = None
 
 
@@ -162,39 +154,6 @@ def check_health(state: HealthState, now: datetime) -> tuple[HealthFinding, ...]
                 ),
                 state.sources.count(code),
             )
-    if not state.archive_enabled:
-        add("archive_off", "archive")
-    elif not state.archive_available:
-        add("archive_unknown", "archive")
-    elif state.archive_storage_error:
-        add("archive_store", "archive", "error")
-    elif not state.archive_loaded:
-        add("archive_not_loaded", "archive", "warning")
-    elif not state.archive_count:
-        add("archive_empty", "archive")
-    else:
-        add("archive_ready", "archive", "info", state.archive_count)
-    if state.archive_truncated:
-        add("archive_truncated", "archive", "warning")
-    if state.calibration_mode == "off":
-        add("learning_off", "calibration")
-    elif state.calibration_status is None:
-        add("learning_unknown", "calibration")
-    elif state.calibration_status == "storage_unavailable":
-        add("learning_store", "calibration", "error")
-    elif state.calibration_status == "prerequisites_missing":
-        add("learning_prerequisites", "calibration")
-    elif state.calibration_status in (
-        "learning",
-        "testing",
-        "approved",
-        "rejected",
-        "invalidated",
-        "underperformance_paused",
-    ):
-        add("learning_" + state.calibration_status, "calibration")
-    else:
-        add("learning_unknown", "calibration")
     if state.cache_status in (
         "disabled",
         "empty",

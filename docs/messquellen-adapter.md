@@ -38,8 +38,7 @@ Es gibt keine neue numerische Integrationsimplementierung oder Geräteabfrage.
 
 Abgeleitete Quellen speichern zusätzlich die ursprüngliche Entity-/Registry-ID
 und die ID des nativen Helfers. Bestehende Quellen ohne diese optionalen Angaben
-behalten ihre bisherigen Identitäten. Messsegmente und Archive bewahren die
-Herkunft; beide Quellen benötigen Leserechte. Umbenennung derselben Registry-
+behalten ihre bisherigen Identitäten. Messsegmente bewahren die Herkunft; beide Quellen benötigen Leserechte. Umbenennung derselben Registry-
 Entity ändert die Identität nicht. Entfernen/Ersetzen der Quelle oder Änderung
 der Helferkonfiguration wird nicht still übernommen. Lücken und ungültige
 Leistungswerte verhindern vollständige Erfassungsintervalle.

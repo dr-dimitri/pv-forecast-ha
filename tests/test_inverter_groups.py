@@ -1,7 +1,5 @@
-"""Reale AC-Gruppen, unveränderte Altdaten und Faktoren vor beiden Begrenzungen."""
+"""Reale AC-Gruppen und das zusätzliche Anlagenlimit gemeinsam prüfen."""
 
-from copy import deepcopy
-from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
@@ -10,28 +8,20 @@ import pytest
 
 from custom_components.pv_forecast.calculations import (
     InvalidConfigurationError,
-    apply_calibration,
     apply_inverter_limits,
     calculate_forecast,
-    calibrated_energy,
-    fit_calibration_factor,
-    forecast_basis,
 )
 from custom_components.pv_forecast.configuration import inverter_groups_from_options
 from custom_components.pv_forecast.coordinator import PvForecastCoordinator
-from custom_components.pv_forecast.history import HistoryArchive
-from custom_components.pv_forecast.history_runtime import _configuration_id
+from custom_components.pv_forecast.model_context import configuration_id
 from custom_components.pv_forecast.models import (
     AcInverterGroup,
-    ForecastCalibrationBasis,
     PvRoof,
     WeatherInterval,
 )
 
 from .helpers import persisted_roof, roof, weather
 from .test_coordinator import _entry
-from .test_history import SOURCE
-from .test_uncertainty import day_record, evaluate, records
 
 END = datetime(2026, 9, 9, 13, tzinfo=UTC)
 SHARED = AcInverterGroup("shared", "Gemeinsamer Wechselrichter", 6, ("a", "b"))
@@ -90,42 +80,9 @@ def test_common_plant_limit_is_applied_after_group_limits_exactly_once():
     assert result.total_intervals[0].ac_power_kw == 6
 
 
-def test_calibration_scales_original_dc_before_group_and_plant_limits():
-    raw = grouped_forecast()
-    corrected = apply_calibration(raw, 0.5, None, UTC)
-    assert corrected.total.today == 7
-    assert [corrected.roofs[key].daily.today for key in ("a", "b", "c")] == [4, 2, 1]
-    assert corrected.roofs["a"].intervals[0].dc_power_kw == 8
-    assert apply_calibration(raw, 1.0, None, UTC) is raw
-    combined = apply_calibration(grouped_forecast(limit=6), 0.5, 6, UTC)
-    assert combined.total.today == pytest.approx(6)
-    assert combined.roofs["a"].daily.today == pytest.approx(24 / 7)
-
-
-def test_group_basis_preserves_preclipping_power_and_reproduces_each_factor():
-    raw = grouped_forecast()
-    basis = forecast_basis(raw, END - timedelta(hours=1), END, None)
-    assert basis.group_limits == (("shared", 6),)
-    assert basis.has_ungrouped_roofs is True
-    assert basis.intervals[0].dc_power_kw == 14
-    assert basis.intervals[0].group_dc_power_kw == (12,)
-    assert basis.intervals[0].ungrouped_dc_power_kw == 2
-    encoded = basis.to_dict()
-    assert encoded["schema_version"] == 2
-    restored = ForecastCalibrationBasis.from_dict(encoded)
-    assert restored == basis
-    for factor in (0.5, 0.8, 1.0, 1.2, 1.5):
-        assert calibrated_energy(restored, factor) == pytest.approx(
-            apply_calibration(raw, factor, None, UTC).total.today
-        )
-    assert fit_calibration_factor([(restored, 8.4)] * 30) == 1.2
-
-
-def test_group_clipping_and_basis_respect_partial_interval_duration():
+def test_group_clipping_respects_partial_interval_duration():
     raw = grouped_forecast(minutes=30)
     assert raw.total.today == 4
-    basis = forecast_basis(raw, END - timedelta(minutes=30), END, None)
-    assert calibrated_energy(basis, 0.5) == 3.5
 
 
 def test_zero_and_missing_roof_data_remain_distinguishable_with_groups():
@@ -143,10 +100,6 @@ def test_zero_and_missing_roof_data_remain_distinguishable_with_groups():
         inverter_groups=(SHARED,),
     )
     assert raw.total_intervals[0].is_complete is False
-    assert forecast_basis(raw, END - timedelta(hours=1), END, None) is None
-    corrected = apply_calibration(raw, 0.5, None, UTC)
-    assert corrected.total.today == 4
-    assert corrected.total_intervals[0].is_complete is False
 
 
 @pytest.mark.parametrize("explicit_empty", [False, True])
@@ -162,18 +115,12 @@ def test_without_groups_outputs_match_pre_extension_float_bits(explicit_empty):
         "b": (WeatherInterval(END - timedelta(hours=1), END, 345.6, 18.2),),
     }
     kwargs = {"inverter_groups": ()} if explicit_empty else {}
-    result = calculate_forecast(
-        roofs, values, 5.7, END.date(), UTC, calibration_factor=0.83, **kwargs
-    )
+    result = calculate_forecast(roofs, values, 5.7, END.date(), UTC, **kwargs)
     assert result.total.today.hex() == "0x1.6cccccccccccdp+2"
     assert result.roofs["a"].intervals[0].dc_power_kw.hex() == "0x1.ba9dee548dca2p+2"
     assert result.roofs["b"].intervals[0].dc_power_kw.hex() == "0x1.087dd131ce68cp+1"
     assert result.roofs["a"].daily.today.hex() == "0x1.18e0efcf94b04p+2"
     assert result.roofs["b"].daily.today.hex() == "0x1.4faf73f4e0724p+0"
-    basis = forecast_basis(result, END - timedelta(hours=1), END, 5.7)
-    assert "schema_version" not in basis.to_dict()
-    assert "inverter_groups" not in basis.to_dict()
-    assert ForecastCalibrationBasis.from_dict(basis.to_dict()) == basis
 
 
 @pytest.mark.parametrize(
@@ -208,125 +155,28 @@ def test_options_do_not_assign_one_roof_to_two_real_ac_groups():
         inverter_groups_from_options(options)
 
 
-@pytest.mark.parametrize(
-    "corruption",
-    [
-        "version",
-        "boolean_version",
-        "group_limit",
-        "boolean_flag",
-        "duplicate",
-        "missing_group",
-        "sum",
-        "boolean_power",
-        "unknown_ungrouped",
-        "missing_flag",
-    ],
-)
-def test_group_basis_rejects_ambiguous_or_inconsistent_stored_data(corruption):
-    raw = grouped_forecast()
-    stored = forecast_basis(raw, END - timedelta(hours=1), END, None).to_dict()
-    if corruption == "version":
-        stored["schema_version"] = 3
-    elif corruption == "boolean_version":
-        stored["schema_version"] = True
-    elif corruption == "group_limit":
-        stored["inverter_groups"][0]["max_power_kw"] = True
-    elif corruption == "boolean_flag":
-        stored["has_ungrouped_roofs"] = 1
-    elif corruption == "duplicate":
-        stored["inverter_groups"].append(deepcopy(stored["inverter_groups"][0]))
-    elif corruption == "missing_group":
-        stored["intervals"][0]["group_dc_power_kw"] = []
-    elif corruption == "sum":
-        stored["intervals"][0]["dc_power_kw"] = 100
-    elif corruption == "boolean_power":
-        stored["intervals"][0]["group_dc_power_kw"] = [True]
-    elif corruption == "unknown_ungrouped":
-        stored["has_ungrouped_roofs"] = False
-    else:
-        stored.pop("has_ungrouped_roofs")
-    with pytest.raises(ValueError):
-        ForecastCalibrationBasis.from_dict(stored)
-
-
 def test_grouping_changes_physical_identity_but_names_and_empty_options_do_not():
     options = group_options()
     entry = SimpleNamespace(
         data={"latitude": 52, "longitude": 13, "time_zone": "UTC"}, options=options
     )
-    grouped = _configuration_id(entry)
+    grouped = configuration_id(entry)
     options["inverter_groups"][0]["name"] = "Neuer Anzeigename"
     options["inverter_groups"][0]["roof_ids"].reverse()
-    assert _configuration_id(entry) == grouped
+    assert configuration_id(entry) == grouped
     options["inverter_groups"][0]["max_power_kw"] = 5
-    assert _configuration_id(entry) != grouped
+    assert configuration_id(entry) != grouped
     options["inverter_groups"][0]["max_power_kw"] = 6
     options["inverter_groups"][0]["roof_ids"] = ["a", "c"]
-    assert _configuration_id(entry) != grouped
+    assert configuration_id(entry) != grouped
     options["inverter_groups"] = []
-    empty = _configuration_id(entry)
+    empty = configuration_id(entry)
     options.pop("inverter_groups")
-    assert _configuration_id(entry) == empty
+    assert configuration_id(entry) == empty
     assert empty == "00ed3467101985fee78023526b13e00377929266cfc9a8d84e4cae9a7d3cea5c"
 
 
-@pytest.mark.parametrize("value", [None, True, -1, float("inf"), float("nan"), 10**400])
-def test_stored_group_power_must_be_a_finite_nonnegative_real_number(value):
-    basis = forecast_basis(grouped_forecast(), END - timedelta(hours=1), END, None)
-    stored = basis.to_dict()
-    stored["intervals"][0]["group_dc_power_kw"] = [value]
-    with pytest.raises(ValueError):
-        ForecastCalibrationBasis.from_dict(stored)
-
-
-@pytest.mark.parametrize("group_id", ["", " ", True, 5, None])
-def test_stored_group_identity_cannot_be_invented_by_string_coercion(group_id):
-    basis = forecast_basis(grouped_forecast(), END - timedelta(hours=1), END, None)
-    stored = basis.to_dict()
-    stored["inverter_groups"][0]["id"] = group_id
-    with pytest.raises(ValueError):
-        ForecastCalibrationBasis.from_dict(stored)
-
-
-def test_archived_group_basis_preserves_raw_applied_and_candidate_energy():
-    forecast = grouped_forecast()
-    archive = HistoryArchive("UTC")
-    observed = END - timedelta(hours=2)
-    archive.capture(
-        forecast,
-        observed,
-        observed,
-        "group-configuration",
-        [SOURCE],
-        applied_factor=0.5,
-        applied_candidate_id="applied",
-        trial_factor=1.2,
-        trial_candidate_id="candidate",
-    )
-    record = next(
-        record for record in archive.records.values() if record.horizon == "hourly_1h"
-    )
-    assert record.raw_energy_kwh == 8
-    assert record.calibrated_energy_kwh == 7
-    assert record.candidate_energy_kwh == pytest.approx(8.4)
-    restored = HistoryArchive.from_dict(archive.to_dict(), "UTC")
-    assert restored.records[record.record_id].to_dict() == record.to_dict()
-
-
-def test_experience_band_uses_sum_of_group_limits_only_for_fully_assigned_plants():
-    target = day_record(92, prediction=23)
-    for has_ungrouped, expected_maximum in ((False, 24), (True, None)):
-        basis = ForecastCalibrationBasis(
-            (), None, (("one", 0.4), ("two", 0.6)), has_ungrouped
-        )
-        result = evaluate(records(), replace(target, basis=basis))
-        assert result["status"] == "available"
-        assert result["physical_maximum_kwh"] == expected_maximum
-        assert result["upper_kwh"] == (24 if not has_ungrouped else 25)
-
-
-async def test_coordinator_groups_and_local_factor_change_need_no_extra_http(hass):
+async def test_coordinator_groups_need_no_extra_http(hass):
     entry = _entry(hass, "UTC")
     hass.config_entries.async_update_entry(
         entry,
@@ -354,8 +204,4 @@ async def test_coordinator_groups_and_local_factor_change_need_no_extra_http(has
         await coordinator.async_refresh()
     assert coordinator.last_update_success
     assert coordinator.data.total.today == 13
-    fetched = coordinator.last_update_success_time
-    coordinator.async_set_calibration(0.5, "candidate")
-    assert coordinator.data.total.today == 8
-    assert coordinator.last_update_success_time == fetched
     assert client.async_fetch_roofs.await_count == 1

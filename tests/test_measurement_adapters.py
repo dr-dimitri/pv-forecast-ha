@@ -351,26 +351,6 @@ async def test_device_disappears_before_save_is_retryable(hass):
     assert result["type"] is FlowResultType.CREATE_ENTRY
 
 
-async def test_archive_keeps_power_provenance_after_roundtrip(hass):
-    """Auch gespeicherte Archive verlangen Leserechte auf die Originalleistung."""
-    from custom_components.pv_forecast.history import HistoryArchive
-
-    from .test_history import forecast
-
-    _, sensor = ksem(hass)
-    source = SourceConfig.from_dict(
-        (await async_resolve_measurement_helpers(hass, [draft(sensor)]))[0]
-    )
-    archive = HistoryArchive("UTC")
-    observed = datetime(2026, 9, 9, 6, tzinfo=UTC)
-    archive.capture(forecast(), observed, observed, "configuration-a", [source])
-    restored = HistoryArchive.from_dict(archive.to_dict(), "UTC")
-    assert {item["registry_id"] for item in restored.external_sources()} == {
-        source.registry_id,
-        source.upstream_registry_id,
-    }
-
-
 async def test_helper_setup_failure_rolls_back(hass):
     """Fehlgeschlagener nativer Setup-Abschluss hinterlässt keine neue Konfiguration."""
     _, sensor = ksem(hass)
