@@ -643,4 +643,4 @@ Anlage ist ein eingeschränkter Bericht verfügbar.
 „Prognose erklärt“ macht die beiden AC-Begrenzungen für die aktuelle
 Gesamtprognose nachvollziehbar. Die Bilanz enthält Energie vor Clipping,
 Gruppenbegrenzung, Anlagenbegrenzung und resultierende Prognose.
-[Erklärung und Grenzen](docs/stundenprognose.md#erklärung-der-aktuellen-prognose).
+[Erklärung und Grenzen](docs/stundenprognose.md#optionale-erklärung-der-aktuellen-gesamtprognose).
