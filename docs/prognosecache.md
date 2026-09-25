@@ -1,8 +1,7 @@
 # Prognose nach einem Neustart ohne Internet
 
 Unter **Konfigurieren → Erweiterte Funktionen → Letzte Prognose speichern**
-kannst du den unabhängigen Neustartcache einschalten. Standard ist aus. Er ist
-auch ohne Prognosearchiv nutzbar. Beim nächsten erfolgreichen Wetterabruf wird
+kannst du den unabhängigen Neustartcache einschalten. Standard ist aus. Beim nächsten erfolgreichen Wetterabruf wird
 der vollständige Rohmodellstand gespeichert. Ausschalten und Entfernen der
 Anlage löschen ausschließlich ihren Cache.
 
@@ -27,14 +26,10 @@ Konfigurationskennung. Dachnamen stammen beim Laden aus der aktuellen Konfigurat
 Es werden keine HTTP-Antworten, Messhistorien, Anschriften oder Zugangsdaten
 gespeichert. Ein unabhängig versionierter privater, atomarer HA-Store Version 1
 ist auf 8 MiB begrenzt; Übergröße lässt den vorherigen Stand bestehen. Unbekannte
-Storeversionen werden nicht überschrieben. Config Entry 1.1 und die Mess-/Archiv-/
-Lern-Stores ändern sich nicht.
+Storeversionen werden nicht überschrieben. Config Entry 1.1 und der Mess-Store ändern sich nicht.
 
-Nur erfolgreiche vollständige Wetterupdates schreiben den Cache. Minutentakte
-und lokale Faktorwechsel schreiben ihn nicht. Ein gespeicherter kalibrierter
-Endwert wird niemals zur Rohbasis. Wiederherstellung erzeugt keine neuen
-rechtzeitig beobachteten Archiv- oder Versuchsbelege. Aktuelle Lernprüfungen
-entscheiden weiterhin über einen Faktor; der Cache speichert keine Lernfreigabe.
+Nur erfolgreiche vollständige Wetterupdates schreiben den Cache.
+Minutentakte schreiben ihn nicht. Der Cache hält genau einen Prognosestand.
 Neue Einrichtung und Standortwechsel benötigen weiterhin ihren Wettertest.
 
 Offline geprüft sind Rohmodell-Rundreise, Zeitumstellungen, Kathmandu, zwei/sieben

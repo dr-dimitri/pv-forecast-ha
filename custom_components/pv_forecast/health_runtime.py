@@ -20,7 +20,7 @@ from .measurements import SourceConfig
 def capture_health(
     hass: HomeAssistant, entry: ConfigEntry, now: datetime
 ) -> HealthState:
-    """Keine Clients erzeugen, Stores lesen oder Archivbewertungen anstoßen."""
+    """Keine Clients erzeugen, Stores lesen oder Zustände verändern."""
     runtime = (
         getattr(entry, "runtime_data", None)
         if entry.state is ConfigEntryState.LOADED
@@ -28,8 +28,6 @@ def capture_health(
     )
     coordinator = getattr(runtime, "coordinator", None)
     manager = getattr(runtime, "measurements", None)
-    history = getattr(runtime, "history", None)
-    calibration = getattr(runtime, "calibration", None)
     cache = getattr(runtime, "forecast_cache", None)
     request_state = hass.data.get(DOMAIN)
     registry = er.async_get(hass)
@@ -103,16 +101,6 @@ def capture_health(
         source_count=len(configured),
         measurements_available=manager is not None,
         measurement_storage_error=bool(getattr(manager, "storage_error", None)),
-        archive_enabled=entry.options.get("history_enabled") is True,
-        archive_available=history is not None,
-        archive_loaded=bool(getattr(history, "loaded", False)),
-        archive_count=len(history._archive.records) if history else 0,
-        archive_storage_error=bool(getattr(history, "storage_error", None)),
-        archive_truncated=bool(history and history._archive.retention_truncated),
-        calibration_status=(
-            calibration.snapshot().get("status") if calibration else None
-        ),
-        calibration_mode=entry.options.get("calibration_mode", "off"),
         cache_status=(
             cache.status
             if cache

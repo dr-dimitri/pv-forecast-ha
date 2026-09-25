@@ -134,8 +134,6 @@ async def test_multiple_runtime_stores_and_unload_remove_are_isolated(
                     "roofs": [persisted_roof("a")],
                     "inverter_max_power_kw": index + 1,
                     "measurement_sources": [_source(entity_id=f"sensor.{name}")],
-                    "history_enabled": True,
-                    "calibration_mode": "observe",
                 },
                 pref_disable_polling=True,
             )
@@ -145,7 +143,7 @@ async def test_multiple_runtime_stores_and_unload_remove_are_isolated(
     await hass.async_block_till_done()
     first, second = entries
     left, right = first.runtime_data, second.runtime_data
-    for attribute in ("coordinator", "measurements", "history", "calibration"):
+    for attribute in ("coordinator", "measurements", "forecast_cache"):
         assert getattr(left, attribute) is not getattr(right, attribute)
     assert (
         left.coordinator._client._request_state
@@ -176,14 +174,14 @@ async def test_multiple_runtime_stores_and_unload_remove_are_isolated(
         right.measurements.snapshot(start, now, now)["total_energy"]["energy_kwh"]
         == 0.5
     )
-    right_before = right.history._archive.to_dict()
+    right_before = right.measurements.snapshot(start, now, now)
     assert await hass.config_entries.async_unload(first.entry_id)
-    assert not left.measurements.running and not left.history.running
-    assert right.measurements.running and right.history.running
+    assert not left.measurements.running
+    assert right.measurements.running
     assert left.coordinator._cancel_minute is None
     assert right.coordinator._cancel_minute is not None
     assert await hass.config_entries.async_remove(first.entry_id)
-    assert right.history._archive.to_dict() == right_before
+    assert right.measurements.snapshot(start, now, now) == right_before
     assert all(first.entry_id not in key for key in hass_storage)
     assert (
         set(

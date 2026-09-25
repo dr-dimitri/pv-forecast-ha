@@ -119,9 +119,6 @@ async def async_delete_measurement_source_data(
 ) -> None:
     """Bestätigt ausgewählte Quelldaten auch bei entladener Anlage löschen."""
 
-    from .history_runtime import async_delete_history_source_data
-
-    await async_delete_history_source_data(hass, entry, source_id)
     manager = getattr(getattr(entry, "runtime_data", None), "measurements", None)
     if manager is not None and manager.running:
         await manager.async_delete_source_data(source_id)

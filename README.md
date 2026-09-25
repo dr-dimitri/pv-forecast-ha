@@ -22,11 +22,8 @@ vorgesehen.
 - lesende Aktion für die gemeinsame Stundenprognose in Automationen
 - native Solarprognose im Home-Assistant-Energie-Dashboard
 - optionale lokale Erfassung bestehender PV-Ertragszähler mit Messdatenprüfung
-- optionales Prognosearchiv mit Soll-Ist-Berichten und bewusstem JSON-/CSV-Export
 - freiwilliges PV-Dashboard direkt über die Integrationsoptionen; Lovelace-Karte
   mit visuellem Editor, Tageskurven und Dachauswahl auch einzeln nutzbar
-- optionale Selbstkalibrierung mit getrennten Lern- und späteren Prüftagen
-- empirische Tagesbänder nach Prüfung passender eingefrorener Archivstände
 - zusammenhängende Solarzeitfenster und getrennte Tagesaussicht aus Messung,
   geschätzter Brücke und Restprognose
 - mehrere Dachflächen mit eigener Leistung, Ausrichtung, Neigung und eigenem
@@ -46,6 +43,21 @@ Funktionsumfang.
 Die noch ausstehenden freiwilligen Nutzertests, fehlenden Gütenachweise und
 zurückgestellten Erweiterungen sind unter
 [Freiwillige Erprobung](docs/offene-abnahmen.md) ausgewiesen.
+
+## Update: Archivfunktion entfernt
+
+Das Prognosearchiv und seine abhängigen Funktionen wurden vollständig entfernt:
+Archivansichten und -berichte, Export, Selbstkalibrierung, Morgenanpassung,
+Erfahrungsbänder, manuelle Tageskorrekturen und experimentelle Vergleiche/Hinweise.
+Die Aktionen `get_history` und `export_history` sind nicht mehr verfügbar.
+Automationen, die diese Aktionen verwenden, müssen angepasst werden.
+
+Beim nächsten Laden einer Anlage werden ihre bisherigen Archiv-, Lern- und
+Morgenstores sowie die zugehörigen Einstellungen gezielt gelöscht. Diese Daten
+werden nicht übernommen. Die Prognose verwendet wieder ausschließlich das
+konfigurierte Modell mit Temperatur, Wirkungsgrad und AC-Grenzen. Aktuelle
+Messwerterfassung und der separat aktivierbare Neustartcache bleiben erhalten.
+Config Entries behalten Schema 1.1.
 
 ## Installation
 
@@ -140,8 +152,8 @@ Jede Aktion wirkt für sich allein, ohne die übrigen Dachflächen anzufassen.
 
 Eine Standortkorrektur erfolgt über **Neu konfigurieren** im Menü der
 Integration. Erst nach Standortprüfung und erfolgreichem Forecast-Test wird
-der Entwurf gespeichert. Bestehende IDs bleiben erhalten; Messung, Archiv und
-Lernen unterscheiden den früheren vom neuen Standort. Details stehen unter
+der Entwurf gespeichert. Bestehende IDs bleiben erhalten; Messsegmente
+unterscheiden den früheren vom neuen Standort. Details stehen unter
 [Standortwechsel](docs/standortwechsel.md).
 
 ## Solarplanung und aktuelle Tagesaussicht
@@ -163,18 +175,12 @@ stumm bleibt. Die geschätzte Brücke bleibt getrennt von der Messung sichtbar.
 getesteten HA-Script-Blueprint für einen bewusst angeforderten Hinweis und einen
 lokalen Datenadapter für EMHASS. Die Integration schaltet keine Verbraucher.
 
-Ein optionales [Erfahrungsband](docs/bandbreite.md) bezieht sich ausdrücklich
-auf den angezeigten eingefrorenen Tagesstand. Es benötigt 60 frühere Lerntage
-und 30 spätere Prüftage mit passender Datenbasis. Ohne bestandene Prüfung
-bleibt die Bandbreite offen. Für die laufende Restprognose und beliebige
-Planungsfenster werden keine unbewiesenen Grenzen übertragen.
-
 ## Diagnosedaten
 
 Über das Menü des Integrationseintrags in Home Assistant kannst du Diagnosedaten
 bewusst herunterladen. Der integrationsspezifische Teil enthält ausschließlich
 ausgewählte Versionsangaben, Anzahlen, Datenalter, Abdeckung sowie grobe Fehler-,
-Mess-, Archiv- und Lernzustände. Er enthält keine Standorte, Koordinaten, Namen,
+Mess- und Speicherzustände. Er enthält keine Standorte, Koordinaten, Namen,
 Sensoridentitäten, URLs, Fehlermeldungen oder Ertragsverläufe. Der Download löst
 keinen Wetterabruf aus.
 
@@ -223,7 +229,7 @@ doppelt zugeordnete Teil-/Gesamtzähler und den Verlauf des KSEM-Leistungssensor
 sowie seines Integral-Helfers in Home Assistant. Bei älteren Versionen ist auch
 die bereits behobene Übernahme von Energie aus langen Meldelücken
 ([#105](https://github.com/dr-dimitri/pv-forecast-ha/issues/105)) relevant.
-Wettermodell, eingestellter Systemwirkungsgrad und Selbstkalibrierung verändern
+Wettermodell und eingestellter Systemwirkungsgrad verändern
 „Ist heute“ nicht. Eine konkrete Portalabweichung lässt sich ohne diese
 Vergleichsdaten nicht einem Rechenfehler zuordnen; ein pauschaler Korrekturfaktor
 für Messwerte ist nicht vorgesehen.
@@ -273,12 +279,11 @@ hinweg exakt null Ertrag. Damit sind vollständige Tage möglich, wenn dein Sens
 beispielsweise immer einige Sekunden nach der vollen Minute meldet. Positive
 Energiedifferenzen und Intervalle mit Ausfällen oder Resets werden nicht auf
 Stunden oder Tage aufgeteilt. Vom Integral-Helfer über eine Lücke hochgerechnete
-Energie wird aus den beobachteten Mengen ausgeschlossen; bereits irrtümlich
-bestätigte Archivbewertungen werden beim Laden nachvollziehbar korrigiert.
+Energie wird aus den beobachteten Mengen ausgeschlossen.
 
 Ein täglich zurückgesetzter Sensor kann den letzten Messabschnitt vor seinem
 Reset allein nicht abschließen. Er bleibt für belegte Messabschnitte nutzbar.
-Für vollständige Tagesberichte und Selbstkalibrierung verwende einen
+Für vollständige Tagesmesswerte verwende einen
 **fortlaufenden AC-Ertragszähler oder den KSEM-Assistenten**. Auch diese Quellen
 benötigen ausreichend regelmäßige Berichte; ausgefallene Meldungen werden nicht
 als nächtlicher Nullertrag ersetzt.
@@ -299,8 +304,7 @@ JSON-Aufbereitung und Dateiarbeit laufen im Executor. Details und Grenzen:
 [Messdaten](docs/messdaten.md). Über die Quellenoptionen lassen sich ihre Daten gezielt
 löschen. Das entfernt nur die Kopie dieser Integration, weder den Originalsensor
 noch dessen HA-Historie. Beim Entfernen der Anlage wird ihr Messdatenspeicher
-mit entfernt. Das unten beschriebene Prognosearchiv ist optional; Lernen folgt
-separat.
+mit entfernt.
 
 Die lesende Aktion `pv_forecast.get_measurements` liefert die vorhandenen Daten
 für eine explizite Anlage und ein Zeitfenster. `start` und `end` verlangen
@@ -309,86 +313,6 @@ ISO-8601-Zeitpunkte mit Offset oder `Z`, beispielsweise
 Einzelquellen, beobachtete Energiemengen, Abdeckung und Qualitätsmarkierungen;
 die Leserechte der ursprünglichen Sensoren gelten auch hier. Der genaue
 [Datenvertrag](docs/messdaten.md) erläutert die Grenzen für spätere Vergleiche.
-
-## Prognosearchiv und Soll-Ist-Vergleich (optional)
-
-Aktiviere **Prognosearchiv** im Abschlussdialog oder unter **Konfigurieren**.
-Die Erfassung beginnt ab diesem Zeitpunkt; fehlende Vergangenheit wird nicht
-nachgebaut. Pausieren erhält die vorhandenen Daten für Bericht und Export.
-Ohne zugeordneten Energiezähler bleiben Bewertungen fehlend.
-
-Unter **Konfigurieren → Tagesertrag korrigieren** kannst du für einen
-abgeschlossenen Archivtag den endgültigen AC-PV-Ertrag deines SmartMeters in
-kWh bestätigen, auch nachträglich. Der korrigierte Wert gilt für Tagesberichte,
-Vergleiche und die Selbstkalibrierung nach deren bestehenden Prüfregeln.
-Der ursprünglich erfasste Wert bleibt erhalten. Du kannst die Korrektur später
-ändern oder zurücknehmen; die historische Kartenansicht zeigt beide Werte.
-Verfügbar sind gespeicherte Tagesstände der letzten 365 Tage mit zugeordneten
-PV-Messquellen. Stundenwerte und fremde HA-Zähler werden dabei nicht verändert.
-Die [Anleitung zur Tageskorrektur](docs/tageskorrektur.md) erläutert den Ablauf.
-
-Der Bericht zeigt für 7, 30 oder 90 abgeschlossene lokale Tage die Anzahl
-rechtzeitig erfasster Prognosen, gültige Messpaare, Abdeckung, MAE und Bias in
-kWh. Positiver Bias bedeutet Überschätzung. Die Horizonte sind getrennt:
-Tagesprognose bis 18 Uhr am Vortag, Tagesprognose bis 06 Uhr am Zieltag sowie
-Stundenprognosen mit einer und drei Stunden Vorlauf. Spätere Verbesserungen
-überschreiben die gewählten Prognosen nicht; Messkorrekturen bleiben als
-Bewertungsrevisionen nachvollziehbar. Ohne Stichprobe wird keine Genauigkeit
-behauptet.
-
-Optional kannst du vorhandene fremde Tagesprognosen für heute/morgen zuordnen,
-wenn Anlagenzeitzone, Tagesbezug und AC-Messgrenze übereinstimmen. Verglichen
-werden ausschließlich dieselben gültigen Messpaare; das Datenalter wird
-getrennt ausgewiesen. Die Integration ruft dafür keinen weiteren Wetteranbieter
-ab. Die optionale Selbstkalibrierung verwendet einen getrennten, späteren
-Prüfzeitraum und bewahrt diese Rohprognosen.
-
-Das Archiv ist lokal begrenzt: Stundenstände 90 Tage, Tagesbewertungen 365 Tage,
-maximal 6.000 Zieldatensätze und 32 MiB, mit je drei früheren Bewertungen.
-**Prognosearchiv löschen** entfernt es nach Bestätigung. Beim Löschen einer
-Messquelle werden auch ihre Messkopien im Archiv entfernt.
-`pv_forecast.get_history` liest den Bericht; `pv_forecast.export_history`
-liefert auf ausdrücklichen Aufruf JSON-/CSV-Inhalt mit Dateiname, ohne eine
-Datei automatisch zu veröffentlichen. Der
-[Archivvertrag](docs/prognosearchiv.md) erklärt Stichtage, Formeln, Grenzen und
-Leserechte. Die reale Nutzer- und Güteerprobung aus der Roadmap bleibt offen.
-
-## Selbstkalibrierung (optional)
-
-Unter **Konfigurieren → Selbstkalibrierung → Modus auswählen** kannst du
-zunächst **Beobachten** wählen. Voraussetzung sind ein aktiviertes Prognosearchiv
-und bestätigte PV-Energiequellen. Standardmäßig ist die Funktion aus. Sie
-verändert weder die installierte Leistung noch deinen Systemwirkungsgrad.
-
-Nach mindestens 30 vollständigen Lerntagen wird ein begrenzter Anlagenfaktor
-an mindestens 14 späteren Tagen geprüft. **Automatisch anwenden** verwendet ihn
-erst bei bestandenem Nutzenkriterium; andernfalls bleibt die Rohprognose wirksam.
-Alle Dächer und das Energy Dashboard verwenden denselben Faktor vor dem
-Wechselrichterlimit. Es entstehen keine zusätzlichen Wetterabrufe.
-
-Der **Lern- und Prüfstatus ansehen** zeigt die verfügbare Stichprobe und den Vergleich. Bekannte
-Abregelung oder Wartung lässt sich für einen lokalen Tag markieren. Abschalten
-verwendet wieder das Grundmodell; **Lernzustand zurücksetzen** beginnt nach
-Bestätigung von vorn. [Regeln, Bedienung und Grenzen](docs/kalibrierung.md)
-erklären insbesondere, warum ältere Archivtage nicht nachträglich als Lerntage
-verwendet werden und warum eine Verbesserung nicht garantiert ist.
-
-## Morgenprognose (optional)
-
-Unter **Konfigurieren → Erweiterte Funktionen → Morgenprognose prüfen und verbessern**
-kannst du den zeitlichen PV-Anstieg beobachten. Ein globaler Anlagenfaktor und eine
-passende Tagesmenge allein belegen noch keinen richtigen Morgenverlauf.
-
-Die Funktion ist standardmäßig aus. Nach 30 geeigneten Morgen und mindestens
-14 späteren Prüfmorgen darf eine ausdrücklich gewählte Automatik eine begrenzte
-Morgenform auf die gemeinsame Prognose anwenden. Dazu braucht sie bestätigte
-AC-Erzeugung mit ausreichender Zeitauflösung und das aktivierte Archiv. Fehlende
-Zeitbelege bleiben unbekannt. Die geprüfte PV-Schwelle ist keine Hauslast; eine
-Speichersteuerung muss ihren Bedarf weiterhin selbst bestimmen.
-
-[Methode, Datenvertrag, Freigabe und Rückfall](docs/morgenprognose.md) erklären
-auch den Unterschied zwischen Beobachten und Automatik sowie die Grenzen der
-60-Minuten-Aussage.
 
 ## PV-Dashboard und eigene Karte (optional)
 
@@ -416,11 +340,10 @@ kannst du die Karte über **Dashboard bearbeiten → Karte hinzufügen** und ihr
 visuellen Editor ohne YAML einrichten.
 
 Sie zeigt vier Tageskennzahlen, Heute/Morgen und Gesamt-/Dachauswahl, eine
-Energiekurve sowie freiwillig erfasste Messungen und feste Archivprognosen.
+Energiekurve sowie freiwillig erfasste Messungen.
 Messlücken werden nicht aufgefüllt; ohne zugeordnete Dachmessung bleibt diese
 in der Dachansicht fehlend. Das Tagesdiagramm zeigt ausschließlich **„Aktuelle Prognose“** (durchgezogen)
-und **„Tatsächlich produziert“** (gestrichelt). Feste Archivprognosen bleiben
-in den Details und der separaten Archivansicht verfügbar. Die Karte verwendet die
+und **„Tatsächlich produziert“** (gestrichelt). Die Karte verwendet die
 Anlagenzeitzone und unterscheidet wiederholte Stunden bei Zeitumstellungen.
 
 [Installation, Bedienung und Grenzen der Karte](docs/karte.md) beschreiben auch
@@ -454,8 +377,7 @@ Revidierte Tages-, Rest- und Stundenprognosen sind keine Erzeugungszähler:
 `total` würde Prognoseänderungen akkumulieren, `total_increasing` könnte
 Abwärtskorrekturen als Zählerrücksetzung interpretieren. Auch die geschätzte
 Leistung ist kein aktueller Erzeugungsmesswert. Die normale Recorder-Historie
-richtet sich nach deiner HA-Aufbewahrung; langfristige Soll-Ist-Vergleiche
-verwenden das datierte Prognosearchiv. Die native Energy-Anbindung benötigt
+richtet sich nach deiner HA-Aufbewahrung. Die native Energy-Anbindung benötigt
 keine Statistikklasse dieser Sensoren.
 
 Die Zuordnung zu heute und morgen wechselt zur Mitternacht am Anlagenstandort.
@@ -528,8 +450,8 @@ Prognosecache reicht nicht aus. Ein späterer erfolgreicher Abruf stellt die
 Verfügbarkeit wieder her. Diese Gültigkeitsregel ist bereits am Sensorzustand
 erkennbar, weil SAX keine zusätzlichen Alters- oder Qualitätsattribute prüft.
 
-Die Energie umfasst alle Dächer der Anlage nach deren Verlusten, gegebenenfalls
-wirksamer Kalibrierung und AC-Begrenzungen. Eigenverbrauch und Speicherverluste
+Die Energie umfasst alle Dächer der Anlage nach deren Verlusten und
+AC-Begrenzungen. Eigenverbrauch und Speicherverluste
 werden nicht als zusätzlicher SAX-Abschlag eingerechnet:
 
 - **Smart / preisoptimiertes Laden:** SAX zieht Prognose × nutzbaren Anteil vom
@@ -697,7 +619,7 @@ Die Integration kann mehrfach eingerichtet werden. Jede logische Anlage erhält 
 
 ## Optionales Horizontprofil
 
-Unter **Konfigurieren → Horizontprofil je Dach (experimentell)** lassen sich 12 oder 24 Höhenwinkel hinterlegen. Das Modell schätzt zeitabhängig blockiertes Direktlicht für einen entfernten Horizont der gesamten Dachfläche und erhält einen diffusen Rest. Eine Verbesserung mit echten Messdaten ist noch nicht belegt. Eingabeformat, Modellgrenzen und Vergleich zur Kalibrierung: [Horizontprofil](docs/horizontprofil.md).
+Unter **Konfigurieren → Horizontprofil je Dach (experimentell)** lassen sich 12 oder 24 Höhenwinkel hinterlegen. Das Modell schätzt zeitabhängig blockiertes Direktlicht für einen entfernten Horizont der gesamten Dachfläche und erhält einen diffusen Rest. Eine Verbesserung mit echten Messdaten ist noch nicht belegt. Eingabeformat und Modellgrenzen: [Horizontprofil](docs/horizontprofil.md).
 
 Für eigene Automationen liefert `get_forecast` optional die Energie eines frei
 gewählten UTC-Zeitfensters und mittlere Leistung in 5-/15-/30-/60-Minuten-Schritten.
@@ -711,18 +633,14 @@ Abrufzeit und Fehler bleiben sichtbar; lokale Messung kann wieder starten.
 [Prognosecache und Grenzen](docs/prognosecache.md).
 
 Unter **Konfigurieren → Betrieb prüfen** erklärt ein rein lokaler Bericht Abruf,
-Anbieterpause, Datenalter, Horizont-/Energy-Abdeckung, Messquellen, Archiv, Lernen
+Anbieterpause, Datenalter, Horizont-/Energy-Abdeckung, Messquellen
 und Neustartcache. **Erneut prüfen** liest nur vorhandene Zustände: keine
 Wetterabfrage, kein Storezugriff und keine automatische Änderung. Ausgeschaltete
-Funktionen und fehlende Lerntage sind keine Defektmeldung. Auch ohne geladene
+Funktionen sind keine Defektmeldung. Auch ohne geladene
 Anlage ist ein eingeschränkter Bericht verfügbar.
 [Betriebscheck mit nativen Browsernachweisen](docs/betriebscheck.md).
 
-Die [historische Tagesansicht](docs/prognosearchiv.md#einen-vergangenen-tag-erkunden)
-zeigt im Analysebereich einzelne abgeschlossene Archivtage mit eingefrorenen
-Stundenständen, ursprünglichem Kontext und belegten Archivmessungen.
-
-„Prognose erklärt“ macht den angewendeten Faktor und die beiden AC-Begrenzungen
-für die aktuelle Gesamtprognose nachvollziehbar. Die optionalen Grundmodellwerte
-enthalten bereits Temperaturannahme, Anwenderwirkungsgrad und reale AC-Grenzen.
-[Erklärung und Grenzen](docs/kalibrierung.md#angewendete-wirkung-nachvollziehen).
+„Prognose erklärt“ macht die beiden AC-Begrenzungen für die aktuelle
+Gesamtprognose nachvollziehbar. Die Bilanz enthält Energie vor Clipping,
+Gruppenbegrenzung, Anlagenbegrenzung und resultierende Prognose.
+[Erklärung und Grenzen](docs/stundenprognose.md#optionale-erklärung-der-aktuellen-gesamtprognose).

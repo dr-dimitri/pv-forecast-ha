@@ -9,7 +9,7 @@ Tabellen-, Panel- und Dokument-Scrollpositionen bleiben erhalten.
 
 Bei entfernter Dachansicht führt der Fokus zur angebotenen Rückkehr zur
 Gesamtanlage, anschließend zur Flächenauswahl. Intervallwechsel und
-Planungs-/Berichtszustände verwenden eine beständige, gezielte Live-Region.
+Planungszustände verwenden eine beständige, gezielte Live-Region.
 Unveränderte Zustände und unveränderte Intervallauswahl werden nicht wiederholt
 angekündigt. Labels, Überschriften und Gruppen bleiben im Accessibility-Baum
 verfügbar; der gesamte Karteninhalt ist keine Live-Region.
@@ -44,7 +44,7 @@ Mobilansicht, Panel, Touch, DST und Teilstunden) sowie:
 - 320 CSS-px mit 200 Prozent Text (mindestens 28 px im HTML), langen Namen und
   großen Werten, ohne horizontales Seitenscrollen; Touchziele nachgemessen.
 - Entfernte Dachauswahl und Rückkehr mit sinnvollem Fokus.
-- Zwei sichtbare Karten teilen drei Leseaufrufe. Ausblenden beider Karten
+- Zwei sichtbare Karten teilen zwei Leseaufrufe. Ausblenden beider Karten
   entfernt alle Abnehmer und den Timer; anschließendes Entfernen bleibt sauber.
 
 61 Frontendtests, 1.175 Python-Tests, Ruff, Black und Übersetzungsabgleich bestehen.
@@ -56,7 +56,7 @@ Am 10.09.2026 wurde zusätzlich außerhalb des Regressionsskripts die lokale
 „Intervalle erkunden“, Pfeil rechts, Escape, Tabfolge zur Planung, Enter,
 Laufdauer 90 und Tab zum frühesten Start. Auswahl, Schließen, Fokusfolge und
 Feldnamen wurden jeweils im Accessibility-Baum geprüft. Die Intervallansage
-enthielt Zeitpunkt mit Offset sowie getrennt Prognose, Archiv und Messung.
+enthielt Zeitpunkt mit Offset sowie getrennt Prognose und Messung.
 Dies ist ein durch das Assistenzwerkzeug ausgeführter Smoke-Test, kein
 menschlicher Usability-Test.
 

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-from copy import deepcopy
 from dataclasses import replace
 from datetime import UTC, date, datetime, time, timedelta
 from unittest.mock import patch
@@ -33,9 +32,6 @@ from custom_components.pv_forecast.const import (
     DOMAIN,
 )
 from custom_components.pv_forecast.diagnostics import async_get_config_entry_diagnostics
-from custom_components.pv_forecast.health import check_health
-from custom_components.pv_forecast.health_runtime import capture_health
-from custom_components.pv_forecast.history_runtime import _configuration_id
 
 from .helpers import persisted_roof, weather
 
@@ -141,12 +137,8 @@ async def test_download_has_fixed_metadata_snapshot(hass, hass_client, forecast_
         "model_version": "1",
         "supported_storage_versions": {
             "measurements": 3,
-            "history": 8,
-            "calibration": 1,
-            "morning": 1,
         },
         "forecast_cache": {"status": "disabled"},
-        "calibration_rule_version": 1,
         "entry_state": "loaded",
         "runtime_available": True,
         "configuration": {
@@ -178,29 +170,15 @@ async def test_download_has_fixed_metadata_snapshot(hass, hass_client, forecast_
             "unresolved_identity_count": 0,
             "storage_error": None,
         },
-        "history": {
-            "available": True,
-            "enabled": False,
-            "loaded": False,
-            "running": False,
-            "storage_error": None,
-        },
-        "calibration": {
-            "available": True,
-            "mode": "off",
-            "status": "off",
-            "storage_error": None,
-            "prerequisites_met": False,
-        },
     }
     _assert_private(result)
     assert forecast_client.await_count == 1
 
 
-async def test_diagnostics_reads_without_updates_storage_or_history(
+async def test_diagnostics_reads_without_updates_or_storage(
     hass, freezer, forecast_client
 ):
-    """Diagnostik löst weder HTTP, Lernen, Speichern noch Archivbewertung aus."""
+    """Diagnostik löst weder HTTP noch Speichern oder neue Messauswertung aus."""
 
     entry = await _load(hass, forecast_client)
     runtime = entry.runtime_data
@@ -213,13 +191,11 @@ async def test_diagnostics_reads_without_updates_storage_or_history(
         patch.object(Store, "async_load") as load,
         patch.object(Store, "async_save") as save,
         patch.object(Store, "async_delay_save") as delayed,
-        patch.object(runtime.history, "snapshot") as history,
         patch.object(runtime.measurements, "snapshot") as measurements,
-        patch.object(runtime.calibration, "async_reconcile") as learn,
     ):
         result = await async_get_config_entry_diagnostics(hass, entry)
 
-    for method in (load, save, delayed, history, measurements, learn):
+    for method in (load, save, delayed, measurements):
         method.assert_not_called()
     assert result["forecast"]["last_success_age_seconds"] == 420
     assert runtime.coordinator.data is forecast
@@ -272,37 +248,17 @@ async def test_status_allowlists_block_unknown_stored_texts(hass, forecast_clien
     entry = await _load(hass, forecast_client)
     runtime = entry.runtime_data
     runtime.measurements._storage_error = _SECRET
-    runtime.history._storage_error = _SECRET
     runtime.forecast_cache.status = _SECRET
-    with patch.object(
-        runtime.calibration,
-        "snapshot",
-        return_value={
-            "mode": _SECRET,
-            "status": _SECRET,
-            "storage_error": _SECRET,
-            "candidate_id": _SECRET,
-            "raw_mae_kwh": 12345.6789,
-            "records": [{"entity_id": _SECRET}],
-        },
-    ):
-        result = await async_get_config_entry_diagnostics(hass, entry)
+    result = await async_get_config_entry_diagnostics(hass, entry)
 
     assert result["measurements"]["storage_error"] == "unknown"
-    assert result["history"]["storage_error"] == "unknown"
     assert result["forecast_cache"]["status"] == "unknown"
-    assert result["calibration"] == {
-        "available": True,
-        "mode": "unknown",
-        "status": "unknown",
-        "storage_error": "unknown",
-        "prerequisites_met": False,
-    }
+
     _assert_private(result)
 
 
-async def _load_learning(hass, mode="observe"):
-    """Eine Anlage mit echtem Archiv, bestätigter Messquelle und Lernen laden."""
+async def _load_measurements(hass):
+    """Eine Anlage mit bestätigter Messquelle laden."""
 
     entry = _entry(hass)
     source_entity = "sensor.geheime_pv_erzeugung"
@@ -328,8 +284,6 @@ async def _load_learning(hass, mode="observe"):
                     "confirmed_disjoint": True,
                 }
             ],
-            "history_enabled": True,
-            "calibration_mode": mode,
         },
     )
     assert await hass.config_entries.async_setup(entry.entry_id)
@@ -337,12 +291,10 @@ async def _load_learning(hass, mode="observe"):
     return entry
 
 
-async def test_active_measurement_and_learning_only_expose_status(
-    hass, forecast_client
-):
+async def test_active_measurement_only_exposes_status(hass, forecast_client):
     """Aktive bestätigte Quellen liefern weder Zählerstände noch Quellidentitäten."""
 
-    entry = await _load_learning(hass)
+    entry = await _load_measurements(hass)
 
     result = await async_get_config_entry_diagnostics(hass, entry)
 
@@ -353,67 +305,9 @@ async def test_active_measurement_and_learning_only_expose_status(
         "unresolved_identity_count": 0,
         "storage_error": None,
     }
-    assert result["history"] == {
-        "available": True,
-        "enabled": True,
-        "loaded": True,
-        "running": True,
-        "storage_error": None,
-    }
-    assert result["calibration"] == {
-        "available": True,
-        "mode": "observe",
-        "status": "learning",
-        "storage_error": None,
-        "prerequisites_met": True,
-    }
     serialized = json.dumps(result)
     assert "sensor.geheime_pv_erzeugung" not in serialized
     assert "12345.6789" not in serialized
-    _assert_private(result)
-    assert forecast_client.await_count == 1
-
-
-@pytest.mark.parametrize("mode", ["observe", "auto"])
-async def test_underperformance_pause_matches_health_without_event_export(
-    hass, forecast_client, mode
-):
-    """Der echte Lernstopp bleibt in beiden Lesewegen sichtbar und datensparsam."""
-
-    entry = await _load_learning(hass, mode)
-    runtime = entry.runtime_data
-    # Nur den vorhandenen Hinweiszustand setzen; die Erkennungsregel prüft #32.
-    event = {
-        "configuration_id": _configuration_id(entry),
-        "acknowledged": False,
-        "notified": False,
-        "accepted_factor": 0.9,
-        "id": _SECRET,
-        "created_at": _NOW.isoformat(),
-        "first_day": "2026-08-16",
-        "last_day": "2026-08-22",
-        "target_id": _SECRET,
-        "case_ids": [_SECRET],
-        "evidence": {"raw_energy_kwh": 12345.6789},
-    }
-    runtime.history._archive.underperformance["event"] = deepcopy(event)
-    assert runtime.history.learning_paused
-    assert runtime.calibration.snapshot()["status"] == "underperformance_paused"
-
-    findings = check_health(capture_health(hass, entry, _NOW), _NOW)
-    result = await async_get_config_entry_diagnostics(hass, entry)
-
-    assert [finding.code for finding in findings if finding.group == "calibration"] == [
-        "learning_underperformance_paused"
-    ]
-    assert result["calibration"] == {
-        "available": True,
-        "mode": mode,
-        "status": "underperformance_paused",
-        "storage_error": None,
-        "prerequisites_met": True,
-    }
-    assert runtime.history._archive.underperformance["event"] == event
     _assert_private(result)
     assert forecast_client.await_count == 1
 

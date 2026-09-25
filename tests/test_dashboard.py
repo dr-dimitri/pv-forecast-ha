@@ -13,7 +13,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.pv_forecast.const import DOMAIN
 from custom_components.pv_forecast.dashboard import DashboardManager, dashboard_path
-from custom_components.pv_forecast.history_runtime import _configuration_id
+from custom_components.pv_forecast.model_context import configuration_id
 
 from .helpers import configure_options, persisted_roof
 from .test_config_flow import _advance_to_summary
@@ -215,7 +215,7 @@ async def test_options_enable_rename_disable_without_weather_reload_or_lost_opti
     original_runtime = entry.runtime_data
     fetched = original_runtime.coordinator.last_update_success_time
     original_data = original_runtime.coordinator.data
-    original_configuration_id = _configuration_id(entry)
+    original_configuration_id = configuration_id(entry)
     calls = session.calls
     for enabled, title in (
         (True, "PV · Aktiv"),
@@ -236,7 +236,7 @@ async def test_options_enable_rename_disable_without_weather_reload_or_lost_opti
         assert original_runtime.coordinator.data is original_data
         assert original_runtime.coordinator.last_update_success_time == fetched
         assert session.calls == calls
-        assert _configuration_id(entry) == original_configuration_id
+        assert configuration_id(entry) == original_configuration_id
         assert (
             dashboard_path(entry.entry_id) in hass.data.get(frontend.DATA_PANELS, {})
         ) == enabled

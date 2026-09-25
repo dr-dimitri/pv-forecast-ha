@@ -47,7 +47,6 @@ from custom_components.pv_forecast.geocoding import (
     GeocodingConnectionError,
     GeocodingDataError,
 )
-from custom_components.pv_forecast.history_runtime import _configuration_id
 from custom_components.pv_forecast.models import GeocodedLocation
 
 from .helpers import configure_options, persisted_roof
@@ -250,7 +249,6 @@ async def test_summary_is_german_for_english_profile(hass) -> None:
         "edit_roofs": "Dachflächen ändern",
         "edit_system": "Wechselrichterleistung ändern",
         "measurements": "PV-Erzeugung einrichten (optional)",
-        "history": "Prognosearchiv und Soll-Ist-Vergleich (optional)",
         "dashboard": "PV-Dashboard einrichten",
     }
 
@@ -406,7 +404,6 @@ async def test_successful_setup_with_multiple_roofs(hass) -> None:
         "edit_roofs": "Dachflächen ändern",
         "edit_system": "Wechselrichterleistung ändern",
         "measurements": "PV-Erzeugung einrichten (optional)",
-        "history": "Prognosearchiv und Soll-Ist-Vergleich (optional)",
         "dashboard": "PV-Dashboard einrichten",
     }
     with patch(
@@ -978,7 +975,6 @@ async def test_options_flow_menu_offers_removal_of_last_roof(hass) -> None:
     assert set(result["menu_options"]) == {
         "plant_options",
         "measurements",
-        "daily_correction",
         "dashboard",
         "advanced_options",
         "health",
@@ -1003,7 +999,6 @@ async def test_options_flow_menu_hides_edit_and_remove_without_roofs(hass) -> No
     assert set(result["menu_options"]) == {
         "plant_options",
         "measurements",
-        "daily_correction",
         "dashboard",
         "advanced_options",
         "health",
@@ -1030,7 +1025,6 @@ async def test_options_flow_add_roof_does_not_touch_existing_roofs(hass) -> None
     assert set(result["menu_options"]) == {
         "plant_options",
         "measurements",
-        "daily_correction",
         "dashboard",
         "advanced_options",
         "health",
@@ -1118,7 +1112,6 @@ async def test_options_flow_preserves_exact_azimuth_when_saving_defaults(
         options={CONF_ROOFS: [stored_roof]},
     )
     entry.add_to_hass(hass)
-    configuration_id = _configuration_id(entry)
     result = await hass.config_entries.options.async_init(entry.entry_id)
     result = await configure_options(
         hass, result["flow_id"], {"next_step_id": "edit_roof"}
@@ -1137,7 +1130,6 @@ async def test_options_flow_preserves_exact_azimuth_when_saving_defaults(
     assert result["type"] is FlowResultType.CREATE_ENTRY
     assert result["data"][CONF_ROOFS] == [stored_roof]
     assert (entry.version, entry.minor_version) == (1, 1)
-    assert _configuration_id(entry) == configuration_id
 
 
 @pytest.mark.asyncio
@@ -1364,7 +1356,6 @@ async def test_options_flow_removing_roof_requires_confirmation(hass) -> None:
     assert set(result["menu_options"]) == {
         "plant_options",
         "measurements",
-        "daily_correction",
         "dashboard",
         "advanced_options",
         "health",

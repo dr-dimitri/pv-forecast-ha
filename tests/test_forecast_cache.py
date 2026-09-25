@@ -188,7 +188,6 @@ async def test_restart_offline_preserves_raw_age_failure_and_recovers(
         first = entry.runtime_data.coordinator
         raw = first.raw_data
         stored = deepcopy(hass_storage[f"pv_forecast.forecast_cache.{entry.entry_id}"])
-        first.async_set_calibration(1.2, None)
         first._async_handle_minute(NOW)
         await hass.async_block_till_done()
         assert hass_storage[f"pv_forecast.forecast_cache.{entry.entry_id}"] == stored
@@ -204,7 +203,6 @@ async def test_restart_offline_preserves_raw_age_failure_and_recovers(
         assert not coordinator.last_update_success
         assert coordinator.last_update_success_time == NOW
         assert coordinator.restored_at == NOW + timedelta(minutes=15)
-        assert runtime.history._archive.records == {}
         assert await async_get_solar_forecast(hass, entry.entry_id) is None
         # SAX darf auch einen erst 15 Minuten alten Offline-Cache nicht verwenden.
         from .test_sensor_sax import states

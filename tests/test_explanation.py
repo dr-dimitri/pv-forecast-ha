@@ -9,7 +9,6 @@ import pytest
 
 from custom_components.pv_forecast.calculations import (
     aggregate_energy_for_day,
-    apply_calibration,
     apply_inverter_limits,
 )
 from custom_components.pv_forecast.explanation import (
@@ -82,30 +81,26 @@ def basis(
     )
 
 
-def explain(raw, factor=1, limit=None, zone="UTC"):
-    effective = apply_calibration(raw, factor, limit, ZoneInfo(zone))
-    snapshot = build_explanation(raw, effective, factor, limit, zone)
+def explain(raw, limit=None, zone="UTC"):
+    effective = raw
+    snapshot = build_explanation(raw, effective, limit, zone)
     now = datetime.combine(raw.local_date, time(12), ZoneInfo(zone)).astimezone(UTC)
     result = explanation_view(snapshot, raw, effective, zone, now, now, True)
     return snapshot, result, effective
 
 
-def test_factor_before_limit_and_effective_difference():
+def test_clipping_explains_effective_energy():
     raw = basis(limit=8)
-    snapshot, result, effective = explain(raw, 1.2, 8)
+    snapshot, result, effective = explain(raw, 8)
     first = snapshot.intervals[0]
     assert (
-        first.before_calibration_kwh,
-        first.calibration_delta_kwh,
+        first.before_clipping_kwh,
         first.group_clipping_kwh,
         first.total_clipping_kwh,
         first.effective_kwh,
-    ) == (10, 2, 0, 4, 8)
+    ) == (10, 0, 2, 8)
     assert result["status"] == "available"
     assert result["totals"]["effective_kwh"] == effective.total.today == 192
-    assert result["totals"]["raw_model_kwh"] == 192
-    assert result["totals"]["effective_minus_raw_kwh"] == 0
-    assert result["totals"]["calibration_delta_kwh"] == 48
 
 
 def test_groups_unassigned_and_additional_plant_limit():
@@ -114,12 +109,11 @@ def test_groups_unassigned_and_additional_plant_limit():
         AcInverterGroup("g2", "Gruppe 2", 3, ("c",)),
     )
     raw = basis({"a": 4, "b": 4, "c": 4, "d": 2}, 10, groups)
-    snapshot, result, _ = explain(raw, 1.2, 10)
+    snapshot, result, _ = explain(raw, 10)
     first = snapshot.intervals[0]
-    assert first.before_calibration_kwh == 14
-    assert first.calibration_delta_kwh == pytest.approx(2.8)
-    assert first.group_clipping_kwh == pytest.approx(5.4)
-    assert first.total_clipping_kwh == pytest.approx(1.4)
+    assert first.before_clipping_kwh == 14
+    assert first.group_clipping_kwh == pytest.approx(3)
+    assert first.total_clipping_kwh == pytest.approx(1)
     assert first.effective_kwh == pytest.approx(10)
     stages = apply_inverter_limits(
         {"a": 4, "b": 4, "c": 4, "d": 2}, 10, groups, include_stages=True
@@ -133,23 +127,6 @@ def test_groups_unassigned_and_additional_plant_limit():
     assert result["status"] == "available"
 
 
-@pytest.mark.parametrize("factor", [0.5, 0.9, 1, 1.5])
-def test_unclipped_signed_factor_and_bit_identical_raw(factor):
-    raw = basis()
-    snapshot, result, effective = explain(raw, factor)
-    assert snapshot.reason is None
-    assert snapshot.intervals[0].calibration_delta_kwh == pytest.approx(
-        10 * (factor - 1)
-    )
-    assert snapshot.intervals[0].group_clipping_kwh == 0
-    assert snapshot.intervals[0].total_clipping_kwh == 0
-    if factor == 1:
-        assert effective is raw
-        assert [i["energy_kwh"] for i in result["raw_intervals"]] == [
-            i.energy_kwh for i in raw.total_intervals[:24]
-        ]
-
-
 @pytest.mark.parametrize(
     ("day", "zone", "hours"),
     [
@@ -160,9 +137,8 @@ def test_unclipped_signed_factor_and_bit_identical_raw(factor):
 )
 def test_day_projection_preserves_dst_and_quarter_hours(day, zone, hours):
     raw = basis(zone=zone, day=day)
-    snapshot, result, effective = explain(raw, 1.2, zone=zone)
-    assert result["totals"]["effective_kwh"] == 12 * hours
-    assert result["totals"]["raw_model_kwh"] == 10 * hours
+    snapshot, result, effective = explain(raw, zone=zone)
+    assert result["totals"]["effective_kwh"] == 10 * hours
     now = datetime.combine(day, time(12), ZoneInfo(zone)).astimezone(UTC)
     with patch(
         "custom_components.pv_forecast.explanation.apply_inverter_limits",
@@ -202,7 +178,7 @@ def test_multiday_explanation_follows_current_days_after_midnight(
         target_day - timedelta(days=2),
         forecast_days,
     )
-    snapshot, _, effective = explain(raw, 1.2, 10, zone)
+    snapshot, _, effective = explain(raw, 10, zone)
     now = datetime.combine(
         target_day - timedelta(days=1), time(0, 15), timezone
     ).astimezone(UTC)
@@ -234,12 +210,10 @@ def test_multiday_explanation_follows_current_days_after_midnight(
             assert result["intervals"][-1]["end"] == end.isoformat()
             totals = result["totals"]
             for key, hourly_value in {
-                "before_calibration_kwh": 14,
-                "calibration_delta_kwh": 2.8,
-                "group_clipping_kwh": 5.4,
-                "total_clipping_kwh": 1.4,
+                "before_clipping_kwh": 14,
+                "group_clipping_kwh": 3,
+                "total_clipping_kwh": 1,
                 "effective_kwh": 10,
-                "raw_model_kwh": 10,
             }.items():
                 assert totals[key] == pytest.approx(hourly_value * hours)
             if selected == "tomorrow" and tomorrow_hours == 25:
@@ -251,7 +225,6 @@ def test_multiday_explanation_follows_current_days_after_midnight(
                 assert result["intervals"][-1]["effective_kwh"] == 2.5
     assert snapshot.raw is raw
     assert snapshot.effective is effective
-    assert snapshot.factor == 1.2
 
 
 @pytest.mark.parametrize("problem", ["zero", "gap", "incomplete"])
@@ -281,7 +254,6 @@ def test_later_day_distinguishes_zero_from_missing_coverage(problem):
         assert result["reason"] is None
         assert result["complete"] is True
         assert result["totals"]["effective_kwh"] == 0
-        assert result["totals"]["effective_minus_raw_percent"] is None
     else:
         assert result["status"] == "unavailable"
         assert result["reason"] == "incomplete_coverage"
@@ -319,7 +291,7 @@ def test_existing_daily_total_remains_checked_against_interval_energy(
         raw,
         total=replace(raw.total, **{stored_day: getattr(raw.total, stored_day) + 1}),
     )
-    snapshot = build_explanation(raw, effective, 1, None, "UTC")
+    snapshot = build_explanation(raw, effective, None, "UTC")
     now = datetime.combine(raw.local_date + timedelta(days=offset), time(1), UTC)
     result = explanation_view(
         snapshot, raw, effective, "UTC", now, now, True, day=selected
@@ -342,7 +314,6 @@ def test_zero_fallback_restored_and_horizon_metadata():
         ),
     )
     snapshot, result, effective = explain(raw)
-    assert result["totals"]["effective_minus_raw_percent"] is None
     assert result["quality_flags"] == ["temperature_fallback"]
     assert "horizon_profile" in result["assumptions"]
     now = datetime(2026, 9, 10, 12, tzinfo=UTC)
@@ -362,7 +333,7 @@ def test_zero_fallback_restored_and_horizon_metadata():
 
 def test_missing_incompatible_and_nonfinite_basis_never_overwrites_forecast():
     raw = basis()
-    assert build_explanation(None, raw, 1, None, "UTC").reason == "missing_raw_basis"
+    assert build_explanation(None, raw, None, "UTC").reason == "missing_raw_basis"
     inconsistent = replace(
         raw,
         total_intervals=(
@@ -371,7 +342,7 @@ def test_missing_incompatible_and_nonfinite_basis_never_overwrites_forecast():
         ),
     )
     assert (
-        build_explanation(raw, inconsistent, 1, None, "UTC").reason
+        build_explanation(raw, inconsistent, None, "UTC").reason
         == "incompatible_raw_basis"
     )
     snapshot, _, effective = explain(raw)
@@ -383,5 +354,5 @@ def test_missing_incompatible_and_nonfinite_basis_never_overwrites_forecast():
         == "incompatible_generation"
     )
     huge = basis({"a": 1e307}, limit=8)
-    assert explain(huge, 1.5, 8)[1]["status"] == "unavailable"
+    assert explain(huge, 8)[1]["status"] == "unavailable"
     assert raw.total_intervals[0].energy_kwh == 10

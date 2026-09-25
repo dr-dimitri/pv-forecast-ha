@@ -24,7 +24,6 @@ from .api import OpenMeteoClient, OpenMeteoError, OpenMeteoRetryError
 from .calculations import (
     InvalidConfigurationError,
     aggregate_energy_for_day,
-    apply_calibration,
     calculate_forecast,
     calculate_planning_values,
 )
@@ -42,8 +41,6 @@ from .forecast_intervals import window_energy
 from .forecast_window import query_forecast_window
 from .horizon import forecast_days_from_options
 from .models import ForecastDay, ForecastResult, PlanningValues
-from .morning import apply_morning
-from .temperature_comparison import COEFFICIENTS, mountings_from_options
 
 if TYPE_CHECKING:
     from .forecast_cache_runtime import ForecastCacheManager
@@ -82,13 +79,6 @@ class PvForecastCoordinator(TimestampDataUpdateCoordinator[ForecastResult]):
         self.origin = "live"
         self.restored_at: datetime | None = None
         self.forecast_cache: ForecastCacheManager | None = None
-        self.temperature_data: ForecastResult | None = None
-        self.temperature_mountings: dict[str, str] | None = None
-        self.morning_applied = False
-        self.morning_coefficient = 0.0
-        self.morning_candidate_id: str | None = None
-        self.calibration_factor = 1.0
-        self.calibration_candidate_id: str | None = None
 
     @callback
     @override
@@ -102,76 +92,6 @@ class PvForecastCoordinator(TimestampDataUpdateCoordinator[ForecastResult]):
                 self.forecast_cache.async_capture()
 
     @callback
-    def async_set_calibration(self, factor: float, candidate_id: str | None) -> None:
-        """Vorhandene Wetterbasis lokal anwenden, ohne den Abrufzustand zu ändern."""
-
-        if (factor, candidate_id) == (
-            self.calibration_factor,
-            self.calibration_candidate_id,
-        ):
-            return
-        forecast = self.raw_data
-        if forecast is not None and (
-            factor != self.calibration_factor or self.data is None
-        ):
-            self.data = self._apply_morning(
-                apply_calibration(
-                    forecast,
-                    factor,
-                    self._entry.options.get(CONF_INVERTER_MAX_POWER_KW),
-                    ZoneInfo(str(self._entry.data[CONF_TIME_ZONE])),
-                ),
-                factor=factor,
-            )
-        self.calibration_factor = factor
-        self.calibration_candidate_id = candidate_id
-        self.async_build_explanation()
-        self.async_update_listeners()
-
-    def _apply_morning(
-        self, baseline: ForecastResult, *, factor: float | None = None
-    ) -> ForecastResult:
-        if self.raw_data is None or self.morning_coefficient == 0:
-            self.morning_applied = False
-            return baseline
-        result = apply_morning(
-            self.raw_data,
-            baseline,
-            coefficient=self.morning_coefficient,
-            global_factor=self.calibration_factor if factor is None else factor,
-            limit=self._entry.options.get(CONF_INVERTER_MAX_POWER_KW),
-            timezone=str(self._entry.data[CONF_TIME_ZONE]),
-            latitude=self._entry.data[CONF_LATITUDE],
-            longitude=self._entry.data[CONF_LONGITUDE],
-        )
-        self.morning_applied = result is not baseline
-        return result
-
-    @callback
-    def async_set_morning(self, coefficient: float, candidate_id: str | None) -> None:
-        """Den freigegebenen Morgenstand auf die unveränderte Rohbasis anwenden."""
-        from .morning import COEFFICIENTS
-
-        if coefficient not in COEFFICIENTS or type(coefficient) is bool:
-            raise ValueError("Unbekannter Morgenkandidat")
-        if (coefficient, candidate_id) == (
-            self.morning_coefficient,
-            self.morning_candidate_id,
-        ):
-            return
-        self.morning_coefficient, self.morning_candidate_id = coefficient, candidate_id
-        if self.raw_data is not None:
-            baseline = apply_calibration(
-                self.raw_data,
-                self.calibration_factor,
-                self._entry.options.get(CONF_INVERTER_MAX_POWER_KW),
-                ZoneInfo(str(self._entry.data[CONF_TIME_ZONE])),
-            )
-            self.data = self._apply_morning(baseline)
-        self.async_build_explanation()
-        self.async_update_listeners()
-
-    @callback
     def async_build_explanation(self, effective: ForecastResult | None = None) -> None:
         """Eine kohärente Roh-/Wirkgeneration lokal und ohne I/O festhalten."""
         current = effective if effective is not None else self.data
@@ -180,14 +100,12 @@ class PvForecastCoordinator(TimestampDataUpdateCoordinator[ForecastResult]):
             self.explanation is not None
             and self.explanation.raw is self.raw_data
             and self.explanation.effective is current
-            and self.explanation.factor == self.calibration_factor
             and self.explanation.timezone == timezone
         ):
             return
         self.explanation = build_explanation(
             self.raw_data,
             current,
-            self.calibration_factor,
             self._entry.options.get(CONF_INVERTER_MAX_POWER_KW),
             str(self._entry.data[CONF_TIME_ZONE]),
         )
@@ -398,41 +316,9 @@ class PvForecastCoordinator(TimestampDataUpdateCoordinator[ForecastResult]):
                     or dt_util.now().astimezone(timezone).date() == requested_date
                 ):
                     break
-            effective = apply_calibration(
-                forecast, self.calibration_factor, inverter_limit, timezone
-            )
             self.raw_data = forecast
-            effective = self._apply_morning(effective)
-            self.temperature_data = None
-            self.temperature_mountings = None
-            if (
-                self._entry.options.get("temperature_comparison_enabled") is True
-                and self._entry.options.get("history_enabled") is True
-            ):
-                mountings = mountings_from_options(self._entry.options, roofs)
-                if mountings is not None:
-                    try:
-                        self.temperature_data = calculate_forecast(
-                            roofs,
-                            weather_by_roof,
-                            inverter_limit,
-                            requested_date,
-                            timezone,
-                            inverter_groups=inverter_groups,
-                            forecast_days=forecast_days,
-                            latitude=latitude,
-                            longitude=longitude,
-                            temperature_coefficients={
-                                key: COEFFICIENTS[value]
-                                for key, value in mountings.items()
-                            },
-                        )
-                        self.temperature_mountings = mountings
-                    except (InvalidConfigurationError, ValueError, OverflowError):
-                        # Ein fehlgeschlagener Vergleich ersetzt keine gültige Prognose.
-                        self.temperature_data = None
-            self.async_build_explanation(effective)
-            return effective
+            self.async_build_explanation(forecast)
+            return forecast
         except OpenMeteoRetryError as err:
             raise UpdateFailed(
                 f"PV-Prognose pausiert wegen eines vorübergehenden API-Fehlers: {err}",

@@ -1,8 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  ARCHIVE_LABEL, REFRESH_MS, PvForecastCard, SharedReadCache, connectionCache, energyText,
-  formatPlantTime, hourMarkers, intervalKey, loadView, planningChoices, plotGeometry, renderContent, renderIntervalDetails, renderOutlook, renderPlanning, renderReport, renderUncertainty, renderUnderperformance,
+  REFRESH_MS, PvForecastCard, SharedReadCache, connectionCache, energyText,
+  formatPlantTime, hourMarkers, intervalKey, loadView, planningChoices, plotGeometry, renderContent, renderIntervalDetails, renderOutlook, renderPlanning,
   selectedSeries, seriesPaths, tableRows, validateView,
 } from "../../custom_components/pv_forecast/frontend/pv-forecast-card.js";
 import { fixture, fixtureHass } from "./fixtures.mjs";
@@ -44,7 +44,7 @@ test("Visueller Editor nutzt HA-Anlagenauswahl; Stub braucht keine Admin-Abfrage
 
 test("Ein Lesezyklus verwendet nur lesende HA-Aktionen und unveränderte Backendwerte", async () => {
   const { calls, states, state } = await load();
-  assert.deepEqual(calls.map((item) => item.service), ["get_forecast", "get_measurements", "get_history"]);
+  assert.deepEqual(calls.map((item) => item.service), ["get_forecast", "get_measurements"]);
   for (const call of calls) { assert.equal(call.type, "call_service"); assert.equal(call.return_response, true); assert.equal(call.domain, "pv_forecast"); }
   assert.equal(calls[0].service_data.include_view, true);
   const view = state.forecast.data;
@@ -66,13 +66,12 @@ test("Morgen behält den heutigen Ist-KPI, ohne morgige Messfenster anzufordern"
   assert.match(renderContent({ ...config, day: "tomorrow" }, state), /12,4/);
 });
 
-test("Eine Dachauswahl liest weder Gesamtmessung noch Gesamtarchiv", async () => {
+test("Eine Dachauswahl liest keine Gesamtmessung", async () => {
   const { calls, state } = await load("sunny", { roof_id: "south" });
   assert.equal(calls.length, 1);
   assert.equal(calls[0].service_data.roof_id, "south");
   assert.equal(state.measurement.status, "roof");
   assert.equal(selectedSeries(state).actual.length, 0);
-  assert.equal(selectedSeries(state).history.length, 0);
   const html = renderContent({ ...config, roof_id: "south" }, state);
   assert.match(html, /Keine Dachmessung/);
   assert.match(html, /12,47/);
@@ -82,7 +81,7 @@ test("Eine Dachauswahl liest weder Gesamtmessung noch Gesamtarchiv", async () =>
 
 test("Genau Mitternacht wird kein leeres Messfenster abgefragt", async () => {
   const { calls, state } = await load("midnight");
-  assert.deepEqual(calls.map((item) => item.service), ["get_forecast", "get_history"]);
+  assert.deepEqual(calls.map((item) => item.service), ["get_forecast"]);
   assert.match(state.measurement.message, /beginnt gerade/);
 });
 
@@ -99,7 +98,6 @@ test("Optionale ACL-Fehler lassen Prognose und Bedienung verfügbar", async () =
   const { state } = await load("acl");
   assert.equal(state.forecast.status, "ready");
   assert.equal(state.measurement.status, "error");
-  assert.equal(state.history.status, "error");
   const html = renderContent(config, state, 328);
   assert.match(html, /Leseberechtigung fehlt/);
   assert.match(html, /Leseberechtigung fehlt/);
@@ -125,7 +123,7 @@ test("Backendausfall und alter Ansichtsvertrag erzeugen kontrollierte deutsche Z
   assert.throws(() => validateView(oldSchema), /Datenvertrag 1/);
 });
 
-for (const service of ["get_measurements", "get_history"]) for (const version of [undefined, 2]) test(`${service}: unbekannte Datenversion ${version} lässt die gültige Prognose verfügbar`, async () => {
+for (const service of ["get_measurements"]) for (const version of [undefined, 2]) test(`${service}: unbekannte Datenversion ${version} lässt die gültige Prognose verfügbar`, async () => {
   const hass = fixtureHass();
   const read = hass.callWS;
   hass.callWS = async (message) => {
@@ -136,37 +134,12 @@ for (const service of ["get_measurements", "get_history"]) for (const version of
   let state;
   await loadView(hass, config, (value) => { state = value; });
   assert.equal(state.forecast.status, "ready");
-  const rejected = service === "get_measurements" ? state.measurement : state.history;
+  const rejected = state.measurement;
   assert.equal(rejected.status, "error");
   assert.equal(rejected.data, undefined);
   assert.match(rejected.message, /Datenvertrag 1/);
   assert.match(renderContent(config, state), /23,14/);
   assert.match(renderContent(config, state), /data-day="tomorrow"/);
-});
-
-for (const version of [undefined, 2]) test(`Separater 30-Tage-Bericht weist unbekannte Datenversion ${version} zurück`, async () => {
-  const calls = [], hass = fixtureHass("sunny", { calls });
-  const read = hass.callWS;
-  hass.callWS = async (message) => {
-    const result = await read(message);
-    result.response.schema_version = version;
-    return result;
-  };
-  const card = new PvForecastCard();
-  card._config = config;
-  card._hass = hass;
-  card._connected = true;
-  card._reportOpen = true;
-  card._reportDays = 30;
-  try {
-    card._bindReport();
-    await flush();
-    assert.equal(calls.length, 1);
-    assert.equal(calls[0].service_data.days, 30);
-    assert.equal(card._report.status, "error");
-    assert.equal(card._report.data, undefined);
-    assert.match(renderReport(card._report, 30), /Datenvertrag 1/);
-  } finally { card.disconnectedCallback(); }
 });
 
 test("Ist-Energie bleibt unverändert ohne Erfassungshinweis, mehrere Zähler werden nicht im Browser addiert", async () => {
@@ -231,18 +204,6 @@ test("Die Browserzeitzone beeinflusst weder Anlagenzeit noch Achse", () => {
   } finally { if (previous === undefined) delete process.env.TZ; else process.env.TZ = previous; }
 });
 
-test("Archivintervalle werden nach absoluter Überlappung gewählt und nie browserseitig skaliert", async () => {
-  const { state } = await load("kolkata");
-  const view = state.forecast.data;
-  state.history.data.current_targets.intervals = [{ start: "2026-09-09T18:00:00Z", end: "2026-09-09T19:00:00Z", energy_kwh: 2.7 }];
-  const history = selectedSeries(state).history;
-  assert.equal(history.length, 1);
-  assert.equal(history[0].energy_kwh, 2.7);
-  assert.ok(Date.parse(history[0].start) < Date.parse(view.start));
-  assert.equal(tableRows(state).find((row) => row.start === history[0].start).history, 2.7);
-  assert.match(renderContent(config, state), new RegExp(ARCHIVE_LABEL));
-});
-
 test("Dynamische Texte sind HTML-escaped; Semantik und Tabellenfallback sind vorhanden", async () => {
   const { state } = await load();
   state.forecast.data.roofs[0].name = '<script>alert("Dach")</script>';
@@ -260,27 +221,14 @@ test("Dynamische Texte sind HTML-escaped; Semantik und Tabellenfallback sind vor
   assert.doesNotMatch(html, /class="actual-bar"/);
 });
 
-test("Veralteter Stand und leeres Archiv werden nicht als aktuelle vollständige Nullprognose ausgegeben", async () => {
+test("Veralteter Stand und fehlende Prognosewerte werden nicht als aktuelle vollständige Nullprognose ausgegeben", async () => {
   const stale = await load("stale"), empty = await load("empty");
   assert.match(renderContent(config, stale.state), /Prognosestand veraltet/);
   assert.match(renderContent(config, stale.state), /Ansicht 13:15 UTC\+02:00/);
   assert.match(renderContent(config, stale.state), /Wetterabruf[^<]+11:15 UTC\+02:00/);
   const html = renderContent(config, empty.state);
   assert.match(html, /Noch keine Intervallwerte/);
-  assert.match(html, /noch keine Stundenstände/);
   assert.match(html, /—/);
-});
-
-test("Bericht übernimmt MAE/Bias/Stichprobe unverändert und weist Kürzung sowie Pause aus", () => {
-  const data = fixture().history;
-  data.retention_truncated = true; data.enabled = false;
-  const html = renderReport({ data }, 30);
-  assert.match(html, /30 abgeschlossene lokale Tage/);
-  assert.match(html, /0,18/);
-  assert.match(html, /-0,07/);
-  assert.match(html, /136/);
-  assert.match(html, /ältere Daten gekürzt/);
-  assert.match(html, /Erfassung ist pausiert/);
 });
 
 test("Mehrere Karten derselben Verbindung teilen einen vollständigen Lesezyklus und einen Timer", async () => {
@@ -290,25 +238,25 @@ test("Mehrere Karten derselben Verbindung teilen einen vollständigen Lesezyklus
   const stopFirst = clock.cache.subscribe("plant/today", loader, (state) => first.push(state));
   const stopSecond = clock.cache.subscribe("plant/today", loader, (state) => second.push(state));
   await flush();
-  assert.equal(calls.length, 3);
+  assert.equal(calls.length, 2);
   assert.equal(first.at(-1).loading, false);
   assert.equal(second.at(-1).loading, false);
   assert.equal(clock.timers.size, 1);
   await clock.advance(REFRESH_MS);
-  assert.equal(calls.length, 6);
+  assert.equal(calls.length, 4);
   stopFirst(); assert.equal(clock.timers.size, 1);
   stopSecond(); assert.equal(clock.timers.size, 0);
   assert.equal(clock.listeners.size, 0);
 });
 
-test("Frische identische Einzelaktionen werden auch zwischen Kartenansicht und Bericht geteilt", async () => {
+test("Frische identische Einzelaktionen werden auch zwischen Kartenansichten geteilt", async () => {
   const clock = clockCache();
   let calls = 0;
   const loader = async () => ({ number: ++calls });
-  const [first, second] = await Promise.all([clock.cache.request("history7", loader), clock.cache.request("history7", loader)]);
+  const [first, second] = await Promise.all([clock.cache.request("forecast", loader), clock.cache.request("forecast", loader)]);
   assert.equal(calls, 1); assert.equal(first, second);
   await clock.advance(REFRESH_MS);
-  assert.equal((await clock.cache.request("history7", loader)).number, 2);
+  assert.equal((await clock.cache.request("forecast", loader)).number, 2);
 });
 
 test("Standardtimer behalten den Browser als Empfänger beim Planen und Abbrechen", () => {
@@ -379,11 +327,11 @@ test("Erneutes Verbinden nach abgebrochenem Zyklus lädt optionale Bereiche voll
   assert.equal(states.at(-1).loading, false);
   assert.equal(states.at(-1).measurement.status, "ready");
   assert.equal(clock.timers.size, 1);
-  assert.equal(calls.length, 3);
+  assert.equal(calls.length, 2);
   stopAgain();
 });
 
-test("Einzeln unsichtbare Karten beenden Ansicht und Bericht, sichtbare Nachbarn lesen weiter", async () => {
+test("Einzeln unsichtbare Karten beenden ihre Lesezyklen, sichtbare Nachbarn lesen weiter", async () => {
   const previous = globalThis.IntersectionObserver;
   const observers = [];
   globalThis.IntersectionObserver = class {
@@ -400,8 +348,6 @@ test("Einzeln unsichtbare Karten beenden Ansicht und Bericht, sichtbare Nachbarn
     for (const card of [first, second]) {
       card.setConfig(config);
       card.hass = hass;
-      card._reportOpen = true;
-      card._reportDays = 30;
       card.connectedCallback();
     }
     await flush();
@@ -410,25 +356,20 @@ test("Einzeln unsichtbare Karten beenden Ansicht und Bericht, sichtbare Nachbarn
     observers[0].visible(true);
     observers[1].visible(true);
     await flush();
-    assert.equal(calls.length, 4, "Beide Karten teilen die drei Ansichtsaktionen und den 30-Tage-Bericht");
-    assert.equal(listeners(), 4);
-    assert.equal(first._report.status, "ready");
+    assert.equal(calls.length, 2, "Beide Karten teilen Prognose und Messdaten");
+    assert.equal(listeners(), 2);
     observers[0].visible(false);
     assert.equal(first._unsubscribe, null);
-    assert.equal(first._unsubscribeReport, null);
-    assert.equal(listeners(), 2);
+    assert.equal(listeners(), 1);
     assert.notEqual(cache.timer, null, "Der sichtbare Nachbar behält den gemeinsamen Timer");
     observers[1].visible(false);
     assert.equal(listeners(), 0);
     assert.equal(cache.timer, null);
     assert.equal(cache.listening, false);
-    first._bindReport();
-    assert.equal(first._unsubscribeReport, null, "Ein geöffnetes Berichtselement startet unsichtbar kein Abonnement");
     observers[0].visible(true);
     await flush();
-    assert.equal(listeners(), 2);
-    assert.equal(first._report.status, "ready");
-    assert.equal(calls.length, 4, "Wiederanzeige verwendet frische gemeinsame Daten");
+    assert.equal(listeners(), 1);
+    assert.equal(calls.length, 2, "Wiederanzeige verwendet frische gemeinsame Daten");
     first.disconnectedCallback();
     assert.equal(observers[0].disconnected, true);
     assert.equal(cache.timer, null);
@@ -436,7 +377,7 @@ test("Einzeln unsichtbare Karten beenden Ansicht und Bericht, sichtbare Nachbarn
     observers[0].visible(true);
     await flush();
     assert.equal(listeners(), 0, "Verspätete Observer-Meldungen reaktivieren keine entfernte Karte");
-    assert.equal(calls.length, 4);
+    assert.equal(calls.length, 2);
     first.connectedCallback();
     observers[0].visible(false);
     observers[0].visible(true);
@@ -444,9 +385,8 @@ test("Einzeln unsichtbare Karten beenden Ansicht und Bericht, sichtbare Nachbarn
     assert.equal(listeners(), 0, "Nach Wiederverbinden gilt nur die neue Observer-Generation");
     observers[2].visible(true);
     await flush();
-    assert.equal(listeners(), 2);
-    assert.equal(first._report.status, "ready");
-    assert.equal(calls.length, 4);
+    assert.equal(listeners(), 1);
+    assert.equal(calls.length, 2);
   } finally {
     first.disconnectedCallback();
     second.disconnectedCallback();
@@ -465,7 +405,6 @@ test("Tagesaussicht übernimmt getrennte Backendwerte ohne eigene Addition", asy
   assert.match(html, /Rest ab jetzt/);
   assert.match(html, /0,4/);
   assert.doesNotMatch(html, /20,4/);
-  assert.match(html, /Kurzfristige Korrektur ist aus/);
   state.measurement.data.outlook.status = "unavailable";
   assert.doesNotMatch(renderOutlook(state), /91,23/);
   state.measurement.data.outlook.schema_version = 2;
@@ -657,47 +596,6 @@ test("Frische Messung und alte Antwort bleiben ohne erfundene Alterswarnung lesb
   assert.match(renderOutlook(state), /23,14 kWh/);
 });
 
-test("Erfahrungsband gehört sichtbar zur eigenen eingefrorenen Prognose", async () => {
-  const { state } = await load("experience");
-  const html = renderUncertainty(state);
-  assert.match(html, /17,2–28,4 kWh/);
-  assert.match(html, /22,5 kWh/);
-  assert.match(html, /06 Uhr am Zieltag/);
-  assert.match(html, /unabhängig von der aktuellen Tagesprognose/);
-  assert.match(html, /60 Lerntage, 30 Prüftage/);
-  assert.match(html, /83,3 %/);
-  assert.match(html, /Mittlere Bandbreite in der Prüfung: 11,2 kWh/);
-  assert.match(html, /66,4–92,7 %/);
-  assert.match(html, /Annahme unabhängiger Tage/);
-  assert.doesNotMatch(html, /23,14/);
-  state.history.data.uncertainty.days.today.status = "unavailable";
-  assert.match(renderUncertainty(state), /Bandbreite noch nicht belastbar/);
-  assert.doesNotMatch(renderUncertainty(state), /17,2–28,4/);
-});
-
-test("Stundenband zeigt nur die gelieferten festen Grenzen und seinen Vorlauf", async () => {
-  const { state } = await load("experience");
-  const band = {
-    ...state.history.data.uncertainty.days.today,
-    rule_version: 2, horizon: "hourly_3h",
-    start: "2026-09-10T10:00:00Z", end: "2026-09-10T11:00:00Z",
-    lower_kwh: 1.23, central_kwh: 2.34, upper_kwh: 3.45,
-  };
-  state.history.data.uncertainty.frozen_hours = [band];
-  const html = renderUncertainty(state);
-  assert.match(html, /Eingefrorene zukünftige Stunden/);
-  assert.match(html, /Stand 3 Stunden vorher: 1,23–3,45 kWh/);
-  assert.match(html, /damalige Prognose 2,34 kWh/);
-  assert.match(html, /Eine Stunde Energie, keine Summe des Vorlaufs/);
-  band.rule_version = 99;
-  assert.doesNotMatch(renderUncertainty(state), /1,23–3,45/);
-  band.rule_version = 2;
-  band.status = "unavailable";
-  assert.doesNotMatch(renderUncertainty(state), /1,23–3,45/);
-  band.target_date = "2026-09-11";
-  assert.doesNotMatch(renderUncertainty(state), /Eingefrorene zukünftige Stunden/);
-});
-
 for (const scenario of ["fold", "kolkata"]) test(`${scenario}: Planung bietet absolute Grenzen mit Datum und Offset für beide Tage`, async () => {
   const { state } = await load(scenario);
   const choices = planningChoices(state);
@@ -817,47 +715,7 @@ test("Ungültige Eingabe, fehlende Rechte und unbekannter Planungsvertrag bleibe
 });
 
 
-test("Kurzfristiger Vergleich bleibt eine Beobachtung mit eigenem Prüffenster", () => {
-  const data = { horizons: { hourly_1h: {} }, short_term: { schema_version: 1, rule_version: 1, enabled: true, window_days: 60, minimum_days: 30, horizons: { hourly_1h: { days: 30, count: 90, baseline_mae_kwh: 0.4, candidate_mae_kwh: 0.3, baseline_bias_kwh: 0.2, candidate_bias_kwh: 0.1, criterion_met: true } } } };
-  const html = renderReport({data}, 7);
-  assert.match(html, /Eigenes Prüffenster: 60 abgeschlossene Tage/);
-  assert.match(html, /MAE Basis 0,4 kWh; Kandidat 0,3 kWh/);
-  assert.match(html, /weiterhin nur Beobachtung/);
-  assert.match(html, /Produktive Prognose unverändert/);
-  data.short_term.rule_version = 99;
-  assert.match(renderReport({data}, 7), /unbekannte Datenversion/);
-  assert.doesNotMatch(renderReport({data}, 7), /Kandidat 0,3/);
-});
 
-
-test("Temperaturvergleich zeigt Rohmodelle derselben Messpaare ohne Modellfreigabe", () => {
-  const data = { horizons: { hourly_1h: {} }, temperature_comparison: { schema_version: 1, model: "ross_comparison_v1", enabled: true, parameter_id: "example", window_days: 90, horizons: { hourly_1h: { days: 20, count: 100, raw_mae_kwh: 0.4, alternative_mae_kwh: 0.38, raw_bias_kwh: 0.2, alternative_bias_kwh: 0.1 } } } };
-  const html = renderReport({data}, 7);
-  assert.match(html, /Rohmodelle ohne übertragene Kalibrierung/);
-  assert.match(html, /MAE Rohmodell 0,4 kWh; Ross 0,38 kWh/);
-  assert.match(html, /Produktive Prognose unverändert/);
-  data.temperature_comparison.model = "unknown";
-  assert.match(renderReport({data}, 7), /unbekannte Datenversion/);
-});
-
-
-test("Experimenteller Hinweis trennt Messung, Rohbasis und Lernstopp ohne Dachdiagnose", async () => {
-  const report = {schema_version: 1, status: "active", experimental: true, first_day: "2026-09-01", last_day: "2026-09-07", raw_kwh: 140, actual_kwh: 84, difference_kwh: 56, shortfall_fraction: 0.4, coverage_fraction: 1, below_days: 7, accepted_factor: 0.9, learning_paused: true, comparison: {training_count: 60, validation_count: 30, evaluation: {coverage_fraction: 0.8}}};
-  const html = renderUnderperformance(report);
-  assert.match(html, /Rohprognose 140 kWh · Messung 84 kWh/);
-  assert.match(html, /keine Defektdiagnose/);
-  assert.match(html, /Faktor 1/);
-  assert.match(html, /keine Dachdiagnose/);
-  assert.equal(renderUnderperformance({...report, schema_version: 99}), "");
-  const changed = renderUnderperformance({...report, status: "reference_changed"});
-  assert.doesNotMatch(changed, /Messung 84/);
-  assert.match(changed, /Erholung ist damit nicht belegt/);
-  const {state} = await load();
-  state.history.data.underperformance = report;
-  assert.match(renderContent(config, state), /Experimentelle Minderertragsprüfung/);
-  const roofState = (await load("sunny", {roof_id: "east"})).state;
-  assert.doesNotMatch(renderContent({...config, roof_id: "east"}, roofState), /Experimentelle Minderertragsprüfung/);
-});
 
 test("Mehrtagesaussicht verwendet Backendwerte und kennzeichnet Tendenz und Lücken", async () => {
   const {state} = await load("horizon");
@@ -876,7 +734,7 @@ test("Horizontprofil bleibt ausdrücklich experimentell und verändert keine Bac
   assert.match(html, /Experimentelles Horizontprofil aktiv/);
   assert.match(html, /Eine bessere Prognosegüte ist noch nicht belegt/);
   assert.equal(state.forecast.data.summary.today_kwh, 23.14);
-  assert.equal(calls.length, 3);
+  assert.equal(calls.length, 2);
   const normal = await load();
   assert.doesNotMatch(renderContent(config, normal.state), /Experimentelles Horizontprofil/);
 });
@@ -918,7 +776,7 @@ test('Heute und Morgen behalten beim Wechsel und nach Minutentakten denselben Re
     assert.equal(card._state.forecast.data.summary.remaining_today_kwh, first.summary.remaining_today_kwh);
     assert.equal(card._state.forecast.data.as_of, first.as_of);
     assert.notEqual(card._state.forecast.data.start, first.start);
-    assert.equal(f.calls.length, 3, 'Tageswechsel braucht keinen zweiten Lesezyklus');
+    assert.equal(f.calls.length, 2, 'Tageswechsel braucht keinen zweiten Lesezyklus');
     await f.advance(40_000);
     const refreshed = card._state.forecast.data;
     assert.equal(refreshed.summary.remaining_today_kwh, 8);
@@ -984,7 +842,7 @@ test("Tagesübersicht trennt bei Morgen die heutigen Werte und hält alle Detail
     assert.match(html, new RegExp(`data-section="${id}"`));
     assert.match(html, new RegExp(`id="${id}" tabindex="-1"`));
   }
-  for (const id of ["outlook", "planning", "uncertainty", "values", "report"]) assert.match(html, new RegExp(`id="${id}"`));
+  for (const id of ["outlook", "planning", "values"]) assert.match(html, new RegExp(`id="${id}"`));
   assert.equal(state.forecast.data.summary.remaining_today_kwh, 10.76);
 });
 
@@ -1089,4 +947,13 @@ test("Intervall und Diagramm zeigen gemischte Energie ohne Herkunftshinweis oder
   assert.doesNotMatch(renderContent(config, state), /berechnetem Anteil|class="actual-bar"/);
   const direct = await load("sunny");
   assert.doesNotMatch(renderContent(config, direct.state), /berechnete Energie|berechnetem Anteil/);
+});
+
+test("Karte fragt ausschließlich Prognose und Messung ab und enthält keine entfernten Archivfunktionen", async () => {
+  const { state, calls } = await load();
+  assert.deepEqual(calls.map(item => item.service), ["get_forecast", "get_measurements"]);
+  assert.deepEqual(Object.keys(selectedSeries(state)), ["forecast", "actual"]);
+  const html = renderContent(config, state);
+  assert.doesNotMatch(html, /Archiv|Erfahrungsband|Selbstkalibrierung|Minderertragsprüfung|id="report"|1 Stunde<br>vorher/);
+  assert.equal(PvForecastCard.getConfigForm().schema.some(item => item.name === "show_raw_forecast"), false);
 });

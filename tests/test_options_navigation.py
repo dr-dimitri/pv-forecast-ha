@@ -19,7 +19,6 @@ async def test_four_native_groups_and_return_preserve_options(hass):
     assert result["menu_options"] == [
         "plant_options",
         "measurements",
-        "daily_correction",
         "dashboard",
         "advanced_options",
         "health",
@@ -31,7 +30,6 @@ async def test_four_native_groups_and_return_preserve_options(hass):
     ] == [
         "Anlage",
         "PV-Erzeugung",
-        "Tagesertrag korrigieren",
         "Dashboard",
         "Erweiterte Funktionen",
         "Betrieb prüfen",
@@ -41,9 +39,6 @@ async def test_four_native_groups_and_return_preserve_options(hass):
         (
             "advanced_options",
             {
-                "history",
-                "calibration",
-                "morning",
                 "forecast_horizon",
                 "forecast_cache",
                 "inverter_groups",

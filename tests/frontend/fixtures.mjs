@@ -1,5 +1,5 @@
 // Ausschließlich synthetische, deterministische Testdaten; keine Modellberechnung.
-export const SCENARIOS = ["partial-outlook", "offset-outlook", "unresolved-outlook", "derived-outlook", "derived-energy", "offset-measurements", "stale-measurement", "restored","no-source", "no-measurement", "archive-off", "archive-empty", "zero", "shading", "horizon","underperformance", "sunny", "gaps", "stale", "empty", "acl", "outage", "old", "roof", "deleted-roof", "spring", "fold", "kolkata", "midnight", "experience", "planning-unavailable"];
+export const SCENARIOS = ["partial-outlook", "offset-outlook", "unresolved-outlook", "derived-outlook", "derived-energy", "offset-measurements", "stale-measurement", "restored","no-source", "no-measurement", "zero", "shading", "horizon","sunny", "gaps", "stale", "empty", "acl", "outage", "old", "roof", "deleted-roof", "spring", "fold", "kolkata", "midnight", "planning-unavailable"];
 const HOURS = [0, 0, 0, 0, 0, 0, 0.1, 0.38, 0.95, 1.7, 2.45, 3.1, 3.6, 3.4, 2.9, 2.1, 1.4, 0.7, 0.22, 0.04, 0, 0, 0, 0];
 const iso = (instant) => new Date(instant).toISOString();
 
@@ -45,31 +45,12 @@ export function fixture(scenario = "sunny", { day = "today", roof_id } = {}) {
   }
   if (scenario === "shading") view.horizon_shading = { rule_version: 1, active: true, experimental: true, measured_improvement: "unavailable" };
   if (scenario === "horizon") view.daily_forecasts = Array.from({ length: 7 }, (_, i) => ({ date: `2026-09-${10 + i}`, energy_kwh: i === 3 ? null : [24, 25, 18, 0, 30, 27, 22][i], tendency: i >= 2, quality_flags: i === 2 ? ["gti_fallback"] : [] }));
-  const history = {
-    schema_version: 1, enabled: true, running: true, window_days: 7, retention_truncated: false,
-    horizons: { hourly_1h: { count_expected: 168, count_forecasts: 153, count_valid: 136, coverage: 136 / 168, mae_kwh: 0.18, bias_kwh: -0.07 } },
-    current_targets: { view_version: 1, as_of: iso(asOf), timezone, horizon: "hourly_1h", label: "Jeweils 1 Stunde vorher", intervals: intervals.filter((item, index) => Date.parse(item.start) - hour <= asOf && !(scenario === "gaps" && [10, 11].includes(index))).map((item, index) => ({ ...item, energy_kwh: [0, 0, 0, 0, 0, 0, 0.05, 0.28, 0.9, 1.4, 2.8, 3.3, 3.4, 3.1, 2.6][index] ?? 0, fetched_at: iso(Date.parse(item.start) - hour - 900_000), cutoff: iso(Date.parse(item.start) - hour) })) },
-  };
-  if (scenario === "experience") history.short_term = { schema_version: 1, rule_version: 1, enabled: true, window_days: 60, minimum_days: 30, horizons: { hourly_1h: { days: 18, count: 90, baseline_mae_kwh: 0.4, candidate_mae_kwh: 0.38, baseline_bias_kwh: 0.1, candidate_bias_kwh: 0.08, criterion_met: false }, hourly_3h: { days: 15, count: 60, baseline_mae_kwh: 0.5, candidate_mae_kwh: 0.52, baseline_bias_kwh: 0.15, candidate_bias_kwh: 0.12, criterion_met: false }, daily_remaining_12: { days: 16, count: 16, baseline_mae_kwh: 2.1, candidate_mae_kwh: 2.0, baseline_bias_kwh: 0.4, candidate_bias_kwh: 0.3, criterion_met: false } } };
-  if (scenario === "underperformance") history.underperformance = {schema_version: 1, status: "active", experimental: true, first_day: "2026-09-01", last_day: "2026-09-07", raw_kwh: 140, actual_kwh: 84, difference_kwh: 56, shortfall_fraction: 0.4, coverage_fraction: 1, below_days: 7, accepted_factor: 0.9, learning_paused: true, comparison: {training_count: 60, validation_count: 30, evaluation: {coverage_fraction: 0.8}}};
-  if (scenario === "experience") history.temperature_comparison = { schema_version: 1, model: "ross_comparison_v1", enabled: true, parameter_id: "synthetic", window_days: 90, horizons: { daily_previous_18: { days: 18, count: 18, raw_mae_kwh: 2.4, alternative_mae_kwh: 2.3, raw_bias_kwh: 0.4, alternative_bias_kwh: 0.1 }, daily_same_06: { days: 17, count: 17, raw_mae_kwh: 2.2, alternative_mae_kwh: 2.1, raw_bias_kwh: 0.3, alternative_bias_kwh: 0.1 }, hourly_1h: { days: 20, count: 100, raw_mae_kwh: 0.4, alternative_mae_kwh: 0.38, raw_bias_kwh: 0.2, alternative_bias_kwh: 0.1 }, hourly_3h: { days: 20, count: 100, raw_mae_kwh: 0.5, alternative_mae_kwh: 0.51, raw_bias_kwh: 0.2, alternative_bias_kwh: 0.1 } } };
-  if (scenario === "empty" || day === "tomorrow") history.current_targets.intervals = [];
   const available = !["partial-outlook", "no-source", "no-measurement", "gaps", "empty", "stale", "restored"].includes(scenario);
-  history.uncertainty = {
-    schema_version: 1, label: "Erfahrungsband", as_of: iso(asOf), timezone, basis: "frozen_daily_forecast", retention_truncated: false,
-    days: {
-      [day]: scenario === "experience" ? { status: "available", target_date: view.date, horizon: day === "today" ? "daily_same_06" : "daily_previous_18", cutoff: iso(todayStart + 6 * hour), forecast_observed_at: iso(todayStart + 5.75 * hour), variant: "raw_model", lower_kwh: 17.2, central_kwh: 22.5, upper_kwh: 28.4, training_count: 60, validation_count: 30, target_coverage: 0.8, evaluation: { coverage_fraction: 0.833, count: 30, mean_width_kwh: 11.2, coverage_wilson95: { lower: 0.664, upper: 0.927, indicative_only: true, assumption: "independent_days" } }, quality_flags: [] } : { status: "unavailable", reasons: ["insufficient_validation"] },
-    },
-    frozen_hours: scenario === "experience" ? [{ rule_version: 2, status: "available", target_date: view.date, horizon: "hourly_3h", start: iso(todayStart + 15 * hour), end: iso(todayStart + 16 * hour), cutoff: iso(todayStart + 12 * hour), forecast_observed_at: iso(todayStart + 11.75 * hour), lower_kwh: 1.4, central_kwh: 2.1, upper_kwh: 2.8, training_count: 60, validation_count: 30, target_coverage: 0.8, evaluation: { coverage_fraction: 0.8, mean_width_kwh: 1.4, winkler_score_kwh: 1.7, reference_winkler_score_kwh: 2.1, coverage_wilson95: { lower: 0.627, upper: 0.905 } } }] : [],
-    remaining_today: { status: "unavailable", reasons: ["unsupported_horizon"] }, next_60_minutes: { status: "unavailable", reasons: ["unsupported_horizon"] },
-  };
   const forecastEnd = todayEnd + (scenario === "horizon" ? 6 : 1) * 24 * hour;
   const forecastBoundaries = [todayStart];
   for (let cursor = Math.ceil((todayStart + 1) / hour) * hour; cursor < forecastEnd; cursor += hour) forecastBoundaries.push(cursor);
   forecastBoundaries.push(forecastEnd);
-  if (scenario === "archive-off") history.enabled = false;
-  if (["archive-off", "archive-empty"].includes(scenario)) history.current_targets.intervals = [];
-  const outlook = { ...(scenario === "partial-outlook" ? { estimate: { schema_version: 1, status: "available", basis: "measurements_and_forecast", measured_kwh: 5.6, estimated_past_kwh: 4.8, remaining_kwh: 10.76, total_kwh: 21.16, forecast_stale: false, forecast_quality_flags: [], measurement_coverage_seconds: 18000 } } : {}), schema_version: 1, status: available ? "available" : "unavailable", reason: available ? null : "incomplete_measurements", as_of: iso(asOf), timezone, measured_until: ["partial-outlook", "no-source", "no-measurement", "empty"].includes(scenario) ? null : iso(asOf - (scenario === "stale-measurement" ? 6 * hour : 900_000)), measured_kwh: scenario === "stale-measurement" ? 5.4 : 12.1, bridge_kwh: scenario === "stale-measurement" ? 12 : 0.31, remaining_kwh: 10.76, total_kwh: scenario === "stale-measurement" ? 28.16 : 23.17, measurement_age_minutes: ["partial-outlook", "no-source", "no-measurement", "empty"].includes(scenario) ? null : scenario === "stale-measurement" ? 360 : 15, measurement_stale: scenario === "stale-measurement", measurement_quality_flags: scenario === "stale-measurement" ? ["stale"] : [], forecast_quality_flags: [], quality_flags: scenario === "stale-measurement" ? ["stale"] : [], correction: "off" };
+  const outlook = { ...(scenario === "partial-outlook" ? { estimate: { schema_version: 1, status: "available", basis: "measurements_and_forecast", measured_kwh: 5.6, estimated_past_kwh: 4.8, remaining_kwh: 10.76, total_kwh: 21.16, forecast_stale: false, forecast_quality_flags: [], measurement_coverage_seconds: 18000 } } : {}), schema_version: 1, status: available ? "available" : "unavailable", reason: available ? null : "incomplete_measurements", as_of: iso(asOf), timezone, measured_until: ["partial-outlook", "no-source", "no-measurement", "empty"].includes(scenario) ? null : iso(asOf - (scenario === "stale-measurement" ? 6 * hour : 900_000)), measured_kwh: scenario === "stale-measurement" ? 5.4 : 12.1, bridge_kwh: scenario === "stale-measurement" ? 12 : 0.31, remaining_kwh: 10.76, total_kwh: scenario === "stale-measurement" ? 28.16 : 23.17, measurement_age_minutes: ["partial-outlook", "no-source", "no-measurement", "empty"].includes(scenario) ? null : scenario === "stale-measurement" ? 360 : 15, measurement_stale: scenario === "stale-measurement", measurement_quality_flags: scenario === "stale-measurement" ? ["stale"] : [], forecast_quality_flags: [], quality_flags: scenario === "stale-measurement" ? ["stale"] : [] };
   if (scenario === "derived-outlook") Object.assign(outlook, {
     measurement_quality_flags: ["derived_energy"], quality_flags: ["derived_energy"],
     estimate: { schema_version: 1, status: "available", reason: null, basis: "measurements_and_forecast", measured_kwh: 12.1, estimated_past_kwh: 0.31, remaining_kwh: 10.76, total_kwh: 23.17, forecast_stale: false, forecast_quality_flags: [], measurement_coverage_seconds: 46800 },
@@ -86,13 +67,12 @@ export function fixture(scenario = "sunny", { day = "today", roof_id } = {}) {
     forecast: {
       schema_version: 1, origin: scenario === "restored" ? "restored" : "live", restored_at: scenario === "restored" ? iso(asOf) : null, last_update_success: scenario !== "restored", fetched_at: iso(asOf - (["stale", "restored"].includes(scenario) ? 7_200_000 : 900_000)), view,
       intervals: forecastBoundaries.slice(0, -1).map((value, index) => ({ start: iso(value), end: iso(forecastBoundaries[index + 1]), energy_kwh: 1, ac_power_kw: 1, is_complete: true, quality_flags: [] })),
-      planning: { schema_version: 1, status: available && scenario !== "planning-unavailable" ? "available" : "unavailable", reason: ["stale", "restored"].includes(scenario) ? "stale_forecast" : "no_energy", as_of: iso(asOf), fetched_at: iso(asOf - 900_000), timezone, start: iso(todayStart + 14 * hour), end: iso(todayStart + 16 * hour), energy_kwh: 5.87, basis: "current_forecast", assumption: "constant_interval_mean_power", quality_flags: [], hysteresis_applied: false, uncertainty: { status: "unavailable", reason: "unsupported_horizon" } },
+      planning: { schema_version: 1, status: available && scenario !== "planning-unavailable" ? "available" : "unavailable", reason: ["stale", "restored"].includes(scenario) ? "stale_forecast" : "no_energy", as_of: iso(asOf), fetched_at: iso(asOf - 900_000), timezone, start: iso(todayStart + 14 * hour), end: iso(todayStart + 16 * hour), energy_kwh: 5.87, basis: "current_forecast", assumption: "constant_interval_mean_power", quality_flags: [], hysteresis_applied: false },
     },
     measurement: {
       schema_version: 1, total_energy: { energy_kwh: ["empty", "no-source", "no-measurement"].includes(scenario) ? null : scenario === "zero" ? 0 : scenario === "gaps" ? 5.6 : 12.4, energy_complete: !["gaps", "empty", "no-source", "no-measurement"].includes(scenario), source_count: ["empty", "no-source"].includes(scenario) ? 0 : 2, quality_flags: ["derived-energy", "derived-outlook"].includes(scenario) ? ["derived_energy"] : scenario === "gaps" ? ["gap"] : [] }, total_intervals: ["empty", "no-source", "no-measurement"].includes(scenario) ? [] : totalIntervals,
       outlook,
     },
-    history,
   };
 }
 
@@ -116,22 +96,12 @@ export function fixtureHass(scenario = "sunny", { calls = [], connection = {}, d
         return { response: data.forecast };
       }
       if (message.service === "get_measurements") return { response: data.measurement };
-      if (message.service === "get_history" && message.service_data.day_view) return { response: { ...data.history, day_view: archiveFixture(scenario, message.service_data.day_view) } };
-      if (message.service === "get_history") return { response: { ...data.history, window_days: message.service_data.days } };
       throw new Error("Unbekannte Testaktion");
     },
   };
 }
 
-export function archiveFixture(scenario, selection) {
-  const live = fixture(scenario).forecast.view;
-  const shift = Date.parse(`${selection.date}T12:00:00Z`) - Date.parse(`${live.date}T12:00:00Z`);
-  const move = (value) => iso(Date.parse(value) + shift);
-  const intervals = live.intervals.map((item, index) => ({ ...item, start: move(item.start), end: move(item.end), source_start: move(item.start), source_end: move(item.end), raw_energy_kwh: item.energy_kwh, cutoff: iso(Date.parse(item.start) + shift - 3600000), fetched_at: iso(Date.parse(item.start) + shift - 3900000), observed_at: iso(Date.parse(item.start) + shift - 3600000), measurement: { energy_kwh: scenario === "gaps" && index === 10 ? null : item.energy_kwh, complete: !(scenario === "gaps" && index === 10), assessed_at: iso(Date.parse(live.end) + shift + 3600000), previous_revision_count: index === 12 ? 1 : 0, revised: index === 12, whole_interval_energy_kwh: item.energy_kwh } }));
-  return { schema_version: 1, scope: "total", date: selection.date, horizon: selection.horizon ?? "hourly_1h", label: selection.horizon === "hourly_3h" ? "Jeweils 3 Stunden vorher" : "Jeweils 1 Stunde vorher", timezone: live.timezone, start: move(live.start), end: move(live.end), configuration_id: selection.configuration_id ?? "synthetic-current", contexts: [{ configuration_id: "synthetic-current", timezone: live.timezone, active: true, min_date: "2026-01-01", max_date: "2026-12-31" }, { configuration_id: "synthetic-old", timezone: live.timezone, active: false, min_date: "2026-01-01", max_date: "2026-12-31" }], status: scenario === "gaps" ? "partial" : "complete", running: true, intervals, daily_forecasts: { daily_previous_18: { energy_kwh: 24 }, daily_same_06: { energy_kwh: 25 } }, daily_measurement: { energy_kwh: scenario === "gaps" ? null : 23, complete: scenario !== "gaps" } };
-}
-
 export function explanationFixture(view) {
-  const intervals = view.intervals.map(item => ({start:item.start, end:item.end, before_calibration_kwh: item.energy_kwh, calibration_delta_kwh:0.2, group_clipping_kwh:0.1, total_clipping_kwh:0.1,effective_kwh:item.energy_kwh}));
-  return {schema_version:1,scope:"total",status:"available",date:view.date,timezone:view.timezone,start:view.start,end:view.end,factor:1.2,origin:"live",fetched_at:view.as_of,last_update_success:true,intervals,raw_intervals:view.intervals.map(item=>({...item,energy_kwh:typeof item.energy_kwh === 'number' ? Math.max(0,item.energy_kwh-0.1) : null})),totals:{before_calibration_kwh:25,calibration_delta_kwh:5,group_clipping_kwh:2,total_clipping_kwh:3,effective_kwh:25,raw_model_kwh:24,effective_minus_raw_kwh:1,effective_minus_raw_percent:4.167},quality_flags:[],assumptions:["temperature_model","configured_efficiency","horizon_profile"]};
+  const intervals = view.intervals.map(item => ({start: item.start, end: item.end, before_clipping_kwh: item.energy_kwh === null ? null : item.energy_kwh + 0.2, group_clipping_kwh: 0.1, total_clipping_kwh: 0.1, effective_kwh: item.energy_kwh}));
+  return {schema_version: 2, scope: "total", status: "available", date: view.date, timezone: view.timezone, start: view.start, end: view.end, origin: "live", fetched_at: view.as_of, last_update_success: true, intervals, totals: {before_clipping_kwh: 30, group_clipping_kwh: 2, total_clipping_kwh: 3, effective_kwh: 25}, quality_flags: [], assumptions: ["temperature_model", "configured_efficiency", "horizon_profile"]};
 }

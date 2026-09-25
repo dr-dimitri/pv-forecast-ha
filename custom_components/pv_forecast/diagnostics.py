@@ -18,38 +18,17 @@ from .api import (
     OpenMeteoTemporaryError,
 )
 from .calculations import InvalidConfigurationError, to_open_meteo_azimuth
-from .calibration import RULE_VERSION
-from .calibration_runtime import STORAGE_VERSION as CALIBRATION_STORAGE_VERSION
 from .configuration import roofs_from_options
 from .const import CONF_INVERTER_MAX_POWER_KW, CONF_TIME_ZONE, DOMAIN, UPDATE_INTERVAL
 from .health import forecast_coverage
-from .history import MODEL_VERSION
-from .history_runtime import STORAGE_VERSION as HISTORY_STORAGE_VERSION
 from .measurement_runtime import STORAGE_VERSION as MEASUREMENT_STORAGE_VERSION
+from .model_context import MODEL_VERSION
 from .models import ForecastResult
-from .morning_runtime import STORAGE_VERSION as MORNING_STORAGE_VERSION
 
 if TYPE_CHECKING:
     from . import PvForecastConfigEntry
-    from .calibration_runtime import CalibrationManager
 
-_STORAGE_ERRORS = frozenset(
-    {"storage_unavailable", "unsupported_version", "storage_limit"}
-)
-_CALIBRATION_MODES = frozenset({"off", "observe", "auto"})
-_CALIBRATION_STATUSES = frozenset(
-    {
-        "off",
-        "learning",
-        "testing",
-        "approved",
-        "rejected",
-        "invalidated",
-        "storage_unavailable",
-        "prerequisites_missing",
-        "underperformance_paused",
-    }
-)
+_STORAGE_ERRORS = frozenset({"storage_unavailable", "unsupported_version"})
 _FORECAST_CACHE_STATUSES = frozenset(
     {
         "disabled",
@@ -102,21 +81,6 @@ def _coverage(
     return forecast_coverage(forecast, timezone_name, now)
 
 
-def _calibration_status(manager: CalibrationManager | None) -> dict[str, Any]:
-    """Nur den vorhandenen Lernstatus lesen, ohne Bewertung oder Historienexport."""
-
-    if manager is None:
-        return {"available": False}
-    status = manager.snapshot()
-    return {
-        "available": True,
-        "mode": _allowed(status.get("mode"), _CALIBRATION_MODES),
-        "status": _allowed(status.get("status"), _CALIBRATION_STATUSES),
-        "storage_error": _allowed(status.get("storage_error"), _STORAGE_ERRORS),
-        "prerequisites_met": manager.prerequisites_met,
-    }
-
-
 async def async_get_config_entry_diagnostics(
     hass: HomeAssistant, entry: PvForecastConfigEntry
 ) -> dict[str, Any]:
@@ -136,11 +100,7 @@ async def async_get_config_entry_diagnostics(
         "model_version": MODEL_VERSION,
         "supported_storage_versions": {
             "measurements": MEASUREMENT_STORAGE_VERSION,
-            "history": HISTORY_STORAGE_VERSION,
-            "calibration": CALIBRATION_STORAGE_VERSION,
-            "morning": MORNING_STORAGE_VERSION,
         },
-        "calibration_rule_version": RULE_VERSION,
         "entry_state": entry.state.value,
         "runtime_available": runtime is not None,
     }
@@ -198,18 +158,6 @@ async def async_get_config_entry_diagnostics(
         if measurements is not None
         else {"available": False}
     )
-    history = runtime.history
-    result["history"] = (
-        {
-            "available": True,
-            "enabled": history.enabled,
-            "loaded": history.loaded,
-            "running": history.running,
-            "storage_error": _allowed(history.storage_error, _STORAGE_ERRORS),
-        }
-        if history is not None
-        else {"available": False}
-    )
     cache = getattr(runtime, "forecast_cache", None)
     result["forecast_cache"] = {
         "status": _allowed(
@@ -217,5 +165,4 @@ async def async_get_config_entry_diagnostics(
             _FORECAST_CACHE_STATUSES,
         )
     }
-    result["calibration"] = _calibration_status(runtime.calibration)
     return result

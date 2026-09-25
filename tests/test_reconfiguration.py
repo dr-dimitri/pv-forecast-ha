@@ -167,7 +167,7 @@ async def test_failed_test_does_not_mutate_or_reload(hass, error):
         reload.assert_not_called()
 
 
-@pytest.mark.parametrize("store_name", ["measurements", "history", "calibration"])
+@pytest.mark.parametrize("store_name", ["measurements"])
 async def test_unknown_store_blocks_location_change_without_overwrite(hass, store_name):
     entry = _entry(hass)
     original = deepcopy(dict(entry.data))

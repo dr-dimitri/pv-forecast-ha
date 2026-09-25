@@ -14,17 +14,14 @@ from homeassistant.helpers.typing import ConfigType
 from homeassistant.util import dt as dt_util
 
 from .api import OpenMeteoError
-from .calibration_runtime import CalibrationManager, async_remove_calibration_store
 from .const import DOMAIN, PLATFORMS
 from .coordinator import PvForecastCoordinator
 from .dashboard import DashboardManager, dashboard_issue_id
 from .forecast_cache_runtime import ForecastCacheManager, async_remove_forecast_cache
 from .frontend import async_setup_frontend
-from .history_runtime import ArchiveManager, async_remove_history_store
-from .history_services import async_setup_history_services
 from .measurement_runtime import MeasurementManager, async_remove_measurement_store
 from .measurement_services import async_setup_measurement_services
-from .morning_runtime import MorningManager, async_remove_morning_store
+from .retirement import async_remove_retired_stores, async_retire_archive
 from .runtime import async_get_open_meteo_client
 from .services import async_setup_services
 
@@ -37,11 +34,8 @@ class PvForecastRuntimeData:
 
     coordinator: PvForecastCoordinator
     measurements: MeasurementManager | None = None
-    history: ArchiveManager | None = None
-    calibration: CalibrationManager | None = None
     dashboard: DashboardManager | None = None
     forecast_cache: ForecastCacheManager | None = None
-    morning: MorningManager | None = None
 
 
 type PvForecastConfigEntry = ConfigEntry[PvForecastRuntimeData]
@@ -52,7 +46,6 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 
     async_setup_services(hass)
     async_setup_measurement_services(hass)
-    async_setup_history_services(hass)
     async_setup_frontend(hass)
     return True
 
@@ -60,6 +53,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 async def async_setup_entry(hass: HomeAssistant, entry: PvForecastConfigEntry) -> bool:
     """Integration aus einem Config Entry einrichten."""
 
+    await async_retire_archive(hass, entry)
     client = async_get_open_meteo_client(hass)
     coordinator = PvForecastCoordinator(hass, entry, client)
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
@@ -87,22 +81,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: PvForecastConfigEntry) -
     coordinator.async_start_planning_updates()
 
     measurements = MeasurementManager(hass, entry)
-    history = ArchiveManager(hass, entry, coordinator, measurements)
-    calibration = CalibrationManager(hass, entry, coordinator, history)
-    morning = MorningManager(hass, entry, coordinator, history)
     entry.runtime_data = PvForecastRuntimeData(
-        coordinator,
-        measurements,
-        history,
-        calibration,
-        forecast_cache=cache,
-        morning=morning,
+        coordinator, measurements, forecast_cache=cache
     )
     try:
         await measurements.async_start(fresh_after=coordinator.restored_at)
-        await history.async_start()
-        await calibration.async_start()
-        await morning.async_start()
         await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
         dashboard = DashboardManager(hass, entry)
         entry.runtime_data.dashboard = dashboard
@@ -112,14 +95,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: PvForecastConfigEntry) -
         await cache.async_stop()
         if entry.runtime_data.dashboard is not None:
             entry.runtime_data.dashboard.async_stop()
-        await morning.async_stop()
-        try:
-            await calibration.async_stop()
-        finally:
-            try:
-                await history.async_stop()
-            finally:
-                await measurements.async_stop()
+        await measurements.async_stop()
         raise
     return True
 
@@ -129,40 +105,24 @@ async def async_unload_entry(hass: HomeAssistant, entry: PvForecastConfigEntry) 
 
     unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unloaded:
-        if entry.runtime_data.morning is not None:
-            await entry.runtime_data.morning.async_stop()
         if entry.runtime_data.forecast_cache is not None:
             await entry.runtime_data.forecast_cache.async_stop(
                 remove=not entry.runtime_data.forecast_cache.enabled
             )
         if entry.runtime_data.dashboard is not None:
             entry.runtime_data.dashboard.async_stop()
-        try:
-            if entry.runtime_data.calibration is not None:
-                await entry.runtime_data.calibration.async_stop()
-        finally:
-            try:
-                if entry.runtime_data.history is not None:
-                    await entry.runtime_data.history.async_stop()
-            finally:
-                if entry.runtime_data.measurements is not None:
-                    await entry.runtime_data.measurements.async_stop()
+        if entry.runtime_data.measurements is not None:
+            await entry.runtime_data.measurements.async_stop()
     return unloaded
 
 
 async def async_remove_entry(hass: HomeAssistant, entry: PvForecastConfigEntry) -> None:
-    """Beim Entfernen einer Anlage ihre lokalen Messdaten und ihr Archiv löschen."""
+    """Beim Entfernen einer Anlage ihre lokalen Daten und alten Bestände löschen."""
 
-    await async_remove_morning_store(hass, entry.entry_id)
+    await async_remove_retired_stores(hass, entry.entry_id)
     await async_remove_forecast_cache(hass, entry.entry_id)
     ir.async_delete_issue(hass, DOMAIN, dashboard_issue_id(entry.entry_id))
-    try:
-        await async_remove_calibration_store(hass, entry.entry_id)
-    finally:
-        try:
-            await async_remove_history_store(hass, entry.entry_id)
-        finally:
-            await async_remove_measurement_store(hass, entry.entry_id)
+    await async_remove_measurement_store(hass, entry.entry_id)
 
 
 async def _async_update_listener(

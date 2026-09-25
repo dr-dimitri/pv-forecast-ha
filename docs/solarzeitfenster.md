@@ -191,7 +191,7 @@ mehreren Zählern wird eine gemeinsame belegte Grenze benötigt; unterschiedlich
 Meldezeiten rechtfertigen keine anteilige Verteilung von Zählerdifferenzen.
 Fehlt das Messpräfix oder eine Prognoseabdeckung, bleiben diese strengen Felder
 unvollständig. Die Karte zeigt trotzdem die verfügbare Abschätzung aus `estimate`
-beziehungsweise die reine Tagesprognose. Archiv, Lernen, Energy und operative
+beziehungsweise die reine Tagesprognose. Energy und operative
 Planung verwenden weiterhin ihre bisherigen Vollständigkeits- und Altersregeln.
 
 Eine halbstündige Brücke ist dabei keine feste Altersgrenze. Meldet eine Quelle
@@ -202,10 +202,9 @@ gemeinsamen Messzeitpunkts und der eigene Hinweis „Der letzte gesicherte Messw
 ist zu alt.“ Die bereits bestätigte Meldefrist jeder Quelle entscheidet über
 diesen Hinweis. Individuell frische, versetzt meldende Quellen können eine ältere
 gemeinsame Grenze haben, ohne als veraltet zu gelten. Ihr gemeinsames Alter bleibt
-trotzdem sichtbar. Diagramm, Tageskennzahlen und Archivbewertung ändern sich nicht.
+trotzdem sichtbar. Diagramm und Tageskennzahlen ändern sich nicht.
 
 Es wird kein kurzfristiger Korrekturfaktor angewendet (`correction: off`).
 Die Addition bereits bekannter Messenergie belegt keine bessere Vorhersage.
-Der [Beobachtungsversuch zu #30](kurzfristiger-vergleich.md) speichert
-rechtzeitige Zukunftskandidaten; seine reale Güteprüfung bleibt offen. PV-Erzeugung ist kein verfügbarer Überschuss und kein Nachweis einer
+PV-Erzeugung ist kein verfügbarer Überschuss und kein Nachweis einer
 Einsparung ohne passende Verbrauchs-, Speicher- und Tarifdaten.

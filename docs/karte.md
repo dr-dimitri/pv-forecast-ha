@@ -23,7 +23,7 @@ Seite erhalten. Über denselben Dialog lässt sich die Seite umbenennen oder
 abschalten. Der Titel ändert ihre URL nicht; Reload und Neustart stellen die
 gewählte Seite wieder her. Beim Entladen oder Entfernen einer Anlage verschwindet
 nur deren eigene Seite. Ein- und Ausschalten oder Umbenennen lädt die Integration
-nicht neu und verändert weder Wetterabrufe noch Prognose- oder Archivdaten.
+nicht neu und verändert weder Wetterabrufe noch Prognosedaten.
 
 Die Seite verwendet ein festes Kartenlayout, das von der Integration verwaltet
 wird. Ihre Zusammenstellung ist nicht über den Lovelace-Dashboard-Editor
@@ -98,19 +98,18 @@ sich auf die gespeicherte Anlagenzeitzone, auch wenn dein Browser woanders ist.
 Das Diagramm zeigt diese beiden Verläufe ohne zusätzliche Balken. Hinweise auf
 teilweise erfasste oder aus Leistung berechnete Ist-Energie entfallen auch in
 Kennzahlen, Legende, Intervallwerten und Meldungen. Fehlende Werte bleiben leer.
-Die zugrunde liegenden Messwerte und die Prüfungen für Archiv und Lernen bleiben
-unverändert. Feste Archivprognosen stehen weiter in Intervallwerten, Details und
-der separaten Archivansicht bereit.
+Die zugrunde liegenden Messwerte bleiben unverändert. Intervallwerte und Details
+zeigen die aktuelle Prognose und die belegte Messung.
 
 ![Tagesdiagramm bei 360 px](images/energieverlauf-360-light.png)
 ![Tagesdiagramm im dunklen Design](images/energieverlauf-360-dark.png)
 
 Die Bilder verwenden synthetische Offline-Daten.
 
-Dachmesswerte und Dacharchive sind bislang nicht zugeordnet. In der Dachansicht
+Dachmesswerte sind bislang nicht zugeordnet. In der Dachansicht
 werden deshalb ausschließlich ihre tatsächlich berechneten Prognosen gezeigt;
 Gesamtmessungen werden nicht nach Dachgröße verteilt. Ohne Messquelle bleibt
-die Karte als reine Prognoseansicht nutzbar. Ohne Archiv fehlen archivierte Prognosewerte und belastbare Fehlerkennzahlen. Eine gültig gemessene Null ist etwas
+die Karte als reine Prognoseansicht nutzbar. Eine gültig gemessene Null ist etwas
 anderes als eine Datenlücke.
 
 Die erste Kartenfassung verwendet ausschließlich eine Energieachse in kWh je
@@ -120,19 +119,9 @@ UTC-Offset unterschieden. Teilstunden an lokalen Tagesgrenzen behalten ihre
 wirkliche Breite und Energiemenge. Die bekannte Einschränkung der nativen
 Energy-Grafik aus #53 gilt nicht als Zeitmodell für diese eigene Darstellung.
 
-Die vertiefende 7-/30-Tage-Ansicht verwendet die eingefrorene Archivstichprobe
-mit MAE und Bias in kWh, Paaranzahl und Abdeckung. Das ist keine Prozentangabe
-zur vermeintlichen Genauigkeit. Details und Formeln stehen im
-[Prognosearchivvertrag](prognosearchiv.md). Bei aktiver
-[Selbstkalibrierung](kalibrierung.md) zeigt die Karte dieselbe wirksame Prognose
-wie die Sensoren und das Energy Dashboard; die Archivlinie verwendet den damals
-wirklich angewendeten Stand. Den Lernstatus findest du in den Anlagenoptionen.
-Ein Unsicherheitsband ist bislang nicht enthalten.
-
 ## Datenzugriff und Fehlerzustände
 
-Die Karte liest vorhandene Daten über `get_forecast`, `get_measurements` und
-`get_history`. Die zusätzlichen Darstellungsfelder sind versioniert; das
+Die Karte liest vorhandene Daten über `get_forecast` und `get_measurements`. Die zusätzlichen Darstellungsfelder sind versioniert; das
 Backend berechnet Tageswerte, Dachbeiträge und exakt belegte Messintervalle.
 Der Browser positioniert und formatiert diese Werte. Er fragt weder Open-Meteo
 noch den Recorder ab und berechnet kein zweites PV-Modell.
@@ -151,13 +140,12 @@ Einblenden nimmt die Karte ihre Leseaufrufe wieder auf. Die üblichen
 speichert keine Historie und verändert keine Prognose.
 
 Die Anlage und alle beteiligten aktuellen beziehungsweise historischen
-Quellidentitäten bleiben berechtigungsgeprüft. Fehlende Rechte auf Mess- oder
-Archivquellen verdecken die weiterhin erlaubte reine Prognose nicht. Ein
+Quellidentitäten bleiben berechtigungsgeprüft. Fehlende Rechte auf Messquellen verdecken die weiterhin erlaubte reine Prognose nicht. Ein
 Forecast-Fehler beziehungsweise ein über 60 Minuten alter Abruf wird sichtbar
 als veraltet ausgewiesen. Fehlt der aktuelle lokale Tag im alten Snapshot,
 erscheint keine alte Tageszahl unter dem Namen „heute“.
 
-Leere Historie, noch nicht zugeordnete Messung, Ladezustand und Ausfall erhalten
+Noch nicht zugeordnete Messung, Ladezustand und Ausfall erhalten
 jeweils eigene Hinweise. Bei eingeschränkten Leserechten hilft die
 Administratorin oder der Administrator mit der gezielten Quellenfreigabe;
 die Karte umgeht diese Rechte nicht.
@@ -173,7 +161,7 @@ Grafik.
 Die Kartenlogik wird ohne zusätzliche Node-Pakete mit
 `node --test tests/frontend/*.test.mjs` geprüft (CI: Node.js 24). Die
 Browser-Demo liegt unter `tests/frontend/demo.html` und simuliert ausschließlich
-die drei vorhandenen Leseaktionen. Ihr Aufrufzähler macht gemeinsame Abrufe
+die zwei vorhandenen Leseaktionen. Ihr Aufrufzähler macht gemeinsame Abrufe
 und das Pausieren beim Ausblenden überprüfbar.
 
 Mit `?panel=1&scenario=sunny&width=360&theme=light` beziehungsweise `theme=dark`
@@ -202,44 +190,19 @@ Die moderierten Tests mit fünf realen PV-Anwendern aus #28 sind weiterhin
 geplant. Automatisierte Prüfungen und Screenshots ersetzen weder diese Tests
 noch einen gemessenen Qualitätsvorsprung der Prognose.
 
-### Historische Einzelansicht
-
-Unter „Analyse → Archivtag erkunden“ sind abgeschlossene Tage, frühere
-Anlagenkontexte und 1-/3-Stunden-Vorläufe wählbar. Grafik und Intervallauswahl
-verwenden dieselben UTC-Grenzen wie die Liveansicht, mit lokaler Zeitzone und
-Offset. Tastatur: Diagramm fokussieren, Pfeile sowie Pos1/Ende; Touch: Intervall
-antippen. Historische Tagesprognosen und vollständig belegte Tagesmessung stehen
-separat unter der Grafik. Lücken und revidierte Messungen bleiben sichtbar.
-
-Die Detailabfrage beginnt beim Öffnen beziehungsweise Ändern der Auswahl;
-„Aktualisieren“ liest bewusst neu. Geschlossene oder ausgeblendete Karten
-beginnen keine historischen Abrufe. Screenshots und Browserprüfung mit
-synthetischen Daten: `scripts/check_archive_browser.cjs`, 360/768/1440 px,
-Hell/Dunkel, Datum/Kontext/Vorlauf, Tastatur und Touch. Dies ersetzt keine reale
-Nutzererprobung.
-
-![Archivnavigation bei 360 px](images/ui-132-360-light.png)
-![Archivnavigation im dunklen Design](images/ui-132-360-dark.png)
-
-### Prognose erklärt und Grundmodellwerte
+### Prognose erklärt
 
 Unter der Livegrafik steht für die Gesamtanlage der zunächst geschlossene Bereich
-„Prognose erklärt“. Die Tagesbilanz zeigt Basis, vorzeichenbehafteten Faktorbeitrag,
+„Prognose erklärt“. Die Tagesbilanz zeigt die Basis vor AC-Begrenzung,
 Gruppenbegrenzung, zusätzliche Anlagenbegrenzung und wirksame AC-Prognose. Bei
 einem ausgewählten Grafikintervall erscheint zusätzlich dessen eigene Bilanz.
-Grundmodell und wirksame Prognose nach Begrenzung werden separat verglichen.
-
-Die Checkbox ergänzt „Grundmodell ohne Selbstkalibrierung“ in Intervall-Details
-und Wertetabelle mit den unveränderten Backendwerten. Das Diagramm bleibt bei
-Prognose und tatsächlicher Produktion. Zum dauerhaften Speichern dient dieselbe
-Option im visuellen Karteneditor beziehungsweise `show_raw_forecast: true` in der Kartenkonfiguration.
-Die temporäre Checkbox verändert keine Anlagenparameter. Dachansichten zeigen
-keine Gesamtverlustbilanz. Eine fehlende kompatible Rohbasis bleibt als solche
+Dachansichten zeigen keine Gesamtverlustbilanz. Eine fehlende kompatible Rohbasis bleibt als solche
 sichtbar; gespeicherte/veraltete Stände behalten ihre Herkunft und Wetterzeit.
 
-Die Erklärung kommt mit der normalen Prognoseantwort; identische aktive Karten
-teilen den Lesezyklus. Ohne geöffnete Erklärung und ohne angeforderte
-Grundmodellwerte wird der Zusatzblock nicht angefragt. Ausblenden/Entfernen beendet die aktiven Leser.
+Die Erklärung verwendet ihren eigenen Datenvertrag in Version 2 und kommt mit
+der normalen Prognoseantwort; identische aktive Karten teilen den Lesezyklus.
+Ohne geöffnete Erklärung wird der Zusatzblock nicht angefragt. Ausblenden oder
+Entfernen beendet die aktiven Leser.
 
 ![Prognoseerklärung bei 360 px](images/ui-133-360-light.png)
 ![Prognoseerklärung im dunklen Design](images/ui-133-360-dark.png)

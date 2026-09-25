@@ -2,8 +2,7 @@
 
 import asyncio
 from copy import deepcopy
-from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 
 import pytest
 from homeassistant.data_entry_flow import FlowResultType
@@ -29,7 +28,6 @@ def _entry(hass):
         options={
             "roofs": [persisted_roof("roof")],
             "inverter_max_power_kw": 8,
-            "history_enabled": True,
             "measurement_sources": [
                 SourceConfig("solar", "sensor.pv", "total", "Gesamte AC-PV").to_dict()
             ],
@@ -49,11 +47,10 @@ async def _menu(hass, entry, menu):
     )
 
 
-@pytest.mark.parametrize("menu", ["history", "measurements", "calibration"])
-async def test_older_dialog_cannot_revert_a_saved_inverter_limit(hass, menu):
+async def test_older_dialog_cannot_revert_a_saved_inverter_limit(hass):
     """Zwei echte HA-Optionsflows werden beim älteren Abschluss sicher getrennt."""
     entry = _entry(hass)
-    older = await _menu(hass, entry, menu)
+    older = await _menu(hass, entry, "measurements")
     newer = await _menu(hass, entry, "system")
     assert (
         len(hass.config_entries.options.async_progress_by_handler(entry.entry_id)) == 2
@@ -62,7 +59,7 @@ async def test_older_dialog_cannot_revert_a_saved_inverter_limit(hass, menu):
         newer["flow_id"], {"inverter_max_power_kw": 5}
     )
     saved = deepcopy(dict(entry.options))
-    result = await _choose(hass, older, f"{menu}_done")
+    result = await _choose(hass, older, "measurements_done")
     assert result["type"] is FlowResultType.ABORT
     assert result["reason"] == "reconfigure_entry_changed"
     assert dict(entry.options) == saved
@@ -70,10 +67,10 @@ async def test_older_dialog_cannot_revert_a_saved_inverter_limit(hass, menu):
 
 
 @pytest.mark.parametrize("change", ["roof", "source", "location"])
-async def test_older_archive_draft_preserves_newer_configuration(hass, change):
+async def test_older_measurement_draft_preserves_newer_configuration(hass, change):
     """Dach-, Quellen- und Standortänderungen entziehen alten Entwürfen die Freigabe."""
     entry = _entry(hass)
-    result = await _menu(hass, entry, "history")
+    result = await _menu(hass, entry, "measurements")
     if change == "location":
         hass.config_entries.async_update_entry(
             entry, data=dict(entry.data) | {"time_zone": "UTC"}
@@ -88,7 +85,7 @@ async def test_older_archive_draft_preserves_newer_configuration(hass, change):
             entry, options=dict(entry.options) | changes
         )
     saved_data, saved_options = dict(entry.data), deepcopy(dict(entry.options))
-    result = await _choose(hass, result, "history_done")
+    result = await _choose(hass, result, "measurements_done")
     assert result["type"] is FlowResultType.ABORT
     assert result["reason"] == "reconfigure_entry_changed"
     assert dict(entry.data) == saved_data
@@ -119,81 +116,43 @@ async def test_open_roof_editor_does_not_overwrite_newer_values(hass):
 async def test_internal_dashboard_revision_does_not_conflict_or_get_reverted(
     hass, previous_revision
 ):
-    """Eine Dashboardreparatur bleibt beim Speichern von Archivoptionen erhalten."""
+    """Eine Dashboardreparatur bleibt beim Speichern von Messoptionen erhalten."""
     entry = _entry(hass)
     if previous_revision is not None:
         hass.config_entries.async_update_entry(
             entry,
             options=dict(entry.options) | {"dashboard_revision": previous_revision},
         )
-    result = await _menu(hass, entry, "history")
-    result = await _choose(hass, result, "history_settings")
-    result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {"history_enabled": False}
-    )
+    result = await _menu(hass, entry, "measurements")
     hass.config_entries.async_update_entry(
         entry, options=dict(entry.options) | {"dashboard_revision": "current"}
     )
-    result = await _choose(hass, result, "history_done")
+    result = await _choose(hass, result, "measurements_done")
     assert result["type"] is FlowResultType.CREATE_ENTRY
     assert entry.options["dashboard_revision"] == "current"
-    assert entry.options["history_enabled"] is False
 
 
-@pytest.mark.parametrize(
-    "menu,action,confirmation,operation",
-    [
-        ("history", "delete_history", {"confirm_delete": True}, "history"),
-        ("calibration", "reset_calibration", {"confirm_reset": True}, "calibration"),
-        (
-            "measurements",
-            "delete_measurement_data",
-            {"confirm_delete": True},
-            "measurement",
-        ),
-        (
-            "history",
-            "underperformance_control",
-            {"action": "clear", "confirm": True},
-            "observation",
-        ),
-    ],
-)
-async def test_conflict_prevents_immediate_data_changes(
-    hass, menu, action, confirmation, operation
-):
-    """Ein Standortwechsel stoppt bestätigte Löschungen aus dem vorherigen Dialog."""
+async def test_conflict_prevents_immediate_data_changes(hass):
+    """Ein Standortwechsel stoppt Messdatenlöschungen aus dem vorherigen Dialog."""
     entry = _entry(hass)
-    observation = AsyncMock()
-    entry.runtime_data = SimpleNamespace(
-        history=SimpleNamespace(loaded=True, async_observation_control=observation)
+    result = await _choose(
+        hass, await _menu(hass, entry, "measurements"), "delete_measurement_data"
     )
-    result = await _choose(hass, await _menu(hass, entry, menu), action)
-    if operation == "measurement":
-        result = await hass.config_entries.options.async_configure(
-            result["flow_id"], {"source_id": "solar"}
-        )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"source_id": "solar"}
+    )
     hass.config_entries.async_update_entry(
         entry, data=dict(entry.data) | {"latitude": 53}
     )
-    with (
-        patch(
-            "custom_components.pv_forecast.history_runtime.async_delete_history_data"
-        ) as history,
-        patch(
-            "custom_components.pv_forecast.calibration_runtime.async_delete_calibration_data"
-        ) as calibration,
-        patch(
-            "custom_components.pv_forecast.measurement_runtime.async_delete_measurement_source_data"
-        ) as measurement,
-    ):
+    with patch(
+        "custom_components.pv_forecast.measurement_runtime.async_delete_measurement_source_data"
+    ) as measurement:
         result = await hass.config_entries.options.async_configure(
-            result["flow_id"], confirmation
+            result["flow_id"], {"confirm_delete": True}
         )
         assert result["type"] is FlowResultType.ABORT
         assert result["reason"] == "reconfigure_entry_changed"
-        for mock in (history, calibration, measurement, observation):
-            mock.assert_not_called()
+        measurement.assert_not_called()
 
 
 async def _guided_source(hass, entry, sensor):

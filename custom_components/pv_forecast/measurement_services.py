@@ -30,7 +30,7 @@ SERVICE_GET_MEASUREMENTS = "get_measurements"
 
 
 class SourceIdentityView(Protocol):
-    """Gemeinsame Leserechtsgrenze aktueller und archivierter Messquellen."""
+    """Leserechtsgrenze der lokal erfassten Messquellen."""
 
     @property
     def entity_ids(self) -> tuple[str, ...]:

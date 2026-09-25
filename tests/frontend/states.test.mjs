@@ -4,8 +4,8 @@ import { dataNotices, loadView, retainReadState, sourceError, renderContent } fr
 import { fixtureHass } from "./fixtures.mjs";
 const config = { config_entry_id: "demo-plant", day: "today" };
 async function load(scenario) { let last; await loadView(fixtureHass(scenario), config, (state) => { last = state; }); return last; }
-test("Zustände unterscheiden fehlende Quellen, Messbeginn, Null und Archiv", async () => {
-  for (const [scenario, id] of [["no-source", "no-source"], ["no-measurement", "measurement-empty"], ["gaps", "incomplete-forecast"], ["archive-off", "archive-off"], ["archive-empty", "archive-empty"], ["stale", "stale"], ["old", "version"]]) {
+test("Zustände unterscheiden fehlende Quellen, Messbeginn, Nullwerte", async () => {
+  for (const [scenario, id] of [["no-source", "no-source"], ["no-measurement", "measurement-empty"], ["gaps", "incomplete-forecast"], ["stale", "stale"], ["old", "version"]]) {
     assert.ok(dataNotices(await load(scenario)).some((item) => item.id === id), scenario);
   }
   assert.equal(dataNotices(await load("zero")).some((item) => /measurement|no-source/.test(item.id)), false);
@@ -15,7 +15,7 @@ test("Zustände unterscheiden fehlende Quellen, Messbeginn, Null und Archiv", as
 test("Vorübergehende Ausfälle bewahren Zeitbasis, Rechteentzug und neue Versionen löschen Werte", async () => {
   const previous = await load("sunny");
   const error = sourceError({ code: "home_assistant_error" }, "Prognosedaten");
-  const retained = retainReadState(previous, { forecast: error, measurement: { status: "idle" }, history: { status: "idle" } });
+  const retained = retainReadState(previous, { forecast: error, measurement: { status: "idle" } });
   assert.equal(retained.forecast.data, previous.forecast.data);
   assert.equal(retained.forecast.envelope.fetched_at, previous.forecast.envelope.fetched_at);
   assert.match(renderContent(config, retained), /Letzte gelesene Ansicht/);
@@ -29,9 +29,9 @@ test("Vorübergehende Ausfälle bewahren Zeitbasis, Rechteentzug und neue Versio
 });
 
 test("Tageswechsel verwirft abhängige Werte beim Nachladen, Ausfall und wiederholten Ausfall", async () => {
-  let state = await load("experience");
+  let state = await load("sunny");
   const old = state;
-  const base = fixtureHass("experience");
+  const base = fixtureHass("sunny");
   const nextDayHass = {
     async callWS(message) {
       const result = await base.callWS(message);
@@ -46,9 +46,8 @@ test("Tageswechsel verwirft abhängige Werte beim Nachladen, Ausfall und wiederh
   };
   const assertNoYesterday = () => {
     assert.equal(state.measurement.data, undefined);
-    assert.equal(state.history.data, undefined);
     const html = renderContent(config, state);
-    assert.doesNotMatch(html, /Aktueller Stand|17,2–28,4|23,17 kWh/);
+    assert.doesNotMatch(html, /Aktueller Stand|23,17 kWh/);
     assert.match(html, /basiert auf der Wetterprognose/);
   };
   for (let attempt = 0; attempt < 2; attempt++) {
@@ -56,7 +55,7 @@ test("Tageswechsel verwirft abhängige Werte beim Nachladen, Ausfall und wiederh
     let pending = 0;
     const run = loadView({ async callWS(message) {
       if (message.service === "get_forecast") return nextDayHass.callWS(message);
-      if (++pending === 2) ready.resolve();
+      if (++pending === 1) ready.resolve();
       await release.promise;
       throw { code: "home_assistant_error" };
     } }, config, (incoming) => { state = retainReadState(state, incoming); });
@@ -72,15 +71,11 @@ test("Tageswechsel verwirft abhängige Werte beim Nachladen, Ausfall und wiederh
       result.response.total_energy.energy_kwh = 0.25;
       Object.assign(result.response.outlook, { as_of: "2026-09-10T22:01:00Z", total_kwh: 19.5 });
     }
-    if (message.service === "get_history") {
-      Object.assign(result.response.uncertainty.days.today, { target_date: "2026-09-11", lower_kwh: 10 });
-    }
     return result;
   } }, config, (incoming) => { state = retainReadState(state, incoming); });
   assert.equal(state.measurement.data.total_energy.energy_kwh, 0.25);
   assert.match(renderContent(config, state), /Aktueller Stand/);
   assert.match(renderContent(config, state), /19,5 kWh/);
-  assert.match(renderContent(config, state), /10–28,4/);
   assert.equal(old.measurement.data.total_energy.energy_kwh, 12.4, "Der ursprüngliche Stand wird nicht verändert");
 });
 
@@ -92,33 +87,28 @@ test("Tagesbasis nutzt UTC-Grenzen und Anlagenzeitzone, unabhängig von Ansicht 
       { today_start: view.today_end, today_end: new Date(Date.parse(view.today_end) + 86400000).toISOString() },
       { timezone: "UTC" },
     ]) {
-      const next = { forecast: { status: "ready", data: { ...view, ...change } }, measurement: { status: "loading" }, history: { status: "loading" } };
+      const next = { forecast: { status: "ready", data: { ...view, ...change } }, measurement: { status: "loading" } };
       const state = retainReadState(previous, next);
       assert.equal(state.measurement.data, undefined, scenario);
-      assert.equal(state.history.data, undefined, scenario);
     }
     const sameDay = retainReadState(previous, {
       forecast: { status: "ready", data: { ...view, day: "tomorrow", as_of: new Date(Date.parse(view.as_of) + 60000).toISOString() } },
-      measurement: sourceError({}, "Messdaten"), history: sourceError({}, "Archivdaten"),
+      measurement: sourceError({}, "Messdaten"),
     });
     assert.equal(sameDay.measurement.data, previous.measurement.data);
-    assert.equal(sameDay.history.data, previous.history.data);
     assert.equal(sameDay.measurement.retained, true);
   }
 });
 
 test("Späte Tagesantworten werden auch bei erfolgreichem Lesen nicht falsch zugeordnet", async () => {
-  const state = await load("experience");
+  const state = await load("sunny");
   state.measurement.data.outlook.as_of = state.forecast.data.today_end;
-  state.history.data.uncertainty.days.today.target_date = "2026-09-11";
   let html = renderContent(config, state);
-  assert.doesNotMatch(html, /23,17 kWh|17,2–28,4/);
+  assert.doesNotMatch(html, /23,17 kWh/);
   state.measurement.data.outlook.as_of = state.forecast.data.as_of;
-  state.history.data.uncertainty.days.today.target_date = state.forecast.data.date;
   state.measurement.data.outlook.timezone = "UTC";
-  state.history.data.uncertainty.timezone = "UTC";
   html = renderContent(config, state);
-  assert.doesNotMatch(html, /23,17 kWh|17,2–28,4/);
+  assert.doesNotMatch(html, /23,17 kWh/);
 });
 test("Wiederhergestellte Prognose nennt Herkunft und echte Wetterzeit", async () => {
   const restored = await load("restored");

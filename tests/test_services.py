@@ -562,7 +562,7 @@ async def test_invalid_window_has_translated_error(hass, loaded_forecast, window
 
 
 async def test_explanation_is_optional_coherent_and_read_only(hass, loaded_forecast):
-    """Lesen verändert keine Generation; ein lokaler Faktor tut dies ohne HTTP."""
+    """Lesen verändert weder die Generation noch den Wetterabruf."""
     entry, coordinator, fetch = loaded_forecast
     ordinary = await _get_forecast(hass, entry.entry_id)
     assert "explanation" not in ordinary
@@ -584,22 +584,9 @@ async def test_explanation_is_optional_coherent_and_read_only(hass, loaded_forec
         first["explanation"]["status"] == second["explanation"]["status"] == "available"
     )
     assert coordinator.explanation is snapshot
-    coordinator.async_set_calibration(0.8, "bestätigter-faktor")
-    current = await _get_forecast(hass, entry.entry_id, include_explanation=True)
-    assert current["explanation"]["factor"] == 0.8
     assert (
-        current["explanation"]["totals"]["effective_kwh"]
-        == coordinator.data.total.today
+        first["explanation"]["totals"]["effective_kwh"] == coordinator.data.total.today
     )
-    assert coordinator.explanation is not snapshot
-    assert (
-        fetch.call_count == before
-        and coordinator.last_update_success_time == fetched_at
-    )
-    coherent = coordinator.explanation
-    coordinator.async_set_calibration(0.8, "andere-bezeichnung")
-    assert coordinator.explanation is coherent
-    coordinator.async_set_calibration(1, None)
-    assert (await _get_forecast(hass, entry.entry_id, include_explanation=True))[
-        "explanation"
-    ]["factor"] == 1
+    assert "factor" not in first["explanation"]
+    assert fetch.call_count == before
+    assert coordinator.last_update_success_time == fetched_at

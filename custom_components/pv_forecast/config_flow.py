@@ -38,7 +38,6 @@ from homeassistant.util import dt as dt_util
 
 from .api import OpenMeteoConnectionError, OpenMeteoDataError
 from .calculations import InvalidConfigurationError, validate_coordinates
-from .calibration_configuration import CalibrationFlowMixin
 from .configuration import location_fingerprint, roof_from_dict, roofs_from_options
 from .const import (
     CONF_ADD_ANOTHER,
@@ -70,7 +69,6 @@ from .const import (
     LOCATION_SOURCE_HOME_ASSISTANT,
     ROOF_DIRECTION_CUSTOM,
 )
-from .correction_configuration import CorrectionFlowMixin
 from .dashboard import CONF_DASHBOARD_ENABLED, CONF_DASHBOARD_REVISION
 from .dashboard_configuration import DashboardFlowMixin
 from .geocoding import (
@@ -79,7 +77,6 @@ from .geocoding import (
     GeocodingDataError,
     NominatimClient,
 )
-from .history_configuration import HistoryFlowMixin
 from .horizon import (
     CONF_FORECAST_DAYS,
     forecast_days_from_options,
@@ -87,7 +84,6 @@ from .horizon import (
 )
 from .inverter_configuration import InverterGroupFlowMixin, groups_for_remaining_roofs
 from .measurement_configuration import MeasurementFlowMixin
-from .morning_configuration import MorningFlowMixin
 from .reconfiguration import ReconfigurationChangedError, async_prepare_location_change
 from .runtime import async_get_open_meteo_client
 from .shading import CONF_HORIZON_PROFILES
@@ -396,13 +392,6 @@ def _optional_summary(options: dict[str, Any], translations: dict[str, str]) -> 
     """Bereits gewählte freiwillige Funktionen aus den HA-Texten zusammenfassen."""
     return translations["common.optional_summary"].format(
         sources=len(options.get("measurement_sources", [])),
-        history=translations[
-            (
-                "common.option_on"
-                if options.get("history_enabled")
-                else "common.option_off"
-            )
-        ],
         dashboard=translations[
             (
                 "common.option_on"
@@ -415,7 +404,6 @@ def _optional_summary(options: dict[str, Any], translations: dict[str, str]) -> 
 
 class PvForecastConfigFlow(
     DashboardFlowMixin,
-    HistoryFlowMixin,
     MeasurementFlowMixin,
     ConfigFlow,
     domain=DOMAIN,
@@ -454,13 +442,6 @@ class PvForecastConfigFlow(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Nach der optionalen Zuordnung zum Abschlussdialog zurückkehren."""
-
-        return await self.async_step_summary()
-
-    async def async_step_history_done(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        """Nach der optionalen Archivierung zum Abschlussdialog zurückkehren."""
 
         return await self.async_step_summary()
 
@@ -713,7 +694,7 @@ class PvForecastConfigFlow(
     async def async_step_reconfigure_confirm(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Geprüften Standort bestätigen und bestehende Mess-/Archivgrenzen bewahren."""
+        """Geprüften Standort bestätigen und bestehende Messgrenzen bewahren."""
 
         entry = self._reconfigure_entry
         assert entry is not None
@@ -941,7 +922,6 @@ class PvForecastConfigFlow(
                 "edit_roofs",
                 "edit_system",
                 "measurements",
-                "history",
                 "dashboard",
             ],
             description_placeholders={
@@ -1010,13 +990,9 @@ class PvForecastConfigFlow(
 
 
 class PvForecastOptionsFlow(
-    MorningFlowMixin,
-    CorrectionFlowMixin,
     DashboardFlowMixin,
     ShadingFlowMixin,
     InverterGroupFlowMixin,
-    CalibrationFlowMixin,
-    HistoryFlowMixin,
     MeasurementFlowMixin,
     OptionsFlow,
 ):
@@ -1118,13 +1094,6 @@ class PvForecastOptionsFlow(
             return await self.async_step_measurement_save()
         return self.async_create_entry(title="", data=self._measurement_options())
 
-    async def async_step_history_done(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        """Archivoptionen mit allen unabhängigen Einstellungen speichern."""
-
-        return self.async_create_entry(title="", data=self._history_options())
-
     def _roofs(self) -> list[dict[str, Any]]:
         """Aktuell gespeicherte Dachflächen als veränderbare Kopien lesen."""
 
@@ -1138,30 +1107,6 @@ class PvForecastOptionsFlow(
 
         self._check_options_unchanged()
         return await super().async_step_confirm_measurement_delete(user_input)
-
-    async def async_step_delete_history(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        """Archivlöschung bei einem inzwischen veralteten Dialog verhindern."""
-
-        self._check_options_unchanged()
-        return await super().async_step_delete_history(user_input)
-
-    async def async_step_reset_calibration(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        """Lernzustand nur für die unverändert bestätigte Anlage zurücksetzen."""
-
-        self._check_options_unchanged()
-        return await super().async_step_reset_calibration(user_input)
-
-    async def async_step_underperformance_control(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        """Hinweisaktionen an einen noch aktuellen Optionsdialog binden."""
-
-        self._check_options_unchanged()
-        return await super().async_step_underperformance_control(user_input)
 
     def _finish(
         self, roofs: list[dict[str, Any]], inverter_limit: float | None
@@ -1207,7 +1152,6 @@ class PvForecastOptionsFlow(
         menu_options = [
             "plant_options",
             "measurements",
-            "daily_correction",
             "dashboard",
             "advanced_options",
             "health",
@@ -1239,7 +1183,7 @@ class PvForecastOptionsFlow(
         findings = check_health(capture_health(self.hass, self.config_entry, now), now)
         translations = await _async_ui_translations(self.hass)
         lines = []
-        for group in ("weather", "measurements", "archive", "calibration", "cache"):
+        for group in ("weather", "measurements", "cache"):
             lines.append("### " + translations[f"common.health_group_{group}"])
             for finding in findings:
                 if finding.group == group:
@@ -1272,14 +1216,11 @@ class PvForecastOptionsFlow(
     async def async_step_advanced_options(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Optionale Modelle und Vergleiche getrennt von der Grundeinrichtung zeigen."""
+        """Optionale Prognose- und Anlagenfunktionen zusammenfassen."""
         roofs = self._roofs()
         return self.async_show_menu(
             step_id="advanced_options",
             menu_options=[
-                "history",
-                "calibration",
-                "morning",
                 "forecast_horizon",
                 "forecast_cache",
                 "inverter_groups",

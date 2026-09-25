@@ -48,7 +48,6 @@ def test_contiguous_window_beats_single_peak():
     assert result["status"] == "available"
     assert result["start"] == "2026-09-09T11:00:00+00:00"
     assert result["energy_kwh"] == 12
-    assert result["uncertainty"]["reason"] == "unsupported_horizon"
 
 
 def test_fractional_duration_and_shifted_boundary():

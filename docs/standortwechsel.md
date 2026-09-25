@@ -10,24 +10,24 @@ Speichern erforderlich. Ohne Dachfläche muss zunächst eine hinzugefügt werden
 Der Abschlussdialog zeigt Standort, Koordinaten und Anlagenzeitzone. Erst
 **Geprüften Standort speichern** verändert den Eintrag. Ein Verbindungsfehler
 oder Abbruch bewahrt den bisherigen Standort. Dachflächen, Leistungsgrenzen,
-optionale Mess-/Archiveinstellungen, Config-Entry-ID und Entity-IDs bleiben
+optionale Messeinstellungen, Config-Entry-ID und Entity-IDs bleiben
 erhalten. Home Assistant lädt die Anlage einmal neu und berechnet die Prognose
 für den bestätigten Standort. Eine Löschung oder Neuerstellung ist unnötig;
 auch eine Löschung würde nicht zwingend sofort alle Recorder-Zeilen entfernen.
 
-## Standortgrenzen für Messung und Auswertung
+## Standortgrenzen für Messungen
 
 Andere Koordinaten oder eine andere gespeicherte Anlagenzeitzone beginnen eine
-neue physische Vergleichsgrundlage. Eine reine Änderung des Standortnamens oder
+neues Messsegment. Eine reine Änderung des Standortnamens oder
 der Adressbeschriftung bei identischen Koordinaten und identischer Zone tut dies
 nicht. Gespeicherte Zeitzonen werden beim normalen Start weiterhin nicht neu
 aufgelöst oder aus Home Assistant übernommen.
 
-Der Messspeicher verwendet Version 2. Zu jedem Messsegment gehören ein
+Der Messspeicher verwendet Version 3. Zu jedem Messsegment gehören ein
 Standortfingerprint, seine ursprüngliche Zeitzone und gegebenenfalls der Beginn
-des neuen Standortsegments. Die verlustfreie Übernahme aus Version 1 ergänzt
-diese Metadaten im bisherigen Standortkontext; Messpunkte, Zählerdifferenzen,
-Quellen-IDs und Tageskorrekturen bleiben erhalten. Beim Wechsel wird die alte
+des neuen Standortsegments. Die verlustfreie Übernahme aus Version 1 oder 2 bewahrt
+die Metadaten im bisherigen Standortkontext; Messpunkte, Zählerdifferenzen,
+Quellen-IDs und beobachtete Zählerkorrekturen bleiben erhalten. Beim Wechsel wird die alte
 Zählerbasis verworfen. Ein bereits vor dem Wechsel gemeldeter HA-Zustand wird
 nicht als neue Basis übernommen; erst neue Meldungen belegen Energie am neuen
 Standort. Es gibt keine Zählerdifferenz über die Standortgrenze.
@@ -47,15 +47,7 @@ kennzeichnet unvollständige Erfassung weiterhin ausdrücklich. Das historische
 `total_energy` bleibt für bestehende Leser erhalten. Bei einer älteren
 Backendversion ohne das Zusatzfeld bleibt die bisherige Kartenanzeige nutzbar.
 
-Archivversion 3 bewahrt alte und neue Prognosestände mit ihrer jeweiligen
-Record-Zeitzone. Tagesgrenzen und Stichtage werden in dieser ursprünglichen
-Zone geprüft. Die aktuelle Berichtssumme bezieht sich auf die aktive
-Konfiguration und Zone; `configuration_groups` enthält getrennte frühere
-Vergleichsgrundlagen. Die Archivmigration aus Version 1 oder 2 verändert die
-bisherigen Prognosestände nicht. Bisherige Lernfaktoren benötigen für die neue
-physische Konfiguration einen neuen Nachweis; sie werden nicht übernommen.
-
-Unbekannte oder unlesbare Mess-, Archiv- und Lernspeicher verhindern einen
+Unbekannte oder unlesbare Messspeicher verhindern einen
 physischen Standortwechsel. Dadurch können fehlende alte Standortmetadaten
 nicht nachträglich mit dem neuen Standort verwechselt werden. Vor dem
 Config-Entry-Update werden die laufenden Manager beendet und erforderliche

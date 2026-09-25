@@ -35,7 +35,7 @@ einen verlässlichen Gerätezeitvertrag nicht als solcher erkannt werden.
 | `identity_unresolved` | Die bestätigte Registry-Identität ist momentan nicht eindeutig auflösbar |
 
 Eine unvollständige beobachtete Energiemenge darf nicht als vollständiger
-Tagesertrag angezeigt oder als vollständige Lerngrundlage benutzt werden.
+Tagesertrag angezeigt werden.
 `total_energy` summiert erst nach der Auswertung jeder einzelnen Energiequelle.
 Leistungssensoren tragen nichts zu dieser Summe bei. Die Quellanzahl und die
 Vollständigkeit der Einzelquellen bleiben ausgewiesen.
@@ -87,9 +87,8 @@ als weiterhin vollständiger Tageswert ausgegeben.
 Ein bewusst geänderter Sensor, eine andere Messart oder eine geänderte
 Messgrenze beginnt ein neues Datensegment. Die Quelle behält ihre Zuordnungs-ID;
 ihre früheren Segmente behalten ihre damaligen Metadaten. Eine bloße
-Entity-Umbenennung folgt der unveränderten Registry-ID. Aus historischen
-Segmenten dürfen spätere Lernfunktionen keine stillen Überträge zwischen
-unterschiedlichen Anlagen ableiten.
+Entity-Umbenennung folgt der unveränderten Registry-ID. Historische Segmente werden nicht still zwischen unterschiedlichen Anlagen
+übertragen.
 
 ## Speicherung und Berechtigungen
 
@@ -176,5 +175,4 @@ als gestrichelten Ist-Verlauf. Legende, Intervallauswahl und Tabelle verwenden
 keinen zusätzlichen Erfassungshinweis.
 So bleiben positive Messwerte bei üblichen, zur vollen Stunde versetzten
 Zählermeldungen sichtbar. Die vollständige Stundenproduktion ist dabei weiterhin
-unbekannt. Archiv, Lernen und vollständige Prognosevergleiche verwenden weiterhin
-nur ihre bisherigen zulässigen Messwerte.
+unbekannt.

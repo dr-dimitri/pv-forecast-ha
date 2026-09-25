@@ -38,9 +38,7 @@ test("Details unterscheiden Nullwerte, unvollständige und fehlende Reihen", asy
   const gap = intervalDetails(state, intervalKey(rows[10]));
   assert.equal(gap.sources.forecast.status, "incomplete");
   assert.equal(gap.sources.actual.status, "incomplete");
-  assert.equal(gap.sources.history.status, "missing");
   assert.match(renderIntervalDetails(state, intervalKey(rows[10])), /unvollständig/);
-  assert.match(renderIntervalDetails(state, intervalKey(rows[10])), /nicht vorhanden/);
   assert.equal(intervalDetails(state, "entfernt"), null);
 });
 
@@ -69,9 +67,7 @@ test("Vorhandene Ist-Mengen bilden eine gemeinsame Kurve ohne Erfassungshinweise
   assert.match(html, /Tatsächlich produziert/);
   assert.doesNotMatch(html, /class="history-line"/);
   assert.doesNotMatch(html, /class="history-key"/);
-  // Unsichtbare Archivwerte dürfen die Diagrammachse nicht mehr verändern.
   const chart = html.match(/<svg id="interval-chart"[\s\S]*?<\/svg>/)[0];
-  for (const item of state.history.data.current_targets.intervals) item.energy_kwh = 10000;
   assert.equal(renderContent({}, state).match(/<svg id="interval-chart"[\s\S]*?<\/svg>/)[0], chart);
   assert.match(renderIntervalDetails(state, key), /<dt>Messung<\/dt><dd>0,81 kWh<\/dd>/);
   // Alte Backendantworten und unvollständige Werte ohne Teilsumme bleiben leer.

@@ -33,8 +33,8 @@ Dach-IDs dürfen sich zwischen Anlagen wiederholen: Entity- und Store-Zuordnung
 verwenden zusätzlich die eindeutige Entry-ID. Daten werden niemals automatisch
 summiert oder zwischen Standorten beziehungsweise Messgrenzen kopiert.
 
-Auch beim Entfernen einer Anlage bleiben Sensoren, Messlistener, Archiv,
-Lernzustand und Aktionen der anderen erhalten. Eine echte Erzeugungsquelle
+Auch beim Entfernen einer Anlage bleiben Sensoren, Messlistener, Messdaten
+und Aktionen der anderen erhalten. Eine echte Erzeugungsquelle
 soll nur der Anlage zugeordnet werden, deren AC-Grenze sie misst. Unabhängige
 Zähler sind nicht automatisch durch ihre Namen oder Einheiten bewiesen.
 
@@ -52,7 +52,7 @@ Reconfigure und die unveränderte alte Domain-ID.
 
 Ein Laufzeittest betreibt zwei echte Config Entries mit getrennten Zählern und
 AC-Limits, prüft Sensoren und Messdifferenzen und entfernt anschließend eine
-Anlage. Die andere bleibt mit unverändertem Archiv, eigenen Listenern und
+Anlage. Die andere bleibt mit unveränderten Messdaten, eigenen Listenern und
 funktionierenden Forecast-/Energy-Abfragen erhalten. Das ersetzt keine reale
 Anlagenerprobung.
 

@@ -80,7 +80,6 @@ async def test_horizon_covers_all_local_days_with_same_geometry_requests(
         day,
         tz,
         forecast_days=days,
-        calibration_factor=1.2,
         inverter_groups=(AcInverterGroup("g", "Gerät", 8, ("a",)),),
     )
     assert data.forecast_days == days
@@ -159,7 +158,6 @@ async def test_sensors_follow_all_covered_days_after_midnight(hass, freezer, zon
     ):
         assert await hass.config_entries.async_setup(entry.entry_id)
     coordinator = entry.runtime_data.coordinator
-    coordinator.async_set_calibration(0.5, None)
     snapshot = coordinator.data
     fetched_at = coordinator.last_update_success_time
     sensors = {

@@ -15,12 +15,11 @@ from .models import ForecastResult
 
 @dataclass(frozen=True, slots=True)
 class ExplanationInterval:
-    """kWh je absolutem Intervall; Faktorbeitrag darf negativ sein."""
+    """Energie und Begrenzungsverluste je absolutem Intervall."""
 
     start: datetime
     end: datetime
-    before_calibration_kwh: float
-    calibration_delta_kwh: float
+    before_clipping_kwh: float
     group_clipping_kwh: float
     total_clipping_kwh: float
     effective_kwh: float
@@ -33,7 +32,6 @@ class ExplanationSnapshot:
     raw: ForecastResult | None
     effective: ForecastResult | None
     timezone: str
-    factor: float
     intervals: tuple[ExplanationInterval, ...] = ()
     reason: str | None = None
 
@@ -49,20 +47,16 @@ def _same(a: float, b: float) -> bool:
 def build_explanation(
     raw: ForecastResult | None,
     effective: ForecastResult | None,
-    factor: float,
     limit: float | None,
     timezone: str,
 ) -> ExplanationSnapshot:
     """Einmal je Generation die produktiven Clippingstufen nachvollziehen."""
-    base = ExplanationSnapshot(raw, effective, timezone, factor)
+    base = ExplanationSnapshot(raw, effective, timezone)
     if raw is None or effective is None or not raw.roofs:
-        return ExplanationSnapshot(
-            raw, effective, timezone, factor, reason="missing_raw_basis"
-        )
+        return ExplanationSnapshot(raw, effective, timezone, reason="missing_raw_basis")
     try:
         if (
-            not 0.5 <= factor <= 1.5
-            or raw.local_date != effective.local_date
+            raw.local_date != effective.local_date
             or raw.forecast_days != effective.forecast_days
             or raw.horizon_shading != effective.horizon_shading
             or raw.inverter_groups != effective.inverter_groups
@@ -100,25 +94,18 @@ def build_explanation(
                 powers[key] = matches[0].dc_power_kw
             if any(not math.isfinite(p) or p < 0 for p in powers.values()):
                 raise ValueError("Ungültige Rohleistung")
-            scaled = {key: power * factor for key, power in powers.items()}
             stages = apply_inverter_limits(
-                scaled, limit, raw.inverter_groups, include_stages=True
+                powers, limit, raw.inverter_groups, include_stages=True
             )
             before = sum(powers.values()) * hours
-            adjusted = sum(scaled.values()) * hours
             grouped = sum(stages.grouped.values()) * hours
             after = sum(stages.effective.values()) * hours
-            group_loss, total_loss = max(0.0, adjusted - grouped), max(
+            group_loss, total_loss = max(0.0, before - grouped), max(
                 0.0, grouped - after
             )
-            delta = adjusted - before
             if (
-                not all(
-                    math.isfinite(v) for v in (before, delta, group_loss, total_loss)
-                )
-                or not _same(
-                    before + delta - group_loss - total_loss, output.energy_kwh
-                )
+                not all(math.isfinite(v) for v in (before, group_loss, total_loss))
+                or not _same(before - group_loss - total_loss, output.energy_kwh)
                 or not _same(after, output.energy_kwh)
             ):
                 raise ValueError("Widersprüchliche Bilanz")
@@ -133,13 +120,13 @@ def build_explanation(
                 raise ValueError("Widersprüchliche Rohkurve")
             intervals.append(
                 ExplanationInterval(
-                    start, end, before, delta, group_loss, total_loss, output.energy_kwh
+                    start, end, before, group_loss, total_loss, output.energy_kwh
                 )
             )
-        return ExplanationSnapshot(raw, effective, timezone, factor, tuple(intervals))
+        return ExplanationSnapshot(raw, effective, timezone, tuple(intervals))
     except (ValueError, OverflowError, KeyError, TypeError):
         return ExplanationSnapshot(
-            base.raw, base.effective, timezone, factor, reason="incompatible_raw_basis"
+            base.raw, base.effective, timezone, reason="incompatible_raw_basis"
         )
 
 
@@ -165,7 +152,7 @@ def explanation_view(
     ).astimezone(UTC)
     expected = window_energy(effective.total_intervals, start, end)
     result = {
-        "schema_version": 1,
+        "schema_version": 2,
         "scope": "total",
         "date": target.isoformat(),
         "timezone": timezone,
@@ -210,15 +197,14 @@ def explanation_view(
     if expected is None:
         return result | {"reason": "incomplete_coverage"}
     fields = (
-        "before_calibration_kwh",
-        "calibration_delta_kwh",
+        "before_clipping_kwh",
         "group_clipping_kwh",
         "total_clipping_kwh",
         "effective_kwh",
     )
-    intervals, raw_intervals = [], []
+    intervals = []
     covered = 0.0
-    for item, original in zip(snapshot.intervals, raw.total_intervals, strict=True):
+    for item in snapshot.intervals:
         left, right = max(start, item.start), min(end, item.end)
         if left >= right:
             continue
@@ -229,15 +215,6 @@ def explanation_view(
                 "start": left.isoformat(),
                 "end": right.isoformat(),
                 **{field: getattr(item, field) * fraction for field in fields},
-            }
-        )
-        raw_intervals.append(
-            {
-                "start": left.isoformat(),
-                "end": right.isoformat(),
-                "energy_kwh": original.energy_kwh * fraction,
-                "is_complete": original.is_complete,
-                "quality_flags": list(original.quality_flags),
             }
         )
     if covered != (end - start).total_seconds():
@@ -258,25 +235,11 @@ def explanation_view(
         stored_daily is not None and not _same(stored_daily, expected)
     ):
         return result | {"reason": "inconsistent_daily_total"}
-    baseline = sum(item["energy_kwh"] for item in raw_intervals)
-    difference = totals["effective_kwh"] - baseline
-    values = [*totals.values(), baseline, difference]
-    if not all(math.isfinite(value) for value in values):
+    if not all(math.isfinite(value) for value in totals.values()):
         return result | {"reason": "nonfinite_result"}
     return result | {
         "status": "available",
         "reason": None,
-        "factor": snapshot.factor,
-        "totals": totals
-        | {
-            "raw_model_kwh": baseline,
-            "effective_minus_raw_kwh": difference,
-            "effective_minus_raw_percent": (
-                difference / baseline * 100
-                if baseline > 0 and math.isfinite(difference / baseline * 100)
-                else None
-            ),
-        },
+        "totals": totals,
         "intervals": intervals,
-        "raw_intervals": raw_intervals,
     }

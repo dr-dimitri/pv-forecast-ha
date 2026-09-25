@@ -160,8 +160,7 @@ dieses. Niemals fehlende Werte durch `float(0)` ersetzen.
 
 Die Annahme `constant_interval_mean_power` bezeichnet die konstante mittlere
 Leistung innerhalb der vorhandenen Wetterintervalle, keine feinere Wetterauflösung.
-`uncertainty` bleibt `unavailable` mit `unsupported_horizon`; PV-Ertrag allein ist
-kein verfügbarer Überschuss. `window` und `planning` können gemeinsam gelesen werden.
+PV-Ertrag allein ist kein verfügbarer Überschuss. `window` und `planning` können gemeinsam gelesen werden.
 `roof_id` gilt weiterhin nur für die Kartenansicht: das Fenster ist ausdrücklich
 die Gesamtanlage. Die normale Prognoseantwort und der bisherige
 [EMHASS-Adapter](solarzeitfenster.md) bleiben kompatibel. Keine Abfrage fordert
@@ -181,25 +180,24 @@ data:
 response_variable: prognose
 ```
 
-`explanation` hat eine eigene `schema_version: 1`, `scope: total`, Datum,
+`explanation` hat eine eigene `schema_version: 2`, `scope: total`, Datum,
 Anlagenzeitzone und UTC-Grenzen des ausgewählten heutigen oder morgigen Tages.
 Auch bei `roof_id` bleibt diese Bilanz ausdrücklich auf die Gesamtanlage bezogen.
 Ohne Flag bleibt die bisherige Antwort unverändert.
 
-`totals` und `intervals` führen Energie vor Kalibrierung (`before_calibration_kwh`),
-Faktorbeitrag (`calibration_delta_kwh`), Gruppenkürzung (`group_clipping_kwh`),
-zusätzliche Gesamtkürzung (`total_clipping_kwh`) und `effective_kwh`. Ihre Bilanz
-wird gegen die bestehende wirksame Zeitreihe und Tageskennzahl geprüft.
-`raw_intervals` liefert direkt die passende Grundmodellkurve mit Faktor 1 nach
-realen AC-Grenzen. `raw_model_kwh`, `effective_minus_raw_kwh` und Prozent bei
-positiver Basis stehen separat in `totals`; beim Nulltag ist Prozent `null`.
+`totals` und `intervals` führen Energie vor Clipping (`before_clipping_kwh`),
+Gruppenkürzung (`group_clipping_kwh`), zusätzliche Gesamtkürzung
+(`total_clipping_kwh`) und `effective_kwh`. Energie vor Clipping minus beide
+Kürzungen ergibt die wirksame Energie. Die Bilanz wird gegen die vorhandene
+Zeitreihe und Tageskennzahl geprüft.
 
-Die Antwort nennt angewendeten Faktor, Herkunft `live/restored`, echte Abrufzeit,
-Abruffehler, Alter (`stale`), Vollständigkeit und Qualitätsmerkmale. Ein
-wiederhergestellter Stand kann rechnerisch erklärt werden, bleibt aber als solcher
-gekennzeichnet und erhält dadurch keine operative Freigabe. Fehlende oder
-inkompatible Rohbasis, Abdeckung oder Bilanz liefert `status: unavailable` und
-einen Grund ohne numerische Erklärung. Keine alte Basis wird aus der AC-Kurve
-rekonstruiert. Die Zwischenstufen entstehen höchstens einmal je Roh-/Faktorgeneration;
-Leseaktionen projizieren nur UTC-Überlappungen. Es gibt keinen HTTP-, Mess-,
-Archiv- oder Lernzugriff durch die Erklärung.
+Die Antwort nennt Herkunft `live/restored`, echte Abrufzeit, Abruffehler,
+Alter (`stale`), Vollständigkeit und Qualitätsmerkmale. Ein wiederhergestellter
+Stand bleibt als solcher gekennzeichnet und erhält dadurch keine operative
+Freigabe. Fehlende oder inkompatible Rohbasis, Abdeckung oder Bilanz liefert
+`status: unavailable` mit Grund ohne numerische Erklärung. Die Zwischenstufen
+entstehen einmal je Wettergeneration; Leseaktionen projizieren nur
+UTC-Überlappungen, ohne HTTP oder Messzugriff.
+
+Schema 2 ersetzt die frühere Faktorbilanz. Deren Faktor-, Kalibrierungs- und
+Grundmodellvergleichsfelder entfallen mit der Archivfunktion.

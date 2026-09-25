@@ -4,7 +4,7 @@ Ein entfernter Bergrücken oder ein genügend weit entferntes Gebäude kann eine
 Dachfläche abhängig vom Sonnenstand abschatten. Unter **Konfigurieren →
 Horizontprofil je Dach (experimentell)** lässt sich dafür ein optionales Profil
 hinterlegen. Das Profil ist standardmäßig aus. Es braucht keine neue Datenquelle,
-Sensoren oder Services. Sensoren, Karte, Planung, Energy und Archiv verwenden
+Sensoren oder Services. Sensoren, Karte, Planung und Energy verwenden
 weiter dieselbe wirksame Prognose.
 
 ## Eingabe und Entfernen
@@ -89,11 +89,8 @@ im Sommerintervall die vollen 600 W/m². Ein gleichbleibender Verlust oder
 Anlagenfaktor kann diese beiden Verhältnisse nicht gleichzeitig abbilden.
 Die Werte sind synthetisch und belegen **keine gemessene Verbesserung**.
 
-Eine reale Vergleichsstudie gegen das bisherige Rohmodell und die freigegebene
-Kalibrierung auf denselben späteren Messintervallen steht aus. Deshalb bleibt
-auch die Kartendarstellung ausdrücklich experimentell. Die Aussage aus der alten
-Issue-Skizze, die vorhandene Selbstkalibrierung lerne zeitaufgelöste Verschattung,
-trifft nicht auf deren implementierten einzelnen Anlagenfaktor zu.
+Eine reale Vergleichsstudie gegen das bisherige Modell auf denselben späteren
+Messintervallen steht aus. Die Kartendarstellung bleibt ausdrücklich experimentell.
 
 Das Profil beschreibt keine partielle Nahverschattung, Bäume, einzelne Module,
 Strings oder Bypassdioden. Es modelliert auch keine diffuse Himmelsverdeckung oder
@@ -105,10 +102,8 @@ insbesondere nahe Sonnenauf-/untergang und an scharfen Hinderniskanten.
 
 Ein wirksames Profil und seine Regelversion erweitern die physische
 Konfigurationskennung. Profiländerung oder Entfernen eines aktiven Profils beginnt
-eine neue Vergleichsgrundlage; bisherige Lernfreigaben werden nicht übertragen.
-Nullprofile ändern die Kennung nicht. Bereits archivierte DC-Basen werden weder
-neu berechnet noch umgedeutet. Config Entries bleiben bei Schema 1.1; Archiv 6,
-Mess-Store 2 und Lern-Store 1 bleiben unverändert.
+eine neue Konfigurationskennung. Nullprofile ändern die Kennung nicht.
+Config Entries bleiben bei Schema 1.1; der Mess-Store bleibt unverändert.
 
 `get_forecast` ergänzt `horizon_shading` einschließlich Regelversion, Aktivierung,
 Experimentstatus und fehlendem realem Verbesserungsnachweis. Die Kartenansicht
@@ -117,8 +112,7 @@ verwendet diese Metadaten ohne eigene Strahlungsberechnung.
 Offline-Tests prüfen unter anderem Winkelkonvention und Nordübergang, den
 veröffentlichten [NREL-SPA-Referenzfall](https://docs.nlr.gov/docs/fy08osti/34302.pdf)
 mit zur NOAA-Näherung passender Toleranz, Winter/Sommer, Polarnacht, diffuse Reste,
-Teilintervalle, UTC/DST, fehlende Werte, unterschiedliche Dächer sowie Kalibrierung
-vor beiden Clippingstufen. Regressionsprüfungen sichern den unveränderten Standard
+Teilintervalle, UTC/DST, fehlende Werte, unterschiedliche Dächer sowie beide Clippingstufen. Regressionsprüfungen sichern den unveränderten Standard
 und Nullprofile. Die Kartenscreenshots bei 360 px zeigen synthetische Daten:
 [Hell](images/karte-horizontprofil-mobil-light.png),
 [Dunkel](images/karte-horizontprofil-mobil-dark.png).

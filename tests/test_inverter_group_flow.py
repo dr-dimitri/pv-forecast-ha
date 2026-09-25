@@ -9,7 +9,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.pv_forecast.configuration import inverter_groups_from_options
 from custom_components.pv_forecast.const import DOMAIN
-from custom_components.pv_forecast.history_runtime import _configuration_id
+from custom_components.pv_forecast.model_context import configuration_id
 
 from .helpers import configure_options, persisted_roof
 from .test_config_flow import _assert_form_is_serializable
@@ -22,8 +22,6 @@ def _entry(hass, groups=None):
             persisted_roof("b", name="Garage"),
         ],
         "inverter_max_power_kw": 12.3456789,
-        "history_enabled": True,
-        "calibration_mode": "off",
     }
     if groups is not None:
         options["inverter_groups"] = groups
@@ -217,12 +215,12 @@ async def test_opening_group_options_keeps_original_configuration_fingerprint(ha
 
     entry = _entry(hass)
     before = deepcopy(dict(entry.options))
-    fingerprint = _configuration_id(entry)
+    fingerprint = configuration_id(entry)
     result = await _menu(hass, entry)
     await configure_options(hass, result["flow_id"], {"next_step_id": "init"})
     assert dict(entry.options) == before
     assert "inverter_groups" not in entry.options
-    assert _configuration_id(entry) == fingerprint
+    assert configuration_id(entry) == fingerprint
 
 
 async def test_roof_removal_does_not_remove_a_new_unconfirmed_group(hass):

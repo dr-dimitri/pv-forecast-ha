@@ -5,7 +5,6 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from custom_components.pv_forecast.history import HistoryArchive
 from custom_components.pv_forecast.measurement_windows import async_interval_windows
 from custom_components.pv_forecast.measurements import (
     SourceConfig,
@@ -14,7 +13,7 @@ from custom_components.pv_forecast.measurements import (
 )
 from custom_components.pv_forecast.outlook import build_day_outlook
 
-from .test_history import forecast
+from .helpers import forecast
 
 DAY = date(2026, 9, 9)
 CASES = [
@@ -69,34 +68,6 @@ def _day_history(day, timezone, *, phase=7, until=None, source_id="pv", derived=
     return values
 
 
-def _assess_day(histories, day, timezone, now):
-    archive = HistoryArchive(timezone)
-    observed = datetime.combine(
-        day - timedelta(days=1), time(18), ZoneInfo(timezone)
-    ).astimezone(UTC)
-    archive.capture(
-        forecast(day - timedelta(days=1), timezone=timezone),
-        observed,
-        observed,
-        "same-configuration",
-        [history.source for history in histories],
-    )
-    record = next(
-        record
-        for record in archive.records.values()
-        if record.horizon == "daily_previous_18" and record.target_date == day
-    )
-    evidence = {
-        "start": record.start.isoformat(),
-        "end": record.end.isoformat(),
-        "sources": [
-            history.snapshot(record.start, record.end, now) for history in histories
-        ],
-    }
-    archive.assess(record.record_id, evidence, now)
-    return archive.records[record.record_id].assessment
-
-
 @pytest.mark.parametrize(("day", "timezone", "hours"), CASES)
 @pytest.mark.parametrize("derived", [False, True])
 async def test_shifted_polling_keeps_complete_days_across_local_time_boundaries(
@@ -120,9 +91,6 @@ async def test_shifted_polling_keeps_complete_days_across_local_time_boundaries(
     result = await async_interval_windows([history], windows, now)
     assert [item["energy_complete"] for item in result] == [True, True]
     assert [item["energy_kwh"] for item in result] == pytest.approx([12, 0])
-    assessment = _assess_day([history], day, timezone, now)
-    assert assessment.valid is True
-    assert assessment.actual_energy_kwh == pytest.approx(12)
     assert history.to_dict() == original
 
 
@@ -212,10 +180,6 @@ async def test_daily_reset_does_not_invent_the_unobserved_previous_day_closing()
     assert snapshot["energy_complete"] is False
     [window] = await async_interval_windows([history], [(start, end)], now)
     assert window["energy_kwh"] is None
-    assessment = _assess_day([history], DAY, "UTC", now)
-    assert assessment.valid is False
-    assert assessment.actual_energy_kwh is None
-    assert "measurement_incomplete" in assessment.reasons
 
 
 async def test_daily_correction_cannot_be_repaired_by_zero_boundary_projection():
@@ -248,7 +212,6 @@ async def test_independent_polling_phases_complete_days_without_splitting_daytim
     [window] = await async_interval_windows(histories, [(start, end)], now)
     assert window["energy_complete"] is True
     assert window["energy_kwh"] == pytest.approx(24)
-    assert _assess_day(histories, DAY, "Europe/Berlin", now).actual_energy_kwh == 24
 
     noon = datetime.combine(DAY, time(12), ZoneInfo("Europe/Berlin")).astimezone(UTC)
     current = [

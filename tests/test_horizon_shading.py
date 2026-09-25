@@ -17,19 +17,15 @@ from custom_components.pv_forecast.api import (
     parse_open_meteo_response,
 )
 from custom_components.pv_forecast.calculations import (
-    apply_calibration,
     calculate_forecast,
-    calibrated_energy,
-    forecast_basis,
 )
 from custom_components.pv_forecast.card_data import build_forecast_view
 from custom_components.pv_forecast.configuration import roofs_from_options
 from custom_components.pv_forecast.const import DOMAIN
 from custom_components.pv_forecast.coordinator import PvForecastCoordinator
-from custom_components.pv_forecast.history_runtime import _configuration_id
+from custom_components.pv_forecast.model_context import configuration_id
 from custom_components.pv_forecast.models import (
     AcInverterGroup,
-    ForecastCalibrationBasis,
 )
 from custom_components.pv_forecast.services import _serialize_forecast
 from custom_components.pv_forecast.shading import (
@@ -192,7 +188,7 @@ def test_missing_radiation_preserves_gti_with_visible_fallback(dni, dhi):
     assert adjusted_weather(roof(), source, 50, 0) is source
 
 
-def test_per_roof_shading_precedes_calibration_and_both_clipping_stages():
+def test_per_roof_shading_precedes_both_clipping_stages():
     a, b = shaded_roof(90, roof_id="a", tilt=0), roof("b", tilt=0)
     source = point(SUMMER)
     data = calculate_forecast(
@@ -207,13 +203,9 @@ def test_per_roof_shading_precedes_calibration_and_both_clipping_stages():
     )
     assert data.roofs["a"].intervals[0].dc_power_kw == pytest.approx(1)
     assert data.roofs["b"].intervals[0].dc_power_kw == 6
-    effective = apply_calibration(data, 1.5, 6, UTC)
+    effective = data
     assert effective.total.today == pytest.approx(6)
-    assert effective.roofs["a"].daily.today == pytest.approx(1.25 * 6 / 10.25)
-    basis = forecast_basis(data, source.start, source.end, 6)
-    assert basis is not None
-    assert calibrated_energy(basis, 1.5) == pytest.approx(effective.total.today)
-    assert ForecastCalibrationBasis.from_dict(basis.to_dict()) == basis
+    assert effective.roofs["a"].daily.today == pytest.approx(6 / 7)
     assert effective.horizon_shading
     envelope = _serialize_forecast(effective, "UTC", SUMMER, True)
     assert envelope["horizon_shading"]["experimental"]
@@ -228,7 +220,7 @@ def test_no_profile_and_zero_profile_preserve_results_and_fingerprint():
         data={"latitude": 50, "longitude": 0, "time_zone": "UTC"},
         options=options,
     )
-    original_id = _configuration_id(entry)
+    original_id = configuration_id(entry)
     original = calculate_forecast(
         roofs_from_options(options), {"roof_1": (point(),)}, 3, WINTER.date(), UTC
     )
@@ -240,14 +232,14 @@ def test_no_profile_and_zero_profile_preserve_results_and_fingerprint():
         == original
     )
     entry.options = zero
-    assert _configuration_id(entry) == original_id
+    assert configuration_id(entry) == original_id
     entry.options = options | {"horizon_profiles": {"roof_1": [30] * 12}}
-    assert _configuration_id(entry) != original_id
-    changed = _configuration_id(entry)
+    assert configuration_id(entry) != original_id
+    changed = configuration_id(entry)
     renamed = deepcopy(dict(entry.options))
     renamed["roofs"][0]["name"] = "Neuer Dachname"
     entry.options = renamed
-    assert _configuration_id(entry) == changed
+    assert configuration_id(entry) == changed
     with pytest.raises(ValueError):
         calculate_forecast(
             (shaded_roof(),), {"roof_1": (point(),)}, None, WINTER.date(), UTC
