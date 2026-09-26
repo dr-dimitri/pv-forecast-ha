@@ -254,7 +254,18 @@ def _build_exact_outlook(
         # differenzen passend gemacht. Nur gemeinsame exakte Grenzen zählen.
         boundaries: set[datetime] | None = None
         for history in sources:
-            ends = {delta.end for delta in history.deltas if start < delta.end <= now}
+            segments = {
+                segment_id
+                for segment_id, source in history.segment_sources.items()
+                if source.measurement_identity == history.source.measurement_identity
+            }
+            # Ohne neue Differenz darf nach einem Quellenwechsel kein früheres
+            # Messpräfix weiterhin als Grenze der aktuellen Quelle gelten.
+            ends = {
+                delta.end
+                for delta in history.deltas
+                if delta.segment_id in segments and start < delta.end <= now
+            }
             boundaries = ends if boundaries is None else boundaries & ends
         if not boundaries:
             return unavailable("no_common_measurement_boundary")

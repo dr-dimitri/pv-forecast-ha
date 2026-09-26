@@ -104,6 +104,32 @@ def test_hysteresis_keeps_valid_window_until_material_improvement():
     assert result["start"] == "2026-09-09T10:00:00+00:00"
 
 
+@pytest.mark.parametrize("previous_energy", [1.0, 2.0, 4.0])
+@pytest.mark.parametrize("margin", [-0.000001, 0.0, 1e-10, 0.000001])
+def test_hysteresis_requires_strict_improvement_at_both_thresholds(
+    previous_energy, margin
+):
+    """Rundungsreste überschreiten weder die 0,1-kWh- noch die 5-%-Grenze."""
+
+    previous_start = START + timedelta(hours=1)
+    best_energy = previous_energy + max(0.1, previous_energy * 0.05) + margin
+    result = plan(
+        forecast([0, previous_energy, best_energy]),
+        duration_minutes=60,
+        previous_start=previous_start,
+    )
+
+    assert result["status"] == "available"
+    assert (
+        result["start"]
+        == (START + timedelta(hours=2) if margin > 0 else previous_start).isoformat()
+    )
+    assert result["hysteresis_applied"] is (margin <= 0)
+    assert result["energy_kwh"] == pytest.approx(
+        best_energy if margin > 0 else previous_energy
+    )
+
+
 def test_started_or_completed_consumer_is_never_rescheduled():
     data = forecast([1, 2, 4, 8])
     for minutes, status in ((30, "started"), (180, "completed")):

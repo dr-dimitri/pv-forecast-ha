@@ -136,11 +136,15 @@ def plan_solar_window(
         previous_energy = _window_energy(
             intervals, previous_start, previous_start + duration
         )
-        if previous_energy is not None and best_energy - previous_energy <= max(
-            0.1, previous_energy * 0.05
-        ):
-            result["hysteresis_applied"] = best_start != previous_start
-            best_start, best_energy = previous_start, previous_energy
+        if previous_energy is not None:
+            improvement = best_energy - previous_energy
+            threshold = max(0.1, previous_energy * 0.05)
+            # Binäre Rundungsreste sind kein striktes Überschreiten der Schwelle.
+            if improvement <= threshold or isclose(
+                improvement, threshold, rel_tol=1e-12, abs_tol=1e-12
+            ):
+                result["hysteresis_applied"] = best_start != previous_start
+                best_start, best_energy = previous_start, previous_energy
     if best_energy <= 0:
         return unavailable("no_solar_energy")
     return {

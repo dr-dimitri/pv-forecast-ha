@@ -224,6 +224,50 @@ def test_counter_decrease_and_source_change_do_not_create_complete_day():
     assert outlook([history])["reason"] == "incomplete_measurements"
 
 
+@pytest.mark.parametrize("new_baseline", [False, True])
+@pytest.mark.parametrize(
+    "source_change",
+    [{"entity_id": "sensor.replacement"}, {"scope": "Andere AC-Messgrenze"}],
+)
+def test_source_change_never_reuses_previous_measurement_prefix(
+    new_baseline, source_change
+):
+    """Bis zur ersten neuen Differenz gelten alte Messgrenzen nicht als aktuell."""
+    history = measurements()
+    history.add_reading(START + timedelta(hours=6), 108, "kWh")
+    history.replace_source(replace(history.source, **source_change))
+    if new_baseline:
+        history.add_reading(START + timedelta(hours=7), 500, "kWh")
+    original = history.to_dict()
+
+    result = outlook([history])
+
+    assert result["status"] == "unavailable"
+    assert result["reason"] == "no_common_measurement_boundary"
+    assert result["measured_kwh"] is None
+    assert result["measured_until"] is None
+    assert result["total_kwh"] is None
+    assert result["estimate"]["basis"] == "forecast_only"
+    assert result["estimate"]["total_kwh"] == 24
+    assert history.to_dict() == original
+
+
+def test_registry_rename_preserves_exact_measurement_prefix():
+    """Ein neuer Entityname mit gleicher Registry-ID bleibt dieselbe Messquelle."""
+    source = replace(measurements().source, registry_id="stable-registry")
+    history = SourceHistory(source, "UTC", 20)
+    history.add_reading(START, 100, "kWh")
+    history.add_reading(START + timedelta(hours=6), 108, "kWh")
+    history.replace_source(replace(source, entity_id="sensor.renamed"))
+
+    result = outlook([history])
+
+    assert result["status"] == "available"
+    assert result["measured_until"] == (START + timedelta(hours=6)).isoformat()
+    assert result["measured_kwh"] == 8
+    assert result["total_kwh"] == 26
+
+
 def test_stale_forecast_keeps_measurement_but_withholds_total():
     history = measurements()
     history.add_reading(NOON, 108, "kWh")
