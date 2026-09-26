@@ -310,6 +310,22 @@ test("Antwort nach Disconnect wird verworfen und startet keine Folgeaktionen ode
   assert.equal(clock.timers.size, 0);
 });
 
+test("Abmelden vor dem Promise-Start verwirft den Zyklus auch bei sofortiger Neuanmeldung", async () => {
+  const clock = clockCache(), reads = [], states = [];
+  const stop = clock.cache.subscribe("plant", async (publish) => {
+    reads.push("alt"); publish({ loading: false });
+  }, () => {});
+  stop();
+  const stopAgain = clock.cache.subscribe("plant", async (publish) => {
+    reads.push("neu"); publish({ loading: false });
+  }, (state) => states.push(state));
+  await flush();
+  assert.deepEqual(reads, ["neu"]);
+  assert.equal(states.length, 1);
+  stopAgain();
+  assert.equal(clock.timers.size, 0);
+});
+
 test("Erneutes Verbinden nach abgebrochenem Zyklus lädt optionale Bereiche vollständig", async () => {
   const clock = clockCache(), calls = [], hass = fixtureHass("sunny", { calls });
   let release;
@@ -692,6 +708,31 @@ test("Mehrere Planungen teilen die Leseabfrage; unsichtbare und entfernte Karten
     assert.equal(cache.timer, null);
     first._visible = true; first._bindPlanning(); await flush();
     assert.equal(calls.length, 1);
+  } finally { first.disconnectedCallback(); second.disconnectedCallback(); }
+});
+
+test("Eine geänderte Nachbarkarte überschreibt nicht den bisherigen Start der gemeinsamen Planung", async () => {
+  const calls = [], hass = fixtureHass("sunny", { calls }), cache = connectionCache(hass);
+  const first = planningCard(hass), second = planningCard(hass);
+  const original = hass.callWS;
+  const originalStart = "2026-09-10T12:00:00.000Z", changedStart = "2026-09-10T14:00:00.000Z";
+  hass.callWS = async (message) => {
+    const response = await original(message);
+    response.response.planning.start = message.service_data.planning.duration_minutes === 120 ? originalStart : changedStart;
+    return response;
+  };
+  try {
+    first._calculatePlanning(); second._calculatePlanning(); await flush();
+    assert.equal(calls.length, 1);
+    assert.equal(first._planningPreviousStart, originalStart);
+    second._planningInputs.duration_minutes = "180";
+    second._calculatePlanning(); await flush();
+    assert.equal(second._planningPreviousStart, changedStart);
+    await refreshPlanning(cache);
+    const unchangedRequests = calls.filter((call) => call.service_data.planning.duration_minutes === 120);
+    assert.equal(unchangedRequests.length, 2);
+    assert.equal(unchangedRequests.at(-1).service_data.planning.previous_start, originalStart);
+    assert.equal(first._planningPreviousStart, originalStart);
   } finally { first.disconnectedCallback(); second.disconnectedCallback(); }
 });
 

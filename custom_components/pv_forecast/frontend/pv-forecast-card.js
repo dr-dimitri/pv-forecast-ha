@@ -77,10 +77,10 @@ export class SharedReadCache {
   subscribe(key, loader, listener) {
     let entry = this.entries.get(key);
     if (!entry) {
-      entry = { listeners: new Set(), loader, state: null, at: -Infinity, running: false, generation: 0 };
+      entry = { listeners: new Map(), loader, state: null, at: -Infinity, running: false, generation: 0 };
       this.entries.set(key, entry);
     }
-    entry.listeners.add(listener);
+    entry.listeners.set(listener, loader);
     entry.loader = loader;
     if (!this.listening) {
       this.document?.addEventListener("visibilitychange", this.onVisibility);
@@ -90,6 +90,9 @@ export class SharedReadCache {
     if (!this.document?.hidden) this._tick();
     return () => {
       entry.listeners.delete(listener);
+      // Ein abgemeldeter Karten-Loader kann inzwischen eine andere Planung
+      // halten. Folgeabrufe gehören deshalb einem weiterhin aktiven Abnehmer.
+      entry.loader = [...entry.listeners.values()].at(-1);
       if (!entry.listeners.size) {
         entry.generation += 1;
         entry.running = false;
@@ -124,9 +127,9 @@ export class SharedReadCache {
         if (!active()) return;
         state = retainReadState(entry.state, state);
         entry.state = state;
-        for (const listener of entry.listeners) listener(state);
+        for (const listener of entry.listeners.keys()) listener(state);
       };
-      Promise.resolve().then(() => entry.loader(publish, active)).catch(() => {
+      Promise.resolve().then(() => { if (active()) return entry.loader(publish, active); }).catch(() => {
         publish({ loading: false, forecast: { status: "error", message: "Die Daten konnten nicht geladen werden." } });
       }).finally(() => {
         if (!active()) return;
