@@ -21,7 +21,7 @@ const { chromium } = require(process.env.PV_PLAYWRIGHT_MODULE || "playwright");
     await again.focus();
     await page.keyboard.press("Enter");
     await page.getByText("Anbieterpause aktiv", { exact: true }).waitFor();
-    assert.match(await page.locator("body").ariaSnapshot(), /90 Minuten/);
+    assert.match(await page.locator("body").ariaSnapshot(), /30 Minuten/);
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
     await page.getByText("Anbieterpause aktiv", { exact: true }).scrollIntoViewIfNeeded();
     await page.screenshot({ path: `docs/images/ui-131-360-${theme}.png`, fullPage: true });

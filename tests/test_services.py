@@ -16,6 +16,7 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.update_coordinator import UpdateFailed
 from pytest_homeassistant_custom_component.common import MockConfigEntry, MockUser
 
+from custom_components.pv_forecast.api import OpenMeteoTemporaryError
 from custom_components.pv_forecast.const import (
     CONF_INVERTER_MAX_POWER_KW,
     CONF_LATITUDE,
@@ -181,6 +182,7 @@ async def test_card_view_is_additive_and_preserves_default_forecast(
         hass, entry.entry_id, include_view=True, day="tomorrow", roof_id="b"
     )
     selected = result.pop("view")
+    assert result.pop("update_error") is None
     assert result == default
     assert selected["view_version"] == 1
     assert selected["day"] == "tomorrow"
@@ -590,3 +592,36 @@ async def test_explanation_is_optional_coherent_and_read_only(hass, loaded_forec
     assert "factor" not in first["explanation"]
     assert fetch.call_count == before
     assert coordinator.last_update_success_time == fetched_at
+
+
+async def test_card_view_reports_logged_weather_error_and_clears_on_recovery(
+    hass, loaded_forecast
+) -> None:
+    """Alte Werte und derselbe Protokolltext bleiben ohne zusätzlichen Abruf lesbar."""
+
+    entry, coordinator, client_fetch = loaded_forecast
+    snapshot = coordinator.data
+    fetched_at = coordinator.last_update_success_time
+    with patch(
+        "custom_components.pv_forecast.api.OpenMeteoClient.async_fetch_roofs",
+        side_effect=OpenMeteoTemporaryError(
+            "Open-Meteo vorübergehend nicht verfügbar (HTTP 503)"
+        ),
+    ):
+        await coordinator.async_refresh()
+    response = await _get_forecast(hass, entry.entry_id, include_view=True)
+    assert response["update_error"] == (
+        "Error fetching pv_forecast data: " + str(coordinator.last_exception)
+    )
+    assert "HTTP 503" in response["update_error"]
+    assert response["view"]["stale"] is True
+    assert coordinator.data is snapshot
+    assert coordinator.last_update_success_time == fetched_at
+    assert client_fetch.await_count == 1
+    assert "update_error" not in await _get_forecast(hass, entry.entry_id)
+
+    await coordinator.async_refresh()
+    recovered = await _get_forecast(hass, entry.entry_id, include_view=True)
+    assert recovered["update_error"] is None
+    assert recovered["view"]["stale"] is False
+    assert client_fetch.await_count == 2

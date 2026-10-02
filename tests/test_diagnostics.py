@@ -230,13 +230,13 @@ async def test_error_class_never_includes_messages_or_urls(
     coordinator = entry.runtime_data.coordinator
     coordinator.last_update_success = False
     coordinator.last_exception = error
-    hass.data[DOMAIN]._record_temporary_failure("3600")
+    hass.data[DOMAIN]._record_temporary_failure()
 
     result = await async_get_config_entry_diagnostics(hass, entry)
 
     assert result["forecast"]["error_class"] == expected
     assert result["forecast"]["last_update_success"] is False
-    assert 3599 <= result["forecast"]["retry_after_seconds"] <= 3600
+    assert 1799 <= result["forecast"]["retry_after_seconds"] <= 1800
     assert result["forecast"]["coverage"]["available"] is True
     _assert_private(result)
     assert forecast_client.await_count == 1

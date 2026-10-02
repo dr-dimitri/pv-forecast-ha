@@ -28,7 +28,7 @@ async def test_native_health(hass, hass_client, hass_access_token, hass_storage,
         assert await async_setup_component(hass, "config", {})
         await hass.async_block_till_done()
         request = OpenMeteoRequestState()
-        request._record_temporary_failure("5400")
+        request._record_temporary_failure()
         hass.data["pv_forecast"] = request
         client = await hass_client()
         process = await asyncio.create_subprocess_exec(

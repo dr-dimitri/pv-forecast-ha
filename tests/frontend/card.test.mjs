@@ -998,3 +998,32 @@ test("Karte fragt ausschließlich Prognose und Messung ab und enthält keine ent
   assert.doesNotMatch(html, /Archiv|Erfahrungsband|Selbstkalibrierung|Minderertragsprüfung|id="report"|1 Stunde<br>vorher/);
   assert.equal(PvForecastCard.getConfigForm().schema.some(item => item.name === "show_raw_forecast"), false);
 });
+
+test("Wetterfehler zeigt Veraltet und die Protokollmeldung am unteren Kartenende", async () => {
+  const { state } = await load("weather-error");
+  const html = renderContent(config, state, 360);
+  assert.match(html, /<strong class="badge stale">Veraltet<\/strong>/);
+  assert.match(html, /Wetterabruf fehlgeschlagen/);
+  assert.ok(html.includes(state.forecast.envelope.update_error));
+  assert.ok(html.indexOf('class="update-error"') > html.indexOf('id="values"'));
+  assert.match(html, /alle 30 Minuten/);
+  state.forecast.envelope.update_error = '<img src=x onerror="alert(1)"> & Fehler';
+  const escaped = renderContent(config, state, 360);
+  assert.doesNotMatch(escaped, /<img/);
+  assert.match(escaped, /&lt;img src=x onerror=&quot;alert\(1\)&quot;&gt; &amp; Fehler/);
+  state.forecast.envelope.last_update_success = true;
+  state.forecast.data.stale = false;
+  const recovered = renderContent(config, state, 360);
+  assert.doesNotMatch(recovered, /badge stale|class="update-error"/);
+});
+
+test("Frischer alter Stand wird bereits bei Abruffehler oder fehlgeschlagenem Lesen rot markiert", async () => {
+  const { state } = await load();
+  state.forecast.envelope.last_update_success = false;
+  assert.match(renderContent(config, state), /badge stale">Veraltet/);
+  state.forecast.envelope.last_update_success = true;
+  state.forecast.retained = true;
+  assert.match(renderContent(config, state), /badge stale">Veraltet/);
+  delete state.forecast.envelope.update_error;
+  assert.doesNotMatch(renderContent(config, state), /class="update-error"/);
+});

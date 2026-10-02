@@ -209,3 +209,23 @@ Entfernen beendet die aktiven Leser.
 
 Reproduzierbare Offlineprüfung: `scripts/check_explanation_browser.cjs`, 360 px,
 Hell/Dunkel, Tastatur, Kurvenauswahl und Tageswechsel. Die Werte sind synthetisch.
+
+### Wetterfehler und veraltete Prognosen
+
+Nach einem fehlgeschlagenen Wetterabruf bleiben vorhandene Prognosewerte
+sichtbar. **Veraltet** erscheint fett und rot im Kartenkopf, auch wenn der
+letzte erfolgreiche Abruf noch keine Stunde zurückliegt. Die Kennzeichnung
+gilt außerdem für zu alte Stände und nach einem fehlgeschlagenen Lesen weiter
+angezeigte Ansichten. Ein gespeicherter Neustartstand behält seine Herkunft am
+Wetterabrufzeitpunkt.
+
+Am unteren Kartenende steht bei einem kontrollierten Wetterabruffehler ein
+sichtbarer Abschnitt **Wetterabruf fehlgeschlagen**. Er zeigt dieselbe Meldung
+wie das HA-Protokoll und erklärt den erneuten Abruf alle 30 Minuten. Der Text
+kommt ausschließlich aus der vorhandenen berechtigungsgeprüften
+`get_forecast`-Antwort mit `include_view: true` (`update_error`, sonst `null`).
+Er wird als Text ausgegeben; HTML in einer Meldung wird nicht ausgeführt.
+Ein erfolgreicher Abruf entfernt die Fehlermeldung. Ältere Backends ohne das
+optionale Feld bleiben mit dem normalen Veraltungshinweis lesbar.
+
+[Browsernachweis und 360-px-Bilder für Wetterfehler](ui/180-wetterfehler.md).

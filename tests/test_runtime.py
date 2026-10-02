@@ -41,7 +41,7 @@ async def test_new_clients_keep_the_same_provider_deadline(
         first = async_get_open_meteo_client(hass)
         with pytest.raises(OpenMeteoRateLimitError):
             await first.async_resolve_timezone(35.6852, 139.7528)
-        assert first.retry_after == pytest.approx(7200)
+        assert first.retry_after == pytest.approx(1800)
         assert aioclient_mock.call_count == 1
 
         clock.return_value = 400
@@ -49,12 +49,12 @@ async def test_new_clients_keep_the_same_provider_deadline(
         assert second is not first
         with pytest.raises(OpenMeteoRetryPendingError):
             await second.async_resolve_timezone(35.6852, 139.7528)
-        assert first.retry_after == second.retry_after == pytest.approx(6900)
+        assert first.retry_after == second.retry_after == pytest.approx(1500)
         assert aioclient_mock.call_count == 1
 
         aioclient_mock.clear_requests()
         aioclient_mock.get(OPEN_METEO_FORECAST_URL, json={"timezone": "Asia/Tokyo"})
-        clock.return_value = 7300
+        clock.return_value = 1900
         assert await second.async_resolve_timezone(35.6852, 139.7528) == "Asia/Tokyo"
         assert first.retry_after is second.retry_after is None
         assert aioclient_mock.call_count == 1
@@ -96,14 +96,14 @@ async def test_setup_retries_and_unload_preserve_provider_pause(
         assert entry.state is ConfigEntryState.SETUP_RETRY
         assert hass.data[DOMAIN] is state
         assert aioclient_mock.call_count == 1
-        assert async_get_open_meteo_client(hass).retry_after == pytest.approx(6900)
+        assert async_get_open_meteo_client(hass).retry_after == pytest.approx(1500)
 
         aioclient_mock.clear_requests()
         aioclient_mock.get(
             OPEN_METEO_FORECAST_URL,
             json=_hourly_payload("2026-08-22T23:00", "2026-08-24T22:00"),
         )
-        clock.return_value = 7300
+        clock.return_value = 1900
         assert await hass.config_entries.async_reload(entry.entry_id)
         await hass.async_block_till_done()
         assert entry.state is ConfigEntryState.LOADED
@@ -153,7 +153,7 @@ async def test_config_flow_retries_respect_metadata_provider_pause(
         assert result["step_id"] == "system"
         assert result["errors"] == {"base": "cannot_connect"}
         assert aioclient_mock.call_count == 1
-        assert async_get_open_meteo_client(hass).retry_after == pytest.approx(6900)
+        assert async_get_open_meteo_client(hass).retry_after == pytest.approx(1500)
 
         aioclient_mock.clear_requests()
         aioclient_mock.get(
@@ -166,7 +166,7 @@ async def test_config_flow_retries_respect_metadata_provider_pause(
             params={"timezone": "UTC"},
             json=_hourly_payload("2026-08-22T16:00", "2026-08-24T15:00"),
         )
-        clock.return_value = 7300
+        clock.return_value = 1900
         result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
         assert result["step_id"] == "summary"
         assert result["description_placeholders"]["timezone"] == "Asia/Tokyo"
