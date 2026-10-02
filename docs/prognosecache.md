@@ -7,7 +7,7 @@ Anlage löschen ausschließlich ihren Cache.
 
 Bei einem anschließenden Neustart mit ausgefallenem Wetterabruf kann die Anlage
 mit diesem Stand starten, solange er noch die aktuellen lokalen Prognosetage
-überlappt. Die Karte zeigt **Gespeicherte Prognose**, den ursprünglichen
+überlappt. Die Karte zeigt **Veraltet** fett und rot sowie die Herkunft **Gespeicherter Stand**, den ursprünglichen
 Wetterabruf und die bestehende Fehler-/Alterskennzeichnung. Neu hinzugekommene,
 nicht abgedeckte Tage bleiben unbekannt. Die Sensoren bleiben bei Abruffehler
 unverfügbar; Energy, Zeitfenster und operative Planung geben dann keine nutzbare

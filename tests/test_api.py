@@ -696,86 +696,27 @@ async def test_http_errors_have_controlled_retry_classification(
         if isinstance(error, ClientResponseError):
             assert f"HTTP {error.status}" in str(raised.value)
         if issubclass(expected, OpenMeteoRetryError):
-            assert client.retry_after == 3600
+            assert client.retry_after == 1800
         else:
             assert client.retry_after is None
     assert session.calls == 1
 
 
+@pytest.mark.parametrize("status", [429, 503])
 @pytest.mark.parametrize(
-    ("header", "expected"),
-    [
-        ("90", 90),
-        (" 120 ", 120),
-        ("28800", 28800),
-        ("100000000000000000000", 1e20),
-        ("Wed, 09 Sep 2026 14:00:00 GMT", 7200),
-        ("Wednesday, 09-Sep-26 14:00:00 GMT", 7200),
-        ("Wed Sep  9 14:00:00 2026", 7200),
-        (
-            "Tuesday, 09-Sep-70 12:00:00 GMT",
-            (
-                datetime(2070, 9, 9, 12, tzinfo=UTC)
-                - datetime(2026, 9, 9, 12, tzinfo=UTC)
-            ).total_seconds(),
-        ),
-        (
-            "Wednesday, 09-Sep-76 12:00:00 GMT",
-            (
-                datetime(2076, 9, 9, 12, tzinfo=UTC)
-                - datetime(2026, 9, 9, 12, tzinfo=UTC)
-            ).total_seconds(),
-        ),
-        ("Wednesday, 09-Sep-76 12:00:01 GMT", 3600),
-        ("Thursday, 09-Sep-77 12:00:00 GMT", 3600),
-        (None, 3600),
-        ("0", 3600),
-        ("-20", 3600),
-        ("+20", 3600),
-        ("1.5", 3600),
-        ("1e4", 3600),
-        ("nan", 3600),
-        ("inf", 3600),
-        ("١٢٠", 3600),
-        ("", 3600),
-        ("unbekannt", 3600),
-        ("9" * 400, 3600),
-        ("Wed, 09 Sep 2026 12:00:00 GMT", 3600),
-        ("Wed, 09 Sep 2026 11:00:00 GMT", 3600),
-        ("Wed, 09 Sep 2026 14:00:00", 3600),
-        ("Wed, 09 Sep 2026 14:00:00 +0000", 3600),
-    ],
+    "header",
+    [None, "90", "28800", "9" * 400, "Wed, 09 Sep 2026 14:00:00 GMT", "ungültig"],
 )
-@freeze_time("2026-09-09T12:00:00+00:00")
-async def test_retry_after_header_validation(
-    header: str | None, expected: float
+async def test_retry_stays_at_thirty_minutes_regardless_of_provider_header(
+    status, header
 ) -> None:
-    """Positive Anbieterfristen gelten; unbrauchbare Angaben nutzen den Backoff."""
+    """Anbieterfristen ändern den beauftragten 30-Minuten-Takt nicht."""
 
-    client = OpenMeteoClient(_Session(_Response({}, _http_error(429, header))))
+    client = OpenMeteoClient(_Session(_Response({}, _http_error(status, header))))
     with patch("custom_components.pv_forecast.api.monotonic", return_value=1000):
-        with pytest.raises(OpenMeteoRateLimitError):
+        with pytest.raises(OpenMeteoRetryError):
             await client.async_resolve_timezone(52, 13)
-        assert client.retry_after == expected
-
-
-@freeze_time("2090-09-09T12:00:00+00:00")
-async def test_rfc850_year_resolves_across_century_boundary() -> None:
-    """Das Rohjahr 00 gehört bei Empfang 2090 zu 2100 statt fest zu 2000."""
-
-    client = OpenMeteoClient(
-        _Session(_Response({}, _http_error(503, "Thursday, 09-Sep-00 12:00:00 GMT")))
-    )
-    with patch("custom_components.pv_forecast.api.monotonic", return_value=1000):
-        with pytest.raises(OpenMeteoTemporaryError):
-            await client.async_resolve_timezone(52, 13)
-        assert (
-            client.retry_after
-            == (
-                datetime(2100, 9, 9, 12, tzinfo=UTC)
-                - datetime(2090, 9, 9, 12, tzinfo=UTC)
-            ).total_seconds()
-        )
+        assert client.retry_after == 1800
 
 
 async def test_shared_pause_blocks_every_public_operation_without_http() -> None:
@@ -789,7 +730,7 @@ async def test_shared_pause_blocks_every_public_operation_without_http() -> None
         with pytest.raises(OpenMeteoRateLimitError):
             await first.async_resolve_timezone(52, 13)
         now.return_value += 60
-        assert second.retry_after == 7140
+        assert second.retry_after == 1740
         with pytest.raises(OpenMeteoRetryPendingError):
             await second.async_fetch_roofs(52, 13, "Europe/Berlin", (roof(),))
         with pytest.raises(OpenMeteoRetryPendingError):
@@ -799,22 +740,20 @@ async def test_shared_pause_blocks_every_public_operation_without_http() -> None
         with pytest.raises(OpenMeteoRetryPendingError):
             await second.async_resolve_timezone(52, 13)
         assert session.calls == 1
-        now.return_value += 7140
+        now.return_value += 1740
         assert first.retry_after is None
         with pytest.raises(OpenMeteoRateLimitError):
             await second.async_resolve_timezone(52, 13)
         assert session.calls == 2
 
 
-async def test_backoff_caps_and_only_validated_success_resets_failure_sequence() -> (
-    None
-):
-    """60/120/240 Minuten zählen Operationen; ein kaputtes 200 ist kein Erfolg."""
+async def test_repeated_errors_keep_thirty_minutes_and_success_clears_pause() -> None:
+    """Fehlschläge erhöhen den Takt nicht; ein gültiger Erfolg löst die Pause."""
 
     session = _Session(_Response({}, _http_error(503)))
     client = OpenMeteoClient(session)
     with patch("custom_components.pv_forecast.api.monotonic", return_value=1000) as now:
-        for expected in (3600, 7200, 14400, 14400):
+        for expected in (1800, 1800, 1800, 1800):
             with pytest.raises(OpenMeteoTemporaryError):
                 await client.async_resolve_timezone(52, 13)
             assert client.retry_after == expected
@@ -827,8 +766,8 @@ async def test_backoff_caps_and_only_validated_success_resets_failure_sequence()
         session.response = _Response({}, _http_error(503))
         with pytest.raises(OpenMeteoTemporaryError):
             await client.async_resolve_timezone(52, 13)
-        assert client.retry_after == 14400
-        now.return_value += 14400
+        assert client.retry_after == 1800
+        now.return_value += 1800
 
         session.response = _Response({"timezone": "Europe/Berlin"})
         assert await client.async_resolve_timezone(52, 13) == "Europe/Berlin"
@@ -836,11 +775,11 @@ async def test_backoff_caps_and_only_validated_success_resets_failure_sequence()
         session.response = _Response({}, _http_error(503))
         with pytest.raises(OpenMeteoTemporaryError):
             await client.async_resolve_timezone(52, 13)
-        assert client.retry_after == 3600
+        assert client.retry_after == 1800
 
 
 @pytest.mark.parametrize("grouped", [False, True])
-async def test_only_complete_forecast_operation_resets_backoff(grouped: bool) -> None:
+async def test_complete_forecast_operation_recovers_after_errors(grouped: bool) -> None:
     """Erst validierte Stundenraster beenden die Fehlerfolge eines Forecasts."""
 
     session = _Session(_Response({}, _http_error(503)))
@@ -867,15 +806,15 @@ async def test_only_complete_forecast_operation_resets_backoff(grouped: bool) ->
     with patch("custom_components.pv_forecast.api.monotonic", return_value=1000) as now:
         with pytest.raises(OpenMeteoTemporaryError):
             await fetch()
-        now.return_value += 3600
+        now.return_value += 1800
         session.response = _Response(_payload())
         with pytest.raises(OpenMeteoDataError):
             await fetch()
         session.response = _Response({}, _http_error(503))
         with pytest.raises(OpenMeteoTemporaryError):
             await fetch()
-        assert client.retry_after == 7200
-        now.return_value += 7200
+        assert client.retry_after == 1800
+        now.return_value += 1800
         session.response = _Response(
             _hourly_payload("2026-09-08T23:00", "2026-09-10T22:00")
         )
@@ -883,7 +822,7 @@ async def test_only_complete_forecast_operation_resets_backoff(grouped: bool) ->
         session.response = _Response({}, _http_error(503))
         with pytest.raises(OpenMeteoTemporaryError):
             await fetch()
-        assert client.retry_after == 3600
+        assert client.retry_after == 1800
 
 
 class _GatedResponse(_Response):
@@ -931,7 +870,9 @@ class _SequenceSession:
         return response
 
 
-async def test_parallel_wave_keeps_longest_pause_and_counts_one_failure() -> None:
+async def test_parallel_wave_keeps_thirty_minute_pause_and_stops_waiting_requests() -> (
+    None
+):
     """Vier laufende Geometrien werden beendet, wartende starten nach 429 nicht."""
 
     payload = _hourly_payload("2026-09-08T23:00", "2026-09-10T22:00")
@@ -955,7 +896,7 @@ async def test_parallel_wave_keeps_longest_pause_and_counts_one_failure() -> Non
         )
         await asyncio.gather(*(response.entered.wait() for response in responses))
         assert len(session.calls) == 4
-        for index, expected in ((0, 120), (2, 120), (1, 28800), (3, 28800)):
+        for index, expected in ((0, 1800), (2, 1800), (1, 1800), (3, 1800)):
             responses[index].release.set()
             await responses[index].finished.wait()
             assert client.retry_after == expected
@@ -963,16 +904,16 @@ async def test_parallel_wave_keeps_longest_pause_and_counts_one_failure() -> Non
         with pytest.raises(OpenMeteoRateLimitError):
             await operation
         assert all(response.task.done() for response in responses)
-        assert client.retry_after == 28800
+        assert client.retry_after == 1800
 
-        now.return_value += 28800
+        now.return_value += 1800
         session.responses.append(_Response({}, _http_error(503)))
         with pytest.raises(OpenMeteoTemporaryError):
             await client.async_resolve_timezone(52, 13)
-        assert client.retry_after == 7200
+        assert client.retry_after == 1800
 
 
-async def test_expired_short_pause_still_stops_failed_wave() -> None:
+async def test_expired_pause_still_stops_failed_wave() -> None:
     """Eine abgelaufene Frist startet keine weiteren Dächer derselben Fehlerwelle."""
 
     payload = _hourly_payload("2026-09-08T23:00", "2026-09-10T22:00")
@@ -987,7 +928,7 @@ async def test_expired_short_pause_still_stops_failed_wave() -> None:
         nonlocal failure_recorded
         if responses[0].finished.is_set():
             if failure_recorded:
-                return 1002
+                return 2802
             failure_recorded = True
         return 1000
 

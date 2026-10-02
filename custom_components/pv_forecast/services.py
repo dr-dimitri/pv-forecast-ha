@@ -20,6 +20,7 @@ from homeassistant.core import (
 from homeassistant.exceptions import ServiceValidationError, Unauthorized, UnknownUser
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers.update_coordinator import UpdateFailed
 from homeassistant.util import dt as dt_util
 
 from .card_data import UnknownRoofError, build_forecast_view
@@ -167,6 +168,14 @@ def async_setup_services(hass: HomeAssistant) -> None:
                     translation_key="invalid_planning_window",
                 ) from err
         if call.data["include_view"]:
+            # Nur die kontrollierte Abrufmeldung wie im HA-Protokoll ausgeben,
+            # niemals einen unerwarteten Traceback oder fremde Exceptiontexte.
+            result["update_error"] = (
+                f"Error fetching {DOMAIN} data: {coordinator.last_exception}"
+                if not coordinator.last_update_success
+                and isinstance(coordinator.last_exception, UpdateFailed)
+                else None
+            )
             try:
                 result["view"] = build_forecast_view(
                     coordinator.data,

@@ -4,11 +4,9 @@ from __future__ import annotations
 
 import asyncio
 import math
-import re
 from collections.abc import AsyncIterator, Mapping
 from contextlib import asynccontextmanager
 from datetime import UTC, date, datetime, time, timedelta
-from email.utils import parsedate_to_datetime
 from time import monotonic
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -22,18 +20,9 @@ from aiohttp import (
 )
 
 from .calculations import to_open_meteo_azimuth
-from .const import OPEN_METEO_FORECAST_URL, REQUEST_TIMEOUT_SECONDS
+from .const import OPEN_METEO_FORECAST_URL, REQUEST_TIMEOUT_SECONDS, UPDATE_INTERVAL
 from .horizon import validate_forecast_days
 from .models import OpenMeteoForecast, PvRoof, WeatherInterval
-
-_HTTP_DATE_PATTERN = re.compile(
-    r"(?:[A-Z][a-z]{2}, [0-9]{2} [A-Z][a-z]{2} [0-9]{4} "
-    r"[0-9]{2}:[0-9]{2}:[0-9]{2} GMT"
-    r"|[A-Z][a-z]+, [0-9]{2}-[A-Z][a-z]{2}-(?P<short_year>[0-9]{2}) "
-    r"[0-9]{2}:[0-9]{2}:[0-9]{2} GMT"
-    r"|[A-Z][a-z]{2} [A-Z][a-z]{2} [ 0-9][0-9] "
-    r"[0-9]{2}:[0-9]{2}:[0-9]{2} [0-9]{4})"
-)
 
 
 class OpenMeteoError(Exception):
@@ -69,7 +58,6 @@ class OpenMeteoRequestState:
 
     def __init__(self) -> None:
         self._retry_deadline = 0.0
-        self._consecutive_failures = 0
         self._operation_failed = False
         self._operation_lock = asyncio.Lock()
         self._request_slots = asyncio.Semaphore(4)
@@ -85,12 +73,10 @@ class OpenMeteoRequestState:
         if self.retry_after is not None:
             raise OpenMeteoRetryPendingError("Open-Meteo-Abrufpause läuft noch")
 
-    def _record_temporary_failure(self, retry_after: str | None = None) -> None:
-        """Sofort pausieren; mehrere Fehler derselben Welle nur einmal zählen."""
+    def _record_temporary_failure(self) -> None:
+        """Auch nach Fehlern beim regulären 30-Minuten-Rhythmus bleiben."""
 
-        delay = _retry_after_seconds(retry_after)
-        if delay is None:
-            delay = 3600 * 2 ** min(self._consecutive_failures, 2)
+        delay = UPDATE_INTERVAL.total_seconds()
         self._retry_deadline = max(self._retry_deadline, monotonic() + delay)
         self._operation_failed = True
 
@@ -129,12 +115,7 @@ class OpenMeteoClient:
                 yield
                 succeeded = True
             finally:
-                if state._operation_failed:
-                    state._consecutive_failures = min(
-                        state._consecutive_failures + 1, 3
-                    )
-                elif succeeded:
-                    state._consecutive_failures = 0
+                if succeeded and not state._operation_failed:
                     state._retry_deadline = 0.0
 
     async def async_resolve_timezone(self, latitude: float, longitude: float) -> str:
@@ -211,7 +192,6 @@ class OpenMeteoClient:
                     task.cancel()
                 await asyncio.gather(*tasks, return_exceptions=True)
                 raise
-            # Schon laufende Requests können noch längere Anbieterpausen melden.
             # Erst nach der gesamten Welle Fehler weiterreichen; wartende Requests
             # werden bereits vor ihrem HTTP-Aufruf von der gemeinsamen Pause geblockt.
             for forecast in forecasts:
@@ -340,9 +320,7 @@ class OpenMeteoClient:
                         ) from err
             except ClientResponseError as err:
                 if err.status == 429 or err.status in {408, 500, 502, 503, 504}:
-                    state._record_temporary_failure(
-                        err.headers.get("Retry-After") if err.headers else None
-                    )
+                    state._record_temporary_failure()
                     if err.status == 429:
                         raise OpenMeteoRateLimitError(
                             "Open-Meteo begrenzt weitere Anfragen (HTTP 429)"
@@ -358,42 +336,6 @@ class OpenMeteoClient:
                 raise OpenMeteoTemporaryError(
                     "Open-Meteo-Abfrage vorübergehend fehlgeschlagen"
                 ) from err
-
-
-def _retry_after_seconds(value: str | None) -> float | None:
-    """Positive ASCII-Sekunden oder ein zukünftiges HTTP-Datum validieren."""
-
-    if not isinstance(value, str):
-        return None
-    value = value.strip()
-    try:
-        if value.isascii() and value.isdecimal():
-            delay = float(value)
-        else:
-            date_match = _HTTP_DATE_PATTERN.fullmatch(value)
-            if date_match is None:
-                return None
-            now = datetime.now(UTC)
-            deadline = parsedate_to_datetime(value)
-            if deadline.tzinfo is None:
-                # Das alte HTTP-asctime-Format hat keine ausgeschriebene Zone,
-                # bezeichnet aber gemäß RFC 9110 Abschnitt 5.6.7 ebenfalls UTC.
-                deadline = deadline.replace(tzinfo=UTC)
-            if short_year := date_match.group("short_year"):
-                # RFC850-Jahre sind relativ zum Empfangsdatum auszulegen, nicht
-                # mit der festen 1969/2068-Grenze des E-Mail-Parsers.
-                year = now.year + 50 - (now.year + 50 - int(short_year)) % 100
-                if year == now.year + 50 and (
-                    deadline.month,
-                    deadline.day,
-                    deadline.time(),
-                ) > (now.month, now.day, now.time()):
-                    year -= 100
-                deadline = deadline.replace(year=year)
-            delay = (deadline - now).total_seconds()
-    except (OverflowError, TypeError, ValueError):
-        return None
-    return delay if math.isfinite(delay) and delay > 0 else None
 
 
 def _timezone(name: str) -> ZoneInfo:

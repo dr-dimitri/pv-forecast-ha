@@ -113,9 +113,10 @@ test("Späte Tagesantworten werden auch bei erfolgreichem Lesen nicht falsch zug
 test("Wiederhergestellte Prognose nennt Herkunft und echte Wetterzeit", async () => {
   const restored = await load("restored");
   const html = renderContent(config, restored, 360);
-  assert.match(html, /Gespeicherte Prognose/);
+  assert.match(html, /<strong class="badge stale">Veraltet/);
+  assert.match(html, /Gespeicherter Stand/);
   assert.match(html, /Wetterabruf/);
   assert.equal(restored.forecast.envelope.last_update_success, false);
   const live = renderContent(config, await load("sunny"), 360);
-  assert.doesNotMatch(live, /Gespeicherte Prognose/);
+  assert.doesNotMatch(live, /Gespeicherter Stand|badge stale/);
 });

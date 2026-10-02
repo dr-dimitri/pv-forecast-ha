@@ -350,6 +350,8 @@ export function retainReadState(previous, incoming) {
   return state;
 }
 
+const forecastStale = (forecast) => Boolean(forecast?.data?.stale || forecast?.retained || forecast?.envelope?.last_update_success === false);
+
 export function dataNotices(state) {
   const result = [];
   const add = (id, level, title, text, help = "") => result.push({ id, level, title, text, help });
@@ -366,7 +368,7 @@ export function dataNotices(state) {
   if (!state) add("forecast-loading", "Information", "Prognose wird geladen", "Die vorhandenen lokalen Daten werden gelesen. Bitte kurz warten.");
   if (view) {
     if (state.selectionPending) add("selection", "Information", "Auswahl wird geladen", "Bis dahin sind noch die bisherigen Werte sichtbar.");
-    if (view.stale) add("stale", "Einschränkung", "Prognosestand veraltet", "Der letzte verfügbare Stand bleibt sichtbar; seine Zeitangabe steht am Tagesverlauf.", "Integrationsstatus prüfen und den regulären Wetterabruf abwarten.");
+    if (forecastStale(state.forecast)) add("stale", "Einschränkung", "Prognosestand veraltet", "Der letzte verfügbare Stand bleibt sichtbar; seine Zeitangabe steht am Tagesverlauf.", "Wetterabrufe werden auch nach Fehlern alle 30 Minuten erneut versucht.");
     if (!view.complete) add("incomplete-forecast", "Einschränkung", "Prognose unvollständig", "Schattierte Lücken sind fehlende Daten und kein null Ertrag.");
     if (view.roof_id) add("roof", "Information", "Nur Dachprognose", "Keine Dachmessung zugeordnet.", "Für Messung die Gesamtanlage auswählen.");
     else if (state.measurement?.status === "ready") {
@@ -384,6 +386,13 @@ export function dataNotices(state) {
 
 function renderNotices(state) {
   return dataNotices(state).map((item) => `<section class="notices data-notice" data-notice="${item.id}"><h3>${item.level} · ${escapeHtml(item.title)}</h3><p>${escapeHtml(item.text)}</p>${item.help ? `<p>${escapeHtml(item.help)}</p>` : ""}</section>`).join("");
+}
+
+function renderUpdateError(state) {
+  const forecast = state?.forecast;
+  const message = forecast?.envelope?.update_error;
+  if (forecast?.envelope?.last_update_success !== false || typeof message !== "string" || !message.trim()) return "";
+  return `<section class="update-error" aria-labelledby="update-error-heading" role="status"><h3 id="update-error-heading">Wetterabruf fehlgeschlagen</h3><p class="error-message">${escapeHtml(message)}</p><p>Ein erneuter Wetterabruf wird alle 30 Minuten versucht. Vorhandene Prognosewerte stammen aus dem letzten erfolgreichen Abruf.</p></section>`;
 }
 
 function renderTable(state) {
@@ -503,25 +512,27 @@ export function renderContent(config, state, width = 600, planningUI = {}, selec
   const roof = view.roofs.find((item) => item.id === view.roof_id);
   const scope = roof?.name ?? "Gesamtanlage";
   const fetchedAt = forecast.envelope?.fetched_at;
+  const stale = forecastStale(forecast);
   const weatherStamp = finite(millis(fetchedAt)) ? `${formatPlantDate(fetchedAt, view.timezone)}, ${formatPlantTime(fetchedAt, view.timezone)}` : "unbekannt";
   const measurement = state.measurement;
   const total = measurement?.data?.current_location_total_energy ?? measurement?.data?.total_energy;
   const actual = total?.energy_kwh;
   const actualHint = measurement?.retained || forecast?.retained ? "Letzter Messstand · Aktualisierung fehlgeschlagen" : view.roof_id ? "Keine Dachmessung" : measurement?.status === "ready" ? finite(actual) ? "Aktueller Stand" : "Noch keine Messwerte" : measurement?.status === "loading" ? "Messdaten laden …" : "Keine Messdaten";
   const kpi = (name, value, detail, className = "") => `<div class="kpi ${className}${energyText(value).length > 6 ? " kpi-wide" : ""}"><dt>${name}</dt><dd>${energyText(value)} <small>kWh</small></dd><span>${detail}</span></div>`;
-  return `<div class="header"><div><p class="eyebrow">PV FORECAST</p><h2 tabindex="-1">${escapeHtml(title)}</h2><p class="subtitle">${escapeHtml(scope)} · ${escapeHtml(formatPlantDate(view.start, view.timezone))}</p></div><span class="badge ${view.stale ? "warning" : ""}">${forecast.envelope?.origin === "restored" ? "Gespeicherte Prognose" : forecast.retained ? "Letzter Stand" : view.stale ? "Veraltet" : "Prognose"}</span></div>
+  return `<div class="header"><div><p class="eyebrow">PV FORECAST</p><h2 tabindex="-1">${escapeHtml(title)}</h2><p class="subtitle">${escapeHtml(scope)} · ${escapeHtml(formatPlantDate(view.start, view.timezone))}</p></div>${stale ? '<strong class="badge stale">Veraltet</strong>' : '<span class="badge">Prognose</span>'}</div>
     <div class="controls"><div class="day-switch" role="group" aria-label="Prognosetag"><button data-day="today" aria-pressed="${config.day === "today"}">Heute</button><button data-day="tomorrow" aria-pressed="${config.day === "tomorrow"}">Morgen</button></div><label class="roof-label"><span>Fläche</span><select id="roof" aria-label="Fläche"><option value="">Gesamtanlage</option>${view.roofs.map((item) => `<option value="${escapeHtml(item.id)}" ${item.id === config.roof_id ? "selected" : ""}>${escapeHtml(item.name)}</option>`).join("")}</select></label></div>
     <nav class="section-nav" aria-label="Bereiche der PV-Karte"><button id="nav-overview" data-section="overview-heading">Übersicht</button>${view.roof_id ? "" : '<button id="nav-planning" data-section="planning-heading">Planen</button>'}<button id="nav-comparison" data-section="comparison-heading">Vergleichen</button></nav>
     <section aria-labelledby="overview-heading"><h3 class="section-heading" id="overview-heading" tabindex="-1">Tagesübersicht</h3>
-    <div class="overview-metrics"><section aria-label="Tagesprognosen"><h3 class="metric-heading">Tagesprognosen</h3><dl class="kpis">${kpi("Heute", view.summary.today_kwh, view.stale || forecast.retained ? "Letzter Prognosestand" : "Tagesprognose")}${kpi("Morgen", view.summary.tomorrow_kwh, view.stale || forecast.retained ? "Letzter Prognosestand" : "Tagesprognose")}</dl></section><section aria-label="Heutiger Stand"><h3 class="metric-heading">Heutiger Stand · ${escapeHtml(formatPlantDate(view.today_start, view.timezone))}</h3><dl class="kpis">${kpi("Rest heute", view.summary.remaining_today_kwh, forecast.retained ? "Rest zum letzten Stand" : "Ab jetzt erwartet")}${kpi("Ist heute", view.roof_id ? null : actual, actualHint, "measured")}</dl></section></div>
-    <section class="chart-section" aria-label="Tagesverlauf"><div class="chart-heading"><h3>Energie im Tagesverlauf · ${view.day === "tomorrow" ? "Morgen" : "Heute"}</h3><span>kWh / Intervall</span></div><div class="legend"><span><i class="forecast-key"></i>Aktuelle Prognose</span><span><i class="actual-key"></i>Tatsächlich produziert</span></div>${renderChart(state, width, selectedKey)}${renderIntervalDetails(state, selectedKey)}<p class="chart-note">${escapeHtml(view.timezone)} · Ansicht ${escapeHtml(formatPlantTime(view.as_of, view.timezone))}<br>Wetterabruf ${escapeHtml(weatherStamp)}${forecast.envelope?.origin === "restored" ? "<br>Gespeicherter Stand · Aktualisierung fehlgeschlagen" : ""}${forecast.retained || measurement?.retained ? `<br>Letzte gelesene Ansicht: ${escapeHtml(plantStamp(view.as_of, view.timezone))}. Messfenster bis ${escapeHtml(plantStamp(measurement?.data?.end ?? measurement?.data?.outlook?.as_of ?? view.as_of, view.timezone))}.` : ""}</p></section>
+    <div class="overview-metrics"><section aria-label="Tagesprognosen"><h3 class="metric-heading">Tagesprognosen</h3><dl class="kpis">${kpi("Heute", view.summary.today_kwh, stale ? "Letzter Prognosestand" : "Tagesprognose")}${kpi("Morgen", view.summary.tomorrow_kwh, stale ? "Letzter Prognosestand" : "Tagesprognose")}</dl></section><section aria-label="Heutiger Stand"><h3 class="metric-heading">Heutiger Stand · ${escapeHtml(formatPlantDate(view.today_start, view.timezone))}</h3><dl class="kpis">${kpi("Rest heute", view.summary.remaining_today_kwh, forecast.retained ? "Rest zum letzten Stand" : "Ab jetzt erwartet")}${kpi("Ist heute", view.roof_id ? null : actual, actualHint, "measured")}</dl></section></div>
+    <section class="chart-section" aria-label="Tagesverlauf"><div class="chart-heading"><h3>Energie im Tagesverlauf · ${view.day === "tomorrow" ? "Morgen" : "Heute"}</h3><span>kWh / Intervall</span></div><div class="legend"><span><i class="forecast-key"></i>${stale ? "Letzter Prognosestand" : "Aktuelle Prognose"}</span><span><i class="actual-key"></i>Tatsächlich produziert</span></div>${renderChart(state, width, selectedKey)}${renderIntervalDetails(state, selectedKey)}<p class="chart-note">${escapeHtml(view.timezone)} · Ansicht ${escapeHtml(formatPlantTime(view.as_of, view.timezone))}<br>Wetterabruf ${escapeHtml(weatherStamp)}${forecast.envelope?.origin === "restored" ? "<br>Gespeicherter Stand · Aktualisierung fehlgeschlagen" : ""}${forecast.retained || measurement?.retained ? `<br>Letzte gelesene Ansicht: ${escapeHtml(plantStamp(view.as_of, view.timezone))}. Messfenster bis ${escapeHtml(plantStamp(measurement?.data?.end ?? measurement?.data?.outlook?.as_of ?? view.as_of, view.timezone))}.` : ""}</p></section>
     ${view.roof_id ? "" : renderExplanation(state, selectedKey)}
     ${renderNotices(state)}
     ${renderDailyTendencies(view)}
     </section>
     ${view.roof_id ? "" : `<section class="task-section" aria-labelledby="planning-heading"><h3 class="section-heading" id="planning-heading" tabindex="-1">Planen</h3><p class="hint">Heutige Tagesaussicht und ein passendes Solarzeitfenster finden.</p>${renderOutlook(state)}${renderPlanning(state, planningUI)}</section>`}
     <section class="task-section" aria-labelledby="comparison-heading"><h3 class="section-heading" id="comparison-heading" tabindex="-1">Vergleichen</h3><p class="hint">${view.roof_id ? "Prognoseintervalle dieser Dachfläche nachlesen." : "Aktuelle Prognose und belegte Messung je Intervall nachlesen."}</p>
-    ${renderTable(state)}</section>`;
+    ${renderTable(state)}</section>
+    ${renderUpdateError(state)}`;
 }
 
 const styles = `
@@ -548,7 +559,9 @@ const styles = `
   @container (max-width:22rem){.overview-metrics .kpis{grid-template-columns:minmax(0,1fr)}.overview-metrics .kpi-wide{grid-column:auto}.outlook-metrics{grid-template-columns:minmax(0,1fr)}.day-switch{flex-shrink:1;max-width:100%;flex-wrap:wrap}.kpi dd{overflow-wrap:anywhere}}
   @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
   :host{container-type:inline-size}
-  .header>div,.chart-section{min-width:0}.header{flex-wrap:wrap}.chart-heading{flex-wrap:wrap}.badge{color:var(--pv-muted)}.badge.warning{color:var(--primary-text-color,#202b32);border-color:currentColor}
+  :host{--pv-error:color-mix(in srgb,#d32f2f 55%,var(--primary-text-color,#202b32))}
+  .header>div,.chart-section{min-width:0}.header{flex-wrap:wrap}.chart-heading{flex-wrap:wrap}.badge{color:var(--pv-muted)}.badge.stale{color:var(--pv-error);font-weight:700;border-color:currentColor;background:color-mix(in srgb,var(--pv-error) 8%,var(--card-background-color,#fff))}
+  .update-error{border-top:1px solid var(--pv-border);border-left:3px solid var(--pv-error);padding:16px;margin:24px 0 16px;border-radius:var(--pv-radius);background:var(--pv-surface);font-size:var(--pv-text);line-height:1.6;overflow-wrap:anywhere}.update-error h3{color:var(--pv-error);font-weight:700}.update-error p{margin:8px 0 0}.update-error p:last-child{color:var(--pv-muted)}
   .kpi-wide{grid-column:span 2}.kpi dd small{display:inline-block;white-space:nowrap}.outlook-metrics dd{overflow-wrap:anywhere}.legend{row-gap:10px}.chart-note{line-height:1.6;text-align:left}.notices{padding:12px 16px}.hint{margin-top:8px}.day-switch{flex-shrink:0}
   @container (min-width:720px){.kpis{grid-template-columns:repeat(4,minmax(0,1fr))}.outlook-metrics{grid-template-columns:repeat(4,minmax(0,1fr))}}
 

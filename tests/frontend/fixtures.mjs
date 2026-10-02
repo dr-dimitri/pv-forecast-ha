@@ -1,5 +1,5 @@
 // Ausschließlich synthetische, deterministische Testdaten; keine Modellberechnung.
-export const SCENARIOS = ["partial-outlook", "offset-outlook", "unresolved-outlook", "derived-outlook", "derived-energy", "offset-measurements", "stale-measurement", "restored","no-source", "no-measurement", "zero", "shading", "horizon","sunny", "gaps", "stale", "empty", "acl", "outage", "old", "roof", "deleted-roof", "spring", "fold", "kolkata", "midnight", "planning-unavailable"];
+export const SCENARIOS = ["partial-outlook", "offset-outlook", "unresolved-outlook", "derived-outlook", "derived-energy", "offset-measurements", "stale-measurement", "restored","no-source", "no-measurement", "zero", "shading", "horizon","sunny", "gaps", "weather-error", "stale", "empty", "acl", "outage", "old", "roof", "deleted-roof", "spring", "fold", "kolkata", "midnight", "planning-unavailable"];
 const HOURS = [0, 0, 0, 0, 0, 0, 0.1, 0.38, 0.95, 1.7, 2.45, 3.1, 3.6, 3.4, 2.9, 2.1, 1.4, 0.7, 0.22, 0.04, 0, 0, 0, 0];
 const iso = (instant) => new Date(instant).toISOString();
 
@@ -28,7 +28,7 @@ export function fixture(scenario = "sunny", { day = "today", roof_id } = {}) {
     roof_id: roof_id ?? null, day, date: iso(Date.parse(`${scenario === "fold" ? "2026-10-25" : scenario === "spring" ? "2026-03-29" : "2026-09-10"}T12:00:00Z`) + (day === "tomorrow" ? 86400000 : 0)).slice(0, 10),
     start: iso(start), end: iso(end), today_start: iso(todayStart), today_end: iso(todayEnd),
     summary: { today_kwh: roof_id ? 12.47 : 23.14, tomorrow_kwh: roof_id ? 14.68 : 26.9, remaining_today_kwh: roof_id ? 6.82 : 10.76 },
-    intervals, complete: scenario !== "gaps", stale: ["stale", "restored"].includes(scenario),
+    intervals, complete: scenario !== "gaps", stale: ["weather-error", "stale", "restored"].includes(scenario),
   };
   if (scenario === "empty") Object.assign(view, { intervals: [], complete: false, summary: { today_kwh: null, tomorrow_kwh: null, remaining_today_kwh: null } });
   if (scenario === "old") delete view.view_version;
@@ -65,9 +65,9 @@ export function fixture(scenario = "sunny", { day = "today", roof_id } = {}) {
   });
   return {
     forecast: {
-      schema_version: 1, origin: scenario === "restored" ? "restored" : "live", restored_at: scenario === "restored" ? iso(asOf) : null, last_update_success: scenario !== "restored", fetched_at: iso(asOf - (["stale", "restored"].includes(scenario) ? 7_200_000 : 900_000)), view,
+      schema_version: 1, origin: scenario === "restored" ? "restored" : "live", restored_at: scenario === "restored" ? iso(asOf) : null, last_update_success: !["weather-error", "restored"].includes(scenario), update_error: scenario === "weather-error" ? "Error fetching pv_forecast data: PV-Prognose pausiert wegen eines vorübergehenden API-Fehlers: Open-Meteo vorübergehend nicht verfügbar (HTTP 503)" : null, fetched_at: iso(asOf - (["weather-error", "stale", "restored"].includes(scenario) ? 7_200_000 : 900_000)), view,
       intervals: forecastBoundaries.slice(0, -1).map((value, index) => ({ start: iso(value), end: iso(forecastBoundaries[index + 1]), energy_kwh: 1, ac_power_kw: 1, is_complete: true, quality_flags: [] })),
-      planning: { schema_version: 1, status: available && scenario !== "planning-unavailable" ? "available" : "unavailable", reason: ["stale", "restored"].includes(scenario) ? "stale_forecast" : "no_energy", as_of: iso(asOf), fetched_at: iso(asOf - 900_000), timezone, start: iso(todayStart + 14 * hour), end: iso(todayStart + 16 * hour), energy_kwh: 5.87, basis: "current_forecast", assumption: "constant_interval_mean_power", quality_flags: [], hysteresis_applied: false },
+      planning: { schema_version: 1, status: available && scenario !== "planning-unavailable" ? "available" : "unavailable", reason: ["weather-error", "stale", "restored"].includes(scenario) ? "stale_forecast" : "no_energy", as_of: iso(asOf), fetched_at: iso(asOf - 900_000), timezone, start: iso(todayStart + 14 * hour), end: iso(todayStart + 16 * hour), energy_kwh: 5.87, basis: "current_forecast", assumption: "constant_interval_mean_power", quality_flags: [], hysteresis_applied: false },
     },
     measurement: {
       schema_version: 1, total_energy: { energy_kwh: ["empty", "no-source", "no-measurement"].includes(scenario) ? null : scenario === "zero" ? 0 : scenario === "gaps" ? 5.6 : 12.4, energy_complete: !["gaps", "empty", "no-source", "no-measurement"].includes(scenario), source_count: ["empty", "no-source"].includes(scenario) ? 0 : 2, quality_flags: ["derived-energy", "derived-outlook"].includes(scenario) ? ["derived_energy"] : scenario === "gaps" ? ["gap"] : [] }, total_intervals: ["empty", "no-source", "no-measurement"].includes(scenario) ? [] : totalIntervals,

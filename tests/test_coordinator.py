@@ -674,7 +674,7 @@ async def test_provider_pause_survives_manual_refresh_and_midnight(
         assert aioclient_mock.call_count == 1
         assert not coordinator.last_update_success
         assert isinstance(coordinator.last_exception, UpdateFailed)
-        assert coordinator.last_exception.retry_after == pytest.approx(7200)
+        assert coordinator.last_exception.retry_after == pytest.approx(1800)
         assert coordinator.data is previous
         assert coordinator.last_update_success_time == previous_success_time
 
@@ -708,16 +708,16 @@ async def test_provider_pause_survives_manual_refresh_and_midnight(
         await coordinator.async_request_refresh()
         await hass.async_block_till_done(wait_background_tasks=True)
         assert aioclient_mock.call_count == 0
-        assert coordinator.last_exception.retry_after == pytest.approx(7140)
+        assert coordinator.last_exception.retry_after == pytest.approx(1740)
         assert coordinator.data is previous
         assert coordinator.last_update_success_time == previous_success_time
 
-        frozen.move_to("2026-08-24T01:58:59+02:00")
+        frozen.move_to("2026-08-24T00:28:59+02:00")
         async_fire_time_changed(hass)
         await hass.async_block_till_done(wait_background_tasks=True)
         assert aioclient_mock.call_count == 0
 
-        frozen.move_to("2026-08-24T01:59:01+02:00")
+        frozen.move_to("2026-08-24T00:29:01+02:00")
         async_fire_time_changed(hass)
         await hass.async_block_till_done(wait_background_tasks=True)
         assert aioclient_mock.call_count == 1
@@ -728,11 +728,11 @@ async def test_provider_pause_survives_manual_refresh_and_midnight(
         assert coordinator.update_interval == UPDATE_INTERVAL
 
         # Nach dem Erfolg gilt wieder das normale 30-Minuten-Intervall.
-        frozen.move_to("2026-08-24T02:28:59+02:00")
+        frozen.move_to("2026-08-24T00:58:59+02:00")
         async_fire_time_changed(hass)
         await hass.async_block_till_done(wait_background_tasks=True)
         assert aioclient_mock.call_count == 1
-        frozen.move_to("2026-08-24T02:29:02+02:00")
+        frozen.move_to("2026-08-24T00:59:02+02:00")
         async_fire_time_changed(hass)
         await hass.async_block_till_done(wait_background_tasks=True)
         assert aioclient_mock.call_count == 2
@@ -742,10 +742,10 @@ async def test_provider_pause_survives_manual_refresh_and_midnight(
 
 
 @pytest.mark.asyncio
-async def test_very_large_provider_pause_is_scheduled_without_overflow(
+async def test_very_large_provider_header_keeps_thirty_minute_retry(
     hass, aioclient_mock
 ) -> None:
-    """Auch eine extreme endliche Anbieterfrist wird ohne Verkürzung eingeplant."""
+    """Auch eine extreme Anbieterfrist verlängert den beauftragten Rhythmus nicht."""
 
     with freeze_time("2026-08-23T23:59:00+02:00") as frozen:
         aioclient_mock.get(
@@ -762,8 +762,8 @@ async def test_very_large_provider_pause_is_scheduled_without_overflow(
             await coordinator.async_refresh()
         assert not coordinator.last_update_success
         assert isinstance(coordinator.last_exception, UpdateFailed)
-        assert coordinator.last_exception.retry_after == pytest.approx(1e100)
-        assert any(call.args[0] >= 1e100 for call in call_at.call_args_list)
+        assert coordinator.last_exception.retry_after == pytest.approx(1800)
+        assert all(call.args[0] < 1e100 for call in call_at.call_args_list)
         assert aioclient_mock.call_count == 1
 
         listener.reset_mock()
@@ -773,7 +773,7 @@ async def test_very_large_provider_pause_is_scheduled_without_overflow(
         listener.assert_called_once_with()
         await coordinator.async_refresh()
         assert aioclient_mock.call_count == 1
-        assert client.retry_after == pytest.approx(1e100)
+        assert client.retry_after == pytest.approx(1740)
         assert coordinator._unsub_refresh is not None
         remove_listener()
         await coordinator.async_shutdown()
@@ -814,4 +814,50 @@ async def test_arithmetic_overflow_keeps_previous_forecast(
         assert all(
             state.state == "unavailable" for state in hass.states.async_all("sensor")
         )
+        assert await hass.config_entries.async_unload(entry.entry_id)
+
+
+@pytest.mark.parametrize("status", [429, 503])
+async def test_scheduled_retries_stay_at_thirty_minutes_after_repeated_errors(
+    hass, aioclient_mock, status
+) -> None:
+    """Der echte HA-Timer ruft trotz mehrerer Fehler alle 30 Minuten erneut ab."""
+
+    with freeze_time("2026-08-23T12:00:00+02:00") as frozen:
+        aioclient_mock.get(
+            OPEN_METEO_FORECAST_URL,
+            json=_hourly_payload("2026-08-22T23:00", "2026-08-24T22:00"),
+        )
+        entry = _entry(hass)
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+        coordinator = entry.runtime_data.coordinator
+        snapshot = coordinator.data
+        fetched_at = coordinator.last_update_success_time
+        aioclient_mock.clear_requests()
+        aioclient_mock.get(
+            OPEN_METEO_FORECAST_URL, status=status, headers={"Retry-After": "28800"}
+        )
+        for count, stamp in enumerate(
+            ("12:30:02", "13:00:04", "13:30:06", "14:00:08"), start=1
+        ):
+            frozen.move_to(f"2026-08-23T{stamp}+02:00")
+            async_fire_time_changed(hass)
+            await hass.async_block_till_done(wait_background_tasks=True)
+            assert aioclient_mock.call_count == count
+            assert coordinator.last_exception.retry_after == pytest.approx(1800)
+            assert not coordinator.last_update_success
+            assert coordinator.data is snapshot
+            assert coordinator.last_update_success_time == fetched_at
+        aioclient_mock.clear_requests()
+        aioclient_mock.get(
+            OPEN_METEO_FORECAST_URL,
+            json=_hourly_payload("2026-08-22T23:00", "2026-08-24T22:00"),
+        )
+        frozen.move_to("2026-08-23T14:30:10+02:00")
+        async_fire_time_changed(hass)
+        await hass.async_block_till_done(wait_background_tasks=True)
+        assert aioclient_mock.call_count == 1
+        assert coordinator.last_update_success
+        assert coordinator.last_update_success_time > fetched_at
         assert await hass.config_entries.async_unload(entry.entry_id)

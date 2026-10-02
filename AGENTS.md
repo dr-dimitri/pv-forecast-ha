@@ -19,6 +19,14 @@ nachgezogen werden. Dokumentation, Kommentare, UI-Texte und Zusammenarbeit sind
 auf Deutsch zu verfassen. Produkt- und Bibliotheksbegriffe dürfen ihre
 gebräuchliche englische Bezeichnung behalten.
 
+## Wetter-Retry und sichtbarer Fehlerstatus vom 02.10.2026
+
+Auf ausdrücklichen Anwenderwunsch bleibt der reguläre Wetterabruf auch nach Fehlern bei 30 Minuten. Die gemeinsame flüchtige Abrufsperre verhindert frühere manuelle, Setup- und Reload-Abrufe, verwendet aber keine wachsende Fehlerfolge und verlängert den Rhythmus nicht durch `Retry-After`, auch bei HTTP 429/503. Alle Geometrien einer fehlgeschlagenen Welle bleiben weiterhin gemeinsam begrenzt; es entsteht keine zusätzliche Abrufschleife.
+
+Die gebündelte Karte zeigt vorhandene alte Prognosen nach fehlgeschlagenem Abruf, überschrittener Altersgrenze oder fehlgeschlagenem Lesen deutlich mit einem fetten roten Hinweis „Veraltet“. Die vorhandene berechtigungsgeprüfte Prognose-Leseaktion liefert für die Kartenansicht optional die gleiche kontrollierte Abruffehlermeldung wie das HA-Protokoll. Ein eigener sichtbarer Abschnitt am unteren Kartenende zeigt diese Meldung und den 30-Minuten-Retryhinweis; nach erfolgreichem Abruf verschwindet der Fehler. Texte werden im Browser ausschließlich als Text dargestellt. Die datensparsame Diagnostics-Allowlist, operative Alters-/Fehlerregeln, IDs, Stores und Schema 1.1 bleiben unverändert.
+
+Diese Entscheidung ersetzt die entgegenstehenden Backoff-/Anbieterfristvorgaben aus #13 sowie die bisherige Gestaltung des Veraltungshinweises.
+
 ## Entfernung des Prognosearchivs vom 25.09.2026
 
 Auf ausdrücklichen Anwenderwunsch entfällt die gesamte Archivfunktion mit allen
@@ -367,10 +375,10 @@ Der Coordinator aktualisiert standardmäßig alle 30 Minuten. Bestehende Daten
 bleiben bei einem vorübergehenden Updatefehler über den normalen
 `DataUpdateCoordinator`-Mechanismus erhalten.
 
-Bei HTTP 429 und vorübergehenden Transport-/Serverfehlern gilt die gemeinsame
-Abrufpause aus #13: gültiges `Retry-After` berücksichtigen, sonst begrenzter
-Backoff mit 60, 120 und höchstens 240 Minuten. Längere gültige Anbieterfristen
-werden nicht gekürzt. Der API-Client verhindert verfrühte Abrufe auch bei
+Bei HTTP 429 und vorübergehenden Transport-/Serverfehlern gilt auf ausdrücklichen
+Anwenderwunsch vom 02.10.2026 eine gemeinsame Abrufpause von 30 Minuten.
+Fehlerfolgen und `Retry-After` verlängern diesen Rhythmus nicht. Der API-Client
+verhindert verfrühte Abrufe auch bei
 manuellen Aktualisierungen, Setup-Wiederholungen und Reloads. Erst vollständig
 validierter Erfolg setzt die Fehlerfolge zurück. Der native
 `TimestampDataUpdateCoordinator` hält den letzten erfolgreichen Abrufzeitpunkt;

@@ -110,7 +110,7 @@ async def test_options_without_runtime_and_recheck_never_touch_network_or_stores
     original = deepcopy(dict(entry.options))
     stores = deepcopy(hass_storage)
     request = OpenMeteoRequestState()
-    request._record_temporary_failure("5400")
+    request._record_temporary_failure()
     hass.data["pv_forecast"] = request
     with (
         patch(
@@ -126,7 +126,7 @@ async def test_options_without_runtime_and_recheck_never_touch_network_or_stores
         assert flow["step_id"] == "health"
         report = flow["description_placeholders"]["report"]
         assert "Anlage nicht geladen" in report
-        assert "90 Minuten" in report
+        assert "30 Minuten" in report
         assert "kein geplanter Abruftermin" in report
         again = await hass.config_entries.options.async_configure(
             flow["flow_id"], {"next_step_id": "health"}

@@ -468,13 +468,19 @@ SAX-Lesevertrag. Sie ersetzen keine Erprobung an einem realen SAX-Speicher.
 
 ### Abrufpausen
 
-Bei einer Abrufbegrenzung oder einem vorübergehenden API-Ausfall berücksichtigt
-die Integration die von Open-Meteo angegebene Wartefrist. Fehlt eine verwendbare
-Frist, steigt die Pause bei weiteren Fehlschlägen auf 60, 120 und höchstens
-240 Minuten. Eine längere gültige Anbieterfrist bleibt maßgeblich. Manuelle
-Aktualisierungen, Tageswechsel und erneute Einrichtungsversuche umgehen diese
-Pause nicht. Nach einem erfolgreichen Abruf gilt wieder der normale
-30-Minuten-Takt. Dauerhaft fehlerhafte Antworten werden getrennt behandelt.
+Auch bei fehlgeschlagenen Wetterabrufen versucht die Integration den Abruf
+weiterhin alle **30 Minuten**. Die gemeinsame Abrufsperre verhindert frühere
+manuelle Aktualisierungen und Setup-/Reload-Versuche. Es gibt keinen wachsenden
+Backoff; auch `Retry-After` verlängert den ausdrücklich gewünschten Rhythmus
+nicht. Laufende Geometrieabrufe bleiben auf höchstens vier HTTP-Requests begrenzt.
+
+Vorhandene alte Prognosedaten bleiben sichtbar. Die Karte zeigt **Veraltet**
+fett und rot, sobald der Wetterabruf fehlgeschlagen oder der Stand zu alt ist.
+Bei einem fehlgeschlagenen Lesen bleibt ein vorhandener Stand ebenfalls so
+markiert. Im unteren Bereich erscheint bei Wetterabruffehlern dieselbe
+kontrollierte Meldung wie im HA-Protokoll sowie der Hinweis auf den
+30-Minuten-Retry. Nach erfolgreichem Abruf verschwindet die Meldung. Energy,
+SAX und operative Planung behalten ihre bestehenden Alters- und Fehlerregeln.
 
 ## Stundenprognose in Automationen
 

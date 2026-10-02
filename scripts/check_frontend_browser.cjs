@@ -142,6 +142,19 @@ async function runCase(browser, origin, test) {
     assert.equal(await page.evaluate(() => window.demo.calls.some(call => call.service === "get_history")), false);
     await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
     const closed = await card.evaluate(inspectCard);
+    if (test.scenario === "weather-error" || test.scenario === "stale") {
+      const badge = card.locator(".badge.stale");
+      assert.equal(await badge.textContent(), "Veraltet");
+      const appearance = await badge.evaluate((element) => ({ weight: getComputedStyle(element).fontWeight, color: getComputedStyle(element).color }));
+      assert.ok(Number(appearance.weight) >= 700, "Veraltet muss fett erscheinen");
+      const channels = appearance.color.match(/[\d.]+/g).map(Number);
+      assert.ok(channels[0] > channels[1] * 1.5 && channels[0] > channels[2] * 1.5, "Veraltet muss rot erscheinen");
+      if (test.scenario === "weather-error") {
+        assert.match(await card.locator(".error-message").textContent(), /Error fetching pv_forecast data:.*HTTP 503/);
+        assert.match(await card.locator(".update-error").textContent(), /alle 30 Minuten/);
+        assert.equal(await card.evaluate((element) => element.shadowRoot.querySelector(".body").lastElementChild.className), "update-error");
+      } else assert.equal(await card.locator(".update-error").count(), 0);
+    }
     const screenshot = `${prefix}-${test.name}.png`;
     await page.screenshot({ path: path.join(output, screenshot), fullPage: true });
     if (test.representative && Number(prefix.split("-").at(-1)) < 113) fs.copyFileSync(path.join(output, screenshot), path.join(root, "docs/images", screenshot));
@@ -598,6 +611,7 @@ async function main() {
       representative: (viewport === 360 && theme === "light") || (viewport === 768 && theme === "custom") || (viewport === 1440 && theme === "dark"),
     })));
     matrix.push(
+      ...["light", "dark"].flatMap((theme) => ["weather-error", "stale"].map((scenario) => ({ name: `360-${scenario}-${theme}`, viewport: 360, cardWidth: 360, theme, scenario }))),
       ...["light", "dark"].map((theme) => ({ name: `360-derived-${theme}`, viewport: 360, cardWidth: 360, theme, scenario: "derived-energy" })),
       ...["light", "dark"].map((theme) => ({ name: `360-offset-${theme}`, viewport: 360, cardWidth: 360, theme, scenario: "offset-measurements" })),
       { name: "desktop-card360", viewport: 1440, cardWidth: 360, theme: "light" },
