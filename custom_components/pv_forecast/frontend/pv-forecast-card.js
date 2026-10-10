@@ -319,7 +319,7 @@ function renderChart(state, width, selectedKey) {
   const selected = tableRows(state).find((row) => intervalKey(row) === selectedKey);
   const highlight = selected ? `<rect class="selected-interval" x="${x(selected.start)}" y="${top}" width="${x(selected.end) - x(selected.start)}" height="${bottom - top}"/>` : "";
   return `<svg id="interval-chart" class="chart" viewBox="0 0 ${width} 242" tabindex="0" role="group" aria-roledescription="Interaktives Diagramm" aria-labelledby="chart-title" aria-describedby="chart-description chart-help">
-    <title id="chart-title">Energie je Intervall in kWh</title><desc id="chart-description">Aktuelle Prognose durchgezogen, tatsächliche Produktion gestrichelt. Fehlende Werte bleiben leer. Alle Werte stehen auch in der Tabelle.</desc>
+    <title id="chart-title">Energie je Intervall in kWh</title><desc id="chart-description">Aktuelle Prognose durchgezogen, tatsächliche Produktion gestrichelt. Fehlende Werte bleiben leer. Intervalle mit positiver Prognose oder Ist-Energie stehen auch in der Tabelle.</desc>
     <defs><clipPath id="plot-clip"><rect x="${left}" y="0" width="${width - left - 12}" height="${bottom + 2}"/></clipPath></defs>
     ${grid}<g clip-path="url(#plot-clip)">${gaps}${highlight}${paths(series.forecast, "forecast-line", "is_complete")}${paths(series.actual, "actual-line")}${now}</g><g aria-hidden="true" class="hour-ticks">${hourTicks}</g>${ticks}
     ${values.length ? "" : `<text class="empty-plot" x="${width / 2}" y="100" text-anchor="middle">Noch keine Intervallwerte</text>`}
@@ -397,8 +397,8 @@ function renderUpdateError(state) {
 
 function renderTable(state) {
   const view = state.forecast.data;
-  const rows = tableRows(state);
-  return `<details id="values"><summary id="values-toggle">Intervallwerte anzeigen <span>${rows.length} Intervalle</span></summary><p class="hint">kWh je angegebenem Intervall. „—“ bedeutet fehlend; 0 ist ein gültiger Wert. Zeitangaben gelten für ${escapeHtml(view.timezone)}.</p><div class="table-scroll" tabindex="0" role="region" aria-label="Intervallwerte, horizontal scrollbar"><table><caption class="sr-only">Intervallenergie in kWh</caption><thead><tr><th scope="col">Zeit</th><th scope="col">Prognose</th><th scope="col">Ist</th></tr></thead><tbody>${rows.map((row) => `<tr><th scope="row"><time datetime="${escapeHtml(row.start)}">${escapeHtml(formatPlantTime(row.start, view.timezone))}</time><span class="until">bis ${escapeHtml(formatPlantTime(row.end, view.timezone))}</span></th><td>${energyText(row.forecast)}</td><td>${energyText(row.actual ?? row.actual_observed)}</td></tr>`).join("")}</tbody></table></div></details>`;
+  const rows = tableRows(state).filter((row) => [row.forecast, row.actual ?? row.actual_observed].some((value) => finite(value) && value > 0));
+  return `<details id="values"><summary id="values-toggle">Intervallwerte anzeigen <span>${rows.length} Intervalle</span></summary><p class="hint">Nur Intervalle mit Prognose oder Ist-Wert größer als 0 kWh. „—“ bedeutet fehlend; 0 ist ein gültiger Wert. Zeitangaben gelten für ${escapeHtml(view.timezone)}.</p><div class="table-scroll" tabindex="0" role="region" aria-label="Intervallwerte, horizontal scrollbar"><table><caption class="sr-only">Intervallenergie in kWh</caption><thead><tr><th scope="col">Zeit</th><th scope="col">Prognose</th><th scope="col">Ist</th></tr></thead><tbody>${rows.map((row) => `<tr><th scope="row"><time datetime="${escapeHtml(row.start)}">${escapeHtml(formatPlantTime(row.start, view.timezone))}</time><span class="until">bis ${escapeHtml(formatPlantTime(row.end, view.timezone))}</span></th><td>${energyText(row.forecast)}</td><td>${energyText(row.actual ?? row.actual_observed)}</td></tr>`).join("")}</tbody></table></div></details>`;
 }
 
 const plantStamp = (value, timezone) => finite(millis(value)) ? `${formatPlantDate(value, timezone)}, ${formatPlantTime(value, timezone)}` : "unbekannt";
